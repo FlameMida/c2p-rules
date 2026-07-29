@@ -733,7 +733,7 @@ geoview -type geosite -action convert -input publish/geosite.dat -list cn -outpu
 
 对每个 expected tag 跑 convert，失败或输出 0 字节 → exit 1。
 
-- [ ] **步骤 1：写 bootstrap 与探针脚本（先写探针失败路径测试：缺 dat 退出 1）**
+- [x] **步骤 1：写 bootstrap 与探针脚本（先写探针失败路径测试：缺 dat 退出 1）**
 
 ```python
 # scripts/probe_tags.py
@@ -803,7 +803,7 @@ mkdir -p "$ROOT/vendor/bin"
 echo "export PATH=\"$ROOT/vendor/bin:\$PATH\""
 ```
 
-- [ ] **步骤 2：bootstrap + 全量构建**
+- [x] **步骤 2：bootstrap + 全量构建**
 
 ```bash
 chmod +x scripts/bootstrap_vendor.sh scripts/probe_tags.py
@@ -819,7 +819,7 @@ sha256sum -c publish/geoip.dat.sha256sum
 
 预期：全部 exit 0；`cn` 与自定义 tag 探针通过。
 
-- [ ] **步骤 3：提交**
+- [x] **步骤 3：提交**
 
 ```bash
 # 不要提交 vendor/ 大目录；提交脚本与 gitignore
