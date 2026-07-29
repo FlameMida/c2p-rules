@@ -1,15 +1,19 @@
-name: build
+name: build-geodata
 
 on:
   schedule:
-    - cron: "17 2 * * *"   # 每日 02:17 UTC（错峰）
+    - cron: "17 2 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: geodata-release
+  cancel-in-progress: false
+
 env:
-  SINGBOX_VER: "1.11.4"
+  GO_VERSION: "1.26.x"
 
 jobs:
   build:
@@ -17,37 +21,58 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install sing-box
-        run: |
-          set -e
-          curl -L -o sb.tar.gz "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
-          tar xzf sb.tar.gz
-          echo "$PWD/sing-box-${SINGBOX_VER}-linux-amd64" >> "$GITHUB_PATH"
-          sing-box version
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.13"
 
-      - run: pip install -r requirements.txt
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
 
-      - name: Build .srs
-        run: python scripts/build.py
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
 
-      - name: Publish .srs to release branch（供 jsdelivr @release 加速）
+      - name: Bootstrap build tools
         run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout --orphan release
-          git rm -rf . >/dev/null 2>&1 || true
-          cp dist/*.srs .
-          git add *.srs
-          git commit -m "Auto-build $(date -u +%FT%TZ) [skip ci]"
-          git push -f origin release
+          bash scripts/bootstrap_vendor.sh
+          echo "$PWD/vendor/bin" >> "$GITHUB_PATH"
+
+      - name: Build and verify geodata
+        run: |
+          python scripts/build.py
+          python scripts/probe_tags.py \
+            --dat publish/geosite.dat \
+            --expect build/expected_tags.json \
+            --side geosite
+          python scripts/probe_tags.py \
+            --dat publish/geoip.dat \
+            --expect build/expected_tags.json \
+            --side geoip
+          cd publish
+          sha256sum -c geosite.dat.sha256sum
+          sha256sum -c geoip.dat.sha256sum
+
+      - name: Publish rolling latest Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: geodata
+          name: geodata release
+          make_latest: true
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          files: |
+            publish/geosite.dat
+            publish/geoip.dat
+            publish/geosite.dat.sha256sum
+            publish/geoip.dat.sha256sum
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: dist
-          path: dist/
+          name: publish
+          path: publish/

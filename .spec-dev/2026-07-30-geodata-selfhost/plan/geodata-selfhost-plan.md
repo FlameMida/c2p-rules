@@ -838,7 +838,7 @@ git commit -m "feat(T4): vendor bootstrap, full dat build hooks, tag probe"
 
 **接口**：无代码接口；契约 = Release assets 四文件 + `latest/download`。
 
-- [ ] **步骤 1：写 workflow**
+- [x] **步骤 1：写 workflow**
 
 ```yaml
 # .github/workflows/build.yml
@@ -915,14 +915,14 @@ jobs:
           path: publish/
 ```
 
-- [ ] **步骤 2：本地校验 yaml**
+- [x] **步骤 2：本地校验 yaml**
 
 ```bash
 # 若有 actionlint 则 actionlint .github/workflows/build.yml
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/build.yml')); print('yaml ok')"
 ```
 
-- [ ] **步骤 3：提交**
+- [x] **步骤 3：提交**
 
 ```bash
 git add .github/workflows/build.yml
