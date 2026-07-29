@@ -1,0 +1,53 @@
+name: build
+
+on:
+  schedule:
+    - cron: "17 2 * * *"   # 每日 02:17 UTC（错峰）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SINGBOX_VER: "1.11.4"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sing-box
+        run: |
+          set -e
+          curl -L -o sb.tar.gz "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
+          tar xzf sb.tar.gz
+          echo "$PWD/sing-box-${SINGBOX_VER}-linux-amd64" >> "$GITHUB_PATH"
+          sing-box version
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - run: pip install -r requirements.txt
+
+      - name: Build .srs
+        run: python scripts/build.py
+
+      - name: Publish .srs to release branch（供 jsdelivr @release 加速）
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan release
+          git rm -rf . >/dev/null 2>&1 || true
+          cp dist/*.srs .
+          git add *.srs
+          git commit -m "Auto-build $(date -u +%FT%TZ) [skip ci]"
+          git push -f origin release
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dist
+          path: dist/

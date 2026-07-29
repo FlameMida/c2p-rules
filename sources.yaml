@@ -1,0 +1,28 @@
+# clash-rules-srs — 源清单
+# 每个源 1:1 转成 sing-box .srs；name 决定输出文件名 dist/<name>.srs
+# format 默认 yaml（Clash payload 列表）；text 为纯规则行（每行一条 Clash 规则）
+# behavior: domain（域名集）/ ipcidr（CIDR 集）/ classical（混合规则，每行一条 TYPE,value 规则）
+sources:
+  # ===== Loyalsoldier/clash-rules（yaml payload）=====
+  - {name: loyalsoldier-reject,       behavior: domain,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/reject.txt"}
+  - {name: loyalsoldier-icloud,       behavior: domain,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/icloud.txt"}
+  - {name: loyalsoldier-apple,        behavior: domain,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/apple.txt"}
+  - {name: loyalsoldier-google,       behavior: domain,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/google.txt"}
+  - {name: loyalsoldier-proxy,        behavior: domain,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/proxy.txt"}
+  - {name: loyalsoldier-direct,       behavior: domain,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt"}
+  - {name: loyalsoldier-private,      behavior: domain,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/private.txt"}
+  - {name: loyalsoldier-gfw,          behavior: domain,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/gfw.txt"}
+  - {name: loyalsoldier-tld-not-cn,   behavior: domain,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/tld-not-cn.txt"}
+  - {name: loyalsoldier-telegramcidr, behavior: ipcidr,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/telegramcidr.txt"}
+  - {name: loyalsoldier-cncidr,       behavior: ipcidr,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/cncidr.txt"}
+  - {name: loyalsoldier-lancidr,      behavior: ipcidr,    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/lancidr.txt"}
+  # applications（classical / PROCESS-NAME）在路由器场景无意义，不转换
+  # ===== xiaolin-007/clash（yaml classical，含 IP-CIDR 混合）=====
+  - {name: xiaolin-youtube,   behavior: classical, url: "https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/YouTube.txt"}
+  - {name: xiaolin-netflix,   behavior: classical, url: "https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/Netflix.txt"}
+  - {name: xiaolin-spotify,   behavior: classical, url: "https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/Spotify.txt"}
+  - {name: xiaolin-bilibili,  behavior: classical, url: "https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/BilibiliHMT.txt"}
+  - {name: xiaolin-tiktok,    behavior: classical, url: "https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/TikTok.txt"}
+  # ===== Sukka（text classical，每行一条规则）=====
+  - {name: sukka-ai,          behavior: classical, format: text, url: "https://ruleset.skk.moe/Clash/non_ip/ai.txt"}
+  # ===== 自定义接口：在此追加你自己的源，保持同样字段（name/behavior/url[/format]）=====
