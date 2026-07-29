@@ -1254,14 +1254,14 @@ README 必含：
 5. clash2passwall `--dat` 与安装脚本用法
 6. 非目标：无 `.srs`、无热更新
 
-- [ ] **步骤 1：撰写并自检关键词**
+- [x] **步骤 1：撰写并自检关键词**
 
 ```bash
 grep -E 'releases/latest/download|轻量完整增强|geosite.dat|rule-set:remote' README.md context.md
 # 应有 latest/download 与轻量完整增强；不应再把 .srs 当主交付
 ```
 
-- [ ] **步骤 2：提交** `docs(T9): rewrite README and context for geodata-only delivery`
+- [x] **步骤 2：提交** `docs(T9): rewrite README and context for geodata-only delivery`
 
 ---
 

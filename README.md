@@ -1,79 +1,102 @@
 # clash-rules-srs
 
-把 Clash 规则源（Loyalsoldier / xiaolin-007 / Sukka 等）**1:1** 自建为 sing-box `.srs` 订阅，由 GitHub Actions **每日自动**拉取原源 → 转换 → 发布。供 OpenWrt PassWall2（sing-box 内核）的 `rule-set:remote:` 订阅，摆脱对第三方聚合源的依赖、保证与原 Clash 规则逐条一致。
+把 `sources.yaml` 中的 Clash 规则源注入一套可供 PassWall2 双核使用的自建 geodata：
 
-> 仅做 sing-box `.srs`。xray 内核请直接用 MetaCubeX/Loyalsoldier 的标准 `geosite.dat`/`geoip.dat`（内容等价），不自建。
+- `geosite.dat`：`v2fly/domain-list-community` 全量标准 list + 每个域名侧自定义 tag。
+- `geoip.dat`：`Loyalsoldier/geoip` 官方增强包 + 每个 IP 侧自定义 tag。
+- 两个同名 `.sha256sum`：可直接由 PassWall2 `rule_update` 校验。
 
-## 订阅 URL
+这套组合称为“轻量完整增强底”。Release 只发布上述两个 dat 和两个校验文件；本项目不发布 `.srs`，也不再维护 `rule-set:remote:`/jsDelivr 交付路径。
 
-托管在仓库 `release` 分支，用 jsdelivr 加速。把 `USER` 换成你的 GitHub 用户名（仓库名 `clash-rules-srs`）：
+## Release URL
 
-**域名类**（填进 PassWall2 shunt_rules 的 `domain_list`）：
+把 `OWNER` 换成 GitHub 仓库所有者：
 
-```
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-reject.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-icloud.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-apple.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-google.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-proxy.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-direct.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-private.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-gfw.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-tld-not-cn.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/xiaolin-youtube.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/xiaolin-netflix.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/xiaolin-spotify.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/xiaolin-bilibili.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/xiaolin-tiktok.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/sukka-ai.srs
+```text
+https://github.com/OWNER/clash-rules-srs/releases/latest/download/geosite.dat
+https://github.com/OWNER/clash-rules-srs/releases/latest/download/geosite.dat.sha256sum
+https://github.com/OWNER/clash-rules-srs/releases/latest/download/geoip.dat
+https://github.com/OWNER/clash-rules-srs/releases/latest/download/geoip.dat.sha256sum
 ```
 
-**IP 类**（填进 `ip_list`）：
+sha URL 就是对应 dat URL 的最终文件名后追加 `.sha256sum`。校验文件格式为 `64hex`、两个空格、纯文件名和换行。
 
+## PassWall2 配置
+
+在 PassWall2 规则管理中将：
+
+- `geosite_url` 设为 `https://github.com/OWNER/clash-rules-srs/releases/latest/download/geosite.dat`
+- `geoip_url` 设为 `https://github.com/OWNER/clash-rules-srs/releases/latest/download/geoip.dat`
+
+更新规则后，xray 与 sing-box 都可在 `shunt_rules` 中使用同一套引用，例如：
+
+```text
+domain_list: geosite:loyalsoldier-gfw
+ip_list:     geoip:loyalsoldier-telegramcidr
 ```
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-telegramcidr.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-cncidr.srs
-https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-lancidr.srs
-```
 
-国内若 jsdelivr 不稳，把前缀换成 `https://gh-proxy.com/https://raw.githubusercontent.com/USER/clash-rules-srs@release/...`。
+标准兜底仍可使用 `geosite:cn`、`geoip:cn` 和 `geoip:private`。sing-box 路径要求设备上的 `geoview >= 0.1.10`。
 
-## PassWall2 用法
+## sources 与自定义 tag
 
-在 PassWall2「分流规则」编辑页，每条规则的文本框里粘贴 `rule-set:remote:<上面某个 URL>`：
-
-- 域名类 → 填进 **Domain（domain_list）**：`rule-set:remote:https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-reject.srs`
-- IP 类 → 填进 **IP（ip_list）**：`rule-set:remote:https://cdn.jsdelivr.net/gh/USER/clash-rules-srs@release/loyalsoldier-cncidr.srs`
-
-sing-box 启动时自动下载，之后每天自动刷新。
-
-> 注：`xiaolin-bilibili` 等含 IP-CIDR 的混合源，其 `.srs` 内同时有域名和 IP；PassWall2 里 domain_list 只匹配域名，若要 IP 也生效，把同一条同时填进 domain_list 和 ip_list。
-
-## 自定义源
-
-编辑 `sources.yaml`，在 `sources:` 下追加一行即可：
+自定义 tag 的唯一真源是 [`sources.yaml`](sources.yaml)，tag 等于条目的 `name`：
 
 ```yaml
-  - {name: my-rule, behavior: domain, url: "https://example.com/list.txt"}
+sources:
+  - {name: my-domain-list, behavior: domain, url: "https://example.com/domain.yaml"}
+  - {name: my-ip-list, behavior: ipcidr, url: "https://example.com/ip.yaml"}
 ```
 
-字段：`name`（输出文件名 `<name>.srs`）、`behavior`（`domain`/`ipcidr`/`classical`）、`url`、可选 `format`（默认 `yaml`，纯规则行用 `text`）。下次 CI 自动纳入。
+- `domain` 源写入同名 geosite tag。
+- `ipcidr` 源写入同名 geoip tag。
+- `classical` 源按域名/IP 拆分；有哪一侧就写哪一侧的同名 tag。
+- `applications` 或仅含 `PROCESS-NAME` 的源会跳过。
+- 下载/解析失败、期望侧为空或与 community 文件撞名会让整个构建失败，Release 不更新。
 
-## 本地构建
+Clash provider 到自定义 tag 的固定映射实现见 companion 项目的 `/Users/flame/clash2passwall/map_dat.cjs`。
+
+## clash2passwall `--dat`
+
+使用 companion 转换器把 Clash rules 转成 `geosite:<tag>` / `geoip:<tag>` 的 PassWall2 UCI 片段：
 
 ```bash
-brew install sing-box          # macOS；或从 github.com/SagerNet/sing-box releases 下载
-pip install -r requirements.txt
-python scripts/build.py        # 产出 dist/*.srs
+node /Users/flame/clash2passwall/clash2passwall.js \
+  /path/to/clash.yaml \
+  --dat \
+  --out /tmp/passwall2-dat
 ```
 
-## 转换规则（1:1）
+输出包括 `passwall2_shunt_rules_dat.conf`、映射说明和 `install_shunt_rules_dat.sh`。安装脚本只覆盖 `shunt_rules`，不会删除用户节点；用环境变量指定实际仓库：
 
-- `behavior: domain` 的 `+.foo`/`*.foo` → sing-box `domain_suffix`；精确域名 → `domain`；含通配 → `domain_regex`
-- `behavior: ipcidr` → `ip_cidr`
-- `behavior: classical` / `text`：每行按 `DOMAIN/DOMAIN-SUFFIX/DOMAIN-KEYWORD/DOMAIN-REGEX/IP-CIDR` 分桶；`PROCESS-NAME` 等路由器无意义的跳过
-- sing-box source JSON 每类一个 rule（同类在数组内 OR，不同类分 rule 再 OR），`sing-box rule-set compile` 压成 `.srs`，不改内容。
+```sh
+OWNER=YOUR_GITHUB_USER REPO=clash-rules-srs sh install_shunt_rules_dat.sh
+```
 
-## CI
+脚本会同时写入 geosite/geoip latest URL，并提示 geoview 版本要求。
 
-`.github/workflows/build.yml`：每日 02:17 UTC 自动构建，或 Actions 页手动触发。产物以 orphan commit 推到 `release` 分支（只留最新，jsdelivr `@release` 可加速）。
+## 本地构建与验证
+
+需要 Python 3.11+、Go，以及网络访问：
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+bash scripts/bootstrap_vendor.sh
+export PATH="$PWD/vendor/bin:$PATH"
+
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python scripts/build.py
+.venv/bin/python scripts/probe_tags.py \
+  --dat publish/geosite.dat --expect build/expected_tags.json --side geosite
+.venv/bin/python scripts/probe_tags.py \
+  --dat publish/geoip.dat --expect build/expected_tags.json --side geoip
+(cd publish && sha256sum -c geosite.dat.sha256sum && sha256sum -c geoip.dat.sha256sum)
+```
+
+`scripts/bootstrap_vendor.sh` 会拉取 community、domain-list-custom、Loyalsoldier/geoip 和 geoview；`scripts/build.py --skip-compile` 可只验证拉源、分桶和中间树。
+
+## CI 与边界
+
+`.github/workflows/build.yml` 每天 02:17 UTC 或手动执行。测试、完整构建、两侧 tag 探针和 sha 校验全部成功后，才更新 GitHub latest Release 的四个资产。
+
+本项目不做 `.srs` 发布、mihomo 规则交付、PassWall2 源码修改或无断流热更新；规则更新仍由 PassWall2 现有 geodata 更新机制负责。
