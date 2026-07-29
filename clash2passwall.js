@@ -292,6 +292,35 @@ function generateConf(order, pr) {
 }
 
 function generateInstall(conf, order, mode) {
+  if (mode === "dat") {
+    return `#!/bin/sh
+# PassWall2 geodata + shunt install (dat mode)
+set -e
+CONF=/etc/config/passwall2
+TS=$(date +%s 2>/dev/null || echo bak)
+OWNER="\${OWNER:-YOUR_GITHUB_USER}"
+REPO="\${REPO:-clash-rules-srs}"
+
+cp "$CONF" "$CONF.bak.$TS"
+echo "已备份原配置: $CONF.bak.$TS"
+
+uci -q set passwall2.@global_rules[0].geosite_url="https://github.com/\${OWNER}/\${REPO}/releases/latest/download/geosite.dat"
+uci -q set passwall2.@global_rules[0].geoip_url="https://github.com/\${OWNER}/\${REPO}/releases/latest/download/geoip.dat"
+
+# 仅覆盖分流规则；不删除 nodes 或其他用户节点 section。
+while uci -q delete passwall2.@shunt_rules[0]; do :; done
+uci commit passwall2
+
+cat >> "$CONF" <<'PWEOF'
+${conf}PWEOF
+uci commit passwall2
+
+echo "✅ 已写入 geodata URL，并覆盖导入 ${order.length} 条 shunt_rules。"
+echo "NOTE: sing-box kernel requires geoview >= 0.1.10"
+echo "请在 PassWall2 执行规则更新或重启，以下载新的 dat。"
+echo "若要撤销：cp \$CONF.bak.$TS \$CONF && uci commit passwall2 && /etc/init.d/passwall2 restart"
+`;
+  }
   // 自包含安装脚本：备份 → 清空所有旧 shunt_rules（含自带）→ 写入新规则 → commit
   const core = mode === "xray" ? "Xray" : "Sing-Box";
   const install = `#!/bin/sh
