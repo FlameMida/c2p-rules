@@ -1144,7 +1144,7 @@ proxy-groups:
 rule-providers: {}
 ```
 
-- [ ] **步骤 1–4：TDD**
+- [x] **步骤 1–4：TDD**
 
 ```javascript
 // test_dat_e2e.cjs
@@ -1174,7 +1174,7 @@ console.log("e2e ok");
 
 实现：`clash2passwall.js` 完整支持 `--dat` 写出 conf。
 
-- [ ] **步骤 5：提交** `feat(T7): dat mode e2e fixture conversion`
+- [x] **步骤 5：提交** `feat(T7): dat mode e2e fixture conversion`
 
 ---
 
