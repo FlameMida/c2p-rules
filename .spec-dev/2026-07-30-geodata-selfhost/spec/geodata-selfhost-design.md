@@ -3,7 +3,7 @@
 spec_dev:
   version: 1
   feature: geodata-selfhost
-  status: draft
+  status: active
   covers:
     - "scripts/**"
     - "sources.yaml"
