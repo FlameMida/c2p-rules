@@ -26,12 +26,12 @@
 
 ### 任务 0：建立隔离工作区
 
-- [ ] **步骤 1：检测已有隔离**
+- [x] **步骤 1：检测已有隔离**
 
 运行：`git rev-parse --git-dir` 与 `git rev-parse --git-common-dir`  
 两者不同、且 `git rev-parse --show-superproject-working-tree` 无输出 → 已在隔离工作区，跳过本任务。
 
-- [ ] **步骤 2：建立 worktree**
+- [x] **步骤 2：建立 worktree**
 
 ```bash
 cd /Users/flame/clash-rules-srs
@@ -40,7 +40,7 @@ git worktree add .worktrees/plan-geodata-selfhost -b plan/2026-07-30-geodata-sel
 cd .worktrees/plan-geodata-selfhost
 ```
 
-- [ ] **步骤 3：安装依赖并验证基线**
+- [x] **步骤 3：安装依赖并验证基线**
 
 ```bash
 python3 -m venv .venv
