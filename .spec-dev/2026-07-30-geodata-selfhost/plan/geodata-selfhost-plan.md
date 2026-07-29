@@ -1209,7 +1209,7 @@ echo "NOTE: sing-box kernel requires geoview >= 0.1.10"
 echo "Run PassWall2 rule update or restart to download dat."
 ```
 
-- [ ] **步骤 1：测试生成物字符串**
+- [x] **步骤 1：测试生成物字符串**
 
 ```javascript
 // tests/test_install_script.cjs
@@ -1235,8 +1235,8 @@ assert.match(body, /geosite:loyalsoldier-gfw/);
 console.log("install script ok");
 ```
 
-- [ ] **步骤 2–4：实现 generateInstall 的 dat 分支直至测试通过**
-- [ ] **步骤 5：提交** `feat(T8): dat install script writes URL and replaces shunt_rules`
+- [x] **步骤 2–4：实现 generateInstall 的 dat 分支直至测试通过**
+- [x] **步骤 5：提交** `feat(T8): dat install script writes URL and replaces shunt_rules`
 
 ---
 
