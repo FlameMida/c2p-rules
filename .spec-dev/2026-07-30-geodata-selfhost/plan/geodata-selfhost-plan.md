@@ -74,7 +74,7 @@ python3 -m venv .venv
   - `buckets_to_dlc_lines(buckets: dict) -> list[str]` 仅域名侧，带前缀
   - `buckets_to_ip_lines(buckets: dict) -> list[str]`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 ```python
 # tests/test_buckets_dlc.py
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 .venv/bin/python -m unittest tests.test_buckets_dlc -v
@@ -141,7 +141,7 @@ if __name__ == "__main__":
 
 预期：FAIL，`ModuleNotFoundError` 或 import 失败。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 ```python
 # scripts/lib/__init__.py
@@ -216,7 +216,7 @@ def buckets_to_ip_lines(buckets: dict) -> list:
     return list(buckets.get("ip_cidr", []))
 ```
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 .venv/bin/python -m unittest tests.test_buckets_dlc -v
@@ -224,7 +224,7 @@ def buckets_to_ip_lines(buckets: dict) -> list:
 
 预期：全部 PASS。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add scripts/lib tests/test_buckets_dlc.py
