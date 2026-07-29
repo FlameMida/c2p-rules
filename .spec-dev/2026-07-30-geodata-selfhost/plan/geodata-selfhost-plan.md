@@ -942,7 +942,7 @@ git commit -m "feat(T5): CI build geodata and publish latest release assets"
 **接口**：
 - 产出：`DAT_RULESET_MAP`（按 spec 表）；`MODE = "dat"`；`applyRuleset` 在 dat 模式写 `geosite:name` / `geoip:name`；Netflix/BilibiliHMT 可写双字段。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 ```javascript
 // /Users/flame/clash2passwall/tests/test_dat_map.mjs
@@ -1003,7 +1003,7 @@ function emptyOut() { return { domain: [], ip: [], policy: null }; }
 console.log("test_dat_map: ok");
 ```
 
-- [ ] **步骤 2：运行确认失败**
+- [x] **步骤 2：运行确认失败**
 
 ```bash
 node /Users/flame/clash2passwall/tests/test_dat_map.mjs
@@ -1011,7 +1011,7 @@ node /Users/flame/clash2passwall/tests/test_dat_map.mjs
 
 预期：无法解析 `map_dat.js`。
 
-- [ ] **步骤 3：实现 `map_dat.js` 并接入主文件**
+- [x] **步骤 3：实现 `map_dat.js` 并接入主文件**
 
 ```javascript
 // /Users/flame/clash2passwall/map_dat.js
@@ -1099,14 +1099,14 @@ const { applyDatRuleset, mapBuiltinGeositeGeoip } = require("./map_dat.cjs");
 
 测试改为 require cjs，或 `"type"` 调整。推荐 **测试与实现都用 cjs** 以匹配现有 `clash2passwall.js`。
 
-- [ ] **步骤 4：运行测试通过**
+- [x] **步骤 4：运行测试通过**
 
 ```bash
 node /Users/flame/clash2passwall/tests/test_dat_map.mjs
 # 或 node --test / node tests/test_dat_map.cjs
 ```
 
-- [ ] **步骤 5：提交（在 clash2passwall 目录；若无 git 则 init 或仅在 clash-rules-srs 文档引用）**
+- [x] **步骤 5：提交（在 clash2passwall 目录；若无 git 则 init 或仅在 clash-rules-srs 文档引用）**
 
 ```bash
 cd /Users/flame/clash2passwall
