@@ -249,7 +249,7 @@ git commit -m "feat(T1): add bucket classify and prefixed dlc emit"
   - `parse_source_content(src: dict, content: str) -> tuple[dict, int, list]`
   - `emit_source_files(name, buckets, data_dir: Path, ip_dir: Path) -> dict` 返回 `{"geosite": bool, "geoip": bool, "domain_count": int, "ip_count": int}`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 ```python
 # tests/test_sources_emit.py
@@ -311,13 +311,13 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **步骤 2：运行确认失败**
+- [x] **步骤 2：运行确认失败**
 
 ```bash
 .venv/bin/python -m unittest tests.test_sources_emit -v
 ```
 
-- [ ] **步骤 3：最小实现**
+- [x] **步骤 3：最小实现**
 
 ```python
 # scripts/lib/sources.py
@@ -395,13 +395,13 @@ def emit_source_files(name: str, buckets: dict, data_dir: Path, ip_dir: Path) ->
     return meta
 ```
 
-- [ ] **步骤 4：运行确认通过**
+- [x] **步骤 4：运行确认通过**
 
 ```bash
 .venv/bin/python -m unittest tests.test_sources_emit -v
 ```
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add scripts/lib/sources.py scripts/lib/fetch_emit.py tests/test_sources_emit.py
