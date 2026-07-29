@@ -20,6 +20,12 @@
 
 const fs = require("fs");
 const path = require("path");
+const {
+  DAT_GEOIP_TAGS,
+  DAT_RULESET_MAP,
+  applyDatRuleset,
+  mapBuiltinGeositeGeoip,
+} = require("./map_dat.cjs");
 
 // ============================================================
 // 镜像源（国内稳定优先）
@@ -33,7 +39,7 @@ const MIRRORS = {
   "raw":      "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo",
 };
 let MIRROR = MIRRORS["gh-proxy"];
-let MODE = "sing-box"; // "sing-box" | "xray"
+let MODE = "sing-box"; // "sing-box" | "xray" | "dat"
 const srs = (type, name) => `rule-set:remote:${MIRROR}/${type}/${name}.srs`;
 
 // ============================================================
@@ -159,6 +165,18 @@ function loadConfig(file) {
 // 规则映射
 // ============================================================
 function applyRuleset(name, out, providers, degrade) {
+  if (MODE === "dat") {
+    if (DAT_RULESET_MAP[name] === null) {
+      degrade.push({ line: "RULE-SET," + name, reason: "进程类规则(applications)，路由器场景无意义，已跳过" });
+      return;
+    }
+    if (applyDatRuleset(name, out, { hasGeoip: DAT_GEOIP_TAGS })) return;
+    degrade.push({
+      line: "RULE-SET," + name,
+      reason: "dat 模式没有该 provider 到自建 geodata tag 的固定映射，已跳过",
+    });
+    return;
+  }
   const m = RULESET_MAP[name];
   if (m === null) {
     degrade.push({ line: "RULE-SET," + name, reason: "进程类规则(applications)，路由器场景无意义，已跳过" });
@@ -221,8 +239,16 @@ function mapRule(rawLine, providers, degrade) {
     case "DOMAIN-SUFFIX":  out.domain.push("domain:" + parts[1]);   setPol(2); break;
     case "DOMAIN-KEYWORD": out.domain.push(parts[1]);               setPol(2); break;
     case "DOMAIN-REGEX":   out.domain.push("regexp:" + parts[1]);   setPol(2); break;
-    case "GEOSITE":        out.domain.push("geosite:" + parts[1]);  setPol(2); break;
-    case "GEOIP":          out.ip.push("geoip:" + parts[1]);        setPol(2); break;
+    case "GEOSITE":
+      if (MODE === "dat") mapBuiltinGeositeGeoip(type, parts[1], out);
+      else out.domain.push("geosite:" + parts[1]);
+      setPol(2);
+      break;
+    case "GEOIP":
+      if (MODE === "dat") mapBuiltinGeositeGeoip(type, parts[1], out);
+      else out.ip.push("geoip:" + parts[1]);
+      setPol(2);
+      break;
     case "IP-CIDR":
     case "IP-CIDR6":
     case "IP-SUFFIX":      out.ip.push(parts[1]);                   setPol(2); break;
@@ -339,13 +365,14 @@ function generateGuide(order, matchPolicy, groupTypes, degrade) {
 // 主流程
 // ============================================================
 function parseArgs(argv) {
-  const a = { positional: [], mirror: "gh-proxy", out: null, noInstall: false, xray: false };
+  const a = { positional: [], mirror: "gh-proxy", out: null, noInstall: false, xray: false, dat: false };
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i];
     if (t === "--mirror") a.mirror = argv[++i];
     else if (t === "--out") a.out = argv[++i];
     else if (t === "--no-install") a.noInstall = true;
     else if (t === "--xray") a.xray = true;
+    else if (t === "--dat") a.dat = true;
     else if (t === "-h" || t === "--help") a.help = true;
     else a.positional.push(t);
   }
@@ -355,8 +382,13 @@ function parseArgs(argv) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.positional.length) {
-    console.error("用法: node clash2passwall.js <clash.yaml> [--mirror gh-proxy|ghfast|jsdelivr|fastly|raw] [--out dir] [--xray] [--no-install]");
+    console.error("用法: node clash2passwall.js <clash.yaml> [--mirror gh-proxy|ghfast|jsdelivr|fastly|raw] [--out dir] [--xray|--dat] [--no-install]");
     process.exit(args.help ? 0 : 1);
+  }
+
+  if (args.xray && args.dat) {
+    console.error("--xray 与 --dat 不能同时使用");
+    process.exit(1);
   }
 
   const inputFile = args.positional[0];
@@ -365,7 +397,7 @@ function main() {
     process.exit(1);
   }
   MIRROR = MIRRORS[args.mirror];
-  MODE = args.xray ? "xray" : "sing-box";
+  MODE = args.dat ? "dat" : (args.xray ? "xray" : "sing-box");
 
   const cfg = loadConfig(inputFile);
   const providers = cfg["rule-providers"];
@@ -398,7 +430,7 @@ function main() {
 
   const outDir = path.resolve(args.out || path.join(process.cwd(), "output"));
   fs.mkdirSync(outDir, { recursive: true });
-  const suffix = MODE === "xray" ? "_xray" : "";
+  const suffix = MODE === "xray" ? "_xray" : (MODE === "dat" ? "_dat" : "");
   const confFile = "passwall2_shunt_rules" + suffix + ".conf";
   const installFile = "install_shunt_rules" + suffix + ".sh";
   const guideFile = "mapping_guide" + suffix + ".txt";
@@ -410,7 +442,10 @@ function main() {
 
   // 终端摘要
   console.log("============================================================");
-  console.log(" Clash → PassWall2 转换完成  [" + MODE + " 模式" + (MODE === "xray" ? "：rule-set → geosite:/geoip:" : "：rule-set → .srs 订阅") + "]");
+  const modeDetail = MODE === "sing-box"
+    ? "：rule-set → .srs 订阅"
+    : (MODE === "dat" ? "：rule-set → 自建 geodata tag" : "：rule-set → 标准 geosite:/geoip:");
+  console.log(" Clash → PassWall2 转换完成  [" + MODE + " 模式" + modeDetail + "]");
   console.log("============================================================");
   console.log(" 输入:        " + inputFile);
   console.log(" YAML 引擎:   " + (jsyaml ? "js-yaml" : "内置解析器"));
