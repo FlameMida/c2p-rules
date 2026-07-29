@@ -12,6 +12,10 @@ def parse_source_content(
 ) -> tuple[dict[str, list[str]], int, list[str]]:
     source_format = source.get("format", "yaml")
     behavior = source["behavior"]
+    if source_format not in {"yaml", "text"}:
+        raise ValueError(f"unsupported source format: {source_format}")
+    if behavior not in {"domain", "ipcidr", "classical"}:
+        raise ValueError(f"unsupported source behavior: {behavior}")
     buckets = empty_buckets()
     skipped = []
 

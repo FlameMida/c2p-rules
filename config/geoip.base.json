@@ -1,0 +1,21 @@
+{
+  "input": [
+    {
+      "type": "v2rayGeoIPDat",
+      "action": "add",
+      "args": {
+        "uri": "https://github.com/Loyalsoldier/geoip/releases/latest/download/geoip.dat"
+      }
+    }
+  ],
+  "output": [
+    {
+      "type": "v2rayGeoIPDat",
+      "action": "output",
+      "args": {
+        "outputDir": "publish",
+        "outputName": "geoip.dat"
+      }
+    }
+  ]
+}

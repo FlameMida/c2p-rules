@@ -41,6 +41,18 @@ class TestSources(unittest.TestCase):
 
         self.assertTrue(is_applications_source(source, buckets, skipped))
 
+    def test_unknown_behavior_is_a_parse_error(self):
+        source = {"name": "broken", "behavior": "mystery", "format": "yaml"}
+
+        with self.assertRaisesRegex(ValueError, "behavior"):
+            parse_source_content(source, "payload:\n  - example.com\n")
+
+    def test_unknown_format_is_a_parse_error(self):
+        source = {"name": "broken", "behavior": "domain", "format": "json"}
+
+        with self.assertRaisesRegex(ValueError, "format"):
+            parse_source_content(source, "example.com\n")
+
     def test_emit_youtube_has_no_geoip_file(self):
         buckets = empty_buckets()
         buckets["domain_suffix"].append("youtube.com")

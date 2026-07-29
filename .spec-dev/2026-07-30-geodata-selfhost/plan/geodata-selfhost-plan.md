@@ -428,7 +428,7 @@ git commit -m "feat(T2): load sources and emit dlc/ip tree"
   - CLI：`python scripts/build.py [--skip-compile]`  
     默认：拉源 → emit → 若存在 `vendor/domain-list-community/data` 则 merge → 写 geoip-config → 若未 `--skip-compile` 且工具在 PATH 则 compile；始终在 emit 后校验非空期望
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 ```python
 # tests/test_merge_hash.py
@@ -475,13 +475,13 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **步骤 2：运行确认失败**
+- [x] **步骤 2：运行确认失败**
 
 ```bash
 .venv/bin/python -m unittest tests.test_merge_hash -v
 ```
 
-- [ ] **步骤 3：最小实现**
+- [x] **步骤 3：最小实现**
 
 ```python
 # scripts/lib/merge_and_hash.py
@@ -694,7 +694,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **步骤 4：运行单元测试 + emit 烟雾**
+- [x] **步骤 4：运行单元测试 + emit 烟雾**
 
 ```bash
 .venv/bin/python -m unittest tests.test_merge_hash -v
@@ -703,7 +703,7 @@ if __name__ == "__main__":
 
 预期：unittest PASS；`build/data/` 与 `build/ip/` 有文件；进程 exit 0（网络失败则按 fail-fast 非零——若网络不可用，用录制 fixture 测 emit 路径：实施者可临时把 `fetch` 换成读 `tests/fixtures/`，但默认按线上 URL）。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add scripts/build.py scripts/lib/merge_and_hash.py config tests/test_merge_hash.py
