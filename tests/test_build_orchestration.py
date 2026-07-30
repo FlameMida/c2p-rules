@@ -53,13 +53,49 @@ class TestBuildOrchestration(unittest.TestCase):
             with self.assertRaisesRegex(BuildError, "wrong-side.*declared sides"):
                 emit_sources(
                     [source],
-                    lambda _: "payload:\n  - 'IP-CIDR,1.2.3.0/24'\n",
+                    lambda _: (
+                        "payload:\n"
+                        "  - 'DOMAIN-SUFFIX,wrong-side.example'\n"
+                        "  - 'IP-CIDR,1.2.3.0/24'\n"
+                    ),
                     root / "data",
                     root / "ip",
                 )
 
+    def test_source_sides_are_mandatory(self):
+        source = {"name": "missing-sides", "behavior": "domain", "url": "source"}
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+
+            with self.assertRaisesRegex(BuildError, "missing-sides.*sides.*required"):
+                emit_sources(
+                    [source],
+                    lambda _: "payload:\n  - example.com\n",
+                    root / "data",
+                    root / "ip",
+                )
+
+    def test_process_only_source_must_match_declared_nonempty_side(self):
+        content = "payload:\n  - 'PROCESS-NAME,Chrome'\n"
+        for side in ("geosite", "geoip"):
+            source = {
+                "name": f"process-{side}",
+                "behavior": "classical",
+                "url": "source",
+                "sides": [side],
+            }
+            with self.subTest(side=side), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                with self.assertRaisesRegex(BuildError, f"process-{side}.*declared sides"):
+                    emit_sources([source], lambda _: content, root / "data", root / "ip")
+
     def test_domain_source_must_not_be_empty(self):
-        source = {"name": "empty-domain", "behavior": "domain", "url": "empty"}
+        source = {
+            "name": "empty-domain",
+            "behavior": "domain",
+            "url": "empty",
+            "sides": ["geosite"],
+        }
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
 
@@ -67,7 +103,12 @@ class TestBuildOrchestration(unittest.TestCase):
                 emit_sources([source], lambda _: "payload: []\n", root / "data", root / "ip")
 
     def test_ipcidr_source_must_not_be_empty(self):
-        source = {"name": "empty-ip", "behavior": "ipcidr", "url": "empty"}
+        source = {
+            "name": "empty-ip",
+            "behavior": "ipcidr",
+            "url": "empty",
+            "sides": ["geoip"],
+        }
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
 
@@ -75,7 +116,12 @@ class TestBuildOrchestration(unittest.TestCase):
                 emit_sources([source], lambda _: "payload: []\n", root / "data", root / "ip")
 
     def test_classical_source_must_have_domain_unless_process_only(self):
-        source = {"name": "ip-only-classical", "behavior": "classical", "url": "ip"}
+        source = {
+            "name": "ip-only-classical",
+            "behavior": "classical",
+            "url": "ip",
+            "sides": ["geosite", "geoip"],
+        }
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
 
@@ -88,7 +134,12 @@ class TestBuildOrchestration(unittest.TestCase):
                 )
 
     def test_fetch_error_is_fatal(self):
-        source = {"name": "offline", "behavior": "domain", "url": "bad"}
+        source = {
+            "name": "offline",
+            "behavior": "domain",
+            "url": "bad",
+            "sides": ["geosite"],
+        }
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
 
@@ -99,7 +150,12 @@ class TestBuildOrchestration(unittest.TestCase):
                 emit_sources([source], fail_fetch, root / "data", root / "ip")
 
     def test_http_404_is_fatal(self):
-        source = {"name": "missing", "behavior": "domain", "url": "https://example.test/404"}
+        source = {
+            "name": "missing",
+            "behavior": "domain",
+            "url": "https://example.test/404",
+            "sides": ["geosite"],
+        }
         error = urllib.error.HTTPError(source["url"], 404, "Not Found", {}, None)
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -109,8 +165,8 @@ class TestBuildOrchestration(unittest.TestCase):
 
     def test_duplicate_source_name_is_fatal(self):
         sources = [
-            {"name": "same", "behavior": "domain", "url": "one"},
-            {"name": "same", "behavior": "domain", "url": "two"},
+            {"name": "same", "behavior": "domain", "url": "one", "sides": ["geosite"]},
+            {"name": "same", "behavior": "domain", "url": "two", "sides": ["geosite"]},
         ]
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

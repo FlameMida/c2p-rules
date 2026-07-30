@@ -63,8 +63,6 @@ def emit_sources(
     expected_site: set[str] = set()
     expected_ip: set[str] = set()
     seen_names: set[str] = set()
-    declared_sides: dict[str, set[str]] = {}
-
     for source in sources:
         name = source.get("name")
         if not isinstance(name, str) or not TAG_PATTERN.fullmatch(name):
@@ -74,16 +72,21 @@ def emit_sources(
         seen_names.add(name)
 
         declared = source.get("sides")
-        if declared is not None:
-            if not isinstance(declared, list) or not all(
-                side in {"geosite", "geoip"} for side in declared
-            ):
-                raise BuildError(f"{name}: sides must contain only geosite/geoip")
-            if len(set(declared)) != len(declared):
-                raise BuildError(f"{name}: duplicate declared side")
-            declared_sides[name] = set(declared)
+        if declared is None:
+            raise BuildError(f"{name}: sides is required")
+        if not isinstance(declared, list) or not all(
+            side in {"geosite", "geoip"} for side in declared
+        ):
+            raise BuildError(f"{name}: sides must contain only geosite/geoip")
+        if len(set(declared)) != len(declared):
+            raise BuildError(f"{name}: duplicate declared side")
+        declared_sides = set(declared)
 
         if name == "applications":
+            if declared_sides:
+                raise BuildError(
+                    f"{name}: emitted sides [] do not match declared sides {sorted(declared_sides)}"
+                )
             print("  · skip applications")
             continue
 
@@ -94,6 +97,10 @@ def emit_sources(
             raise BuildError(f"{name}: fetch/parse failed: {error}") from error
 
         if is_applications_source(source, buckets, skipped):
+            if declared_sides:
+                raise BuildError(
+                    f"{name}: emitted sides [] do not match declared sides {sorted(declared_sides)}"
+                )
             print(f"  · skip {name} (process-only)")
             continue
 
@@ -106,16 +113,16 @@ def emit_sources(
             )
             if present
         }
-        if name in declared_sides and actual_sides != declared_sides[name]:
-            raise BuildError(
-                f"{name}: emitted sides {sorted(actual_sides)} do not match "
-                f"declared sides {sorted(declared_sides[name])}"
-            )
         behavior = source["behavior"]
         if behavior in {"domain", "classical"} and not metadata["geosite"]:
             raise BuildError(f"{name}: expected domain tag is empty")
         if behavior == "ipcidr" and not metadata["geoip"]:
             raise BuildError(f"{name}: expected IP tag is empty")
+        if actual_sides != declared_sides:
+            raise BuildError(
+                f"{name}: emitted sides {sorted(actual_sides)} do not match "
+                f"declared sides {sorted(declared_sides)}"
+            )
 
         if metadata["geosite"]:
             expected_site.add(name)

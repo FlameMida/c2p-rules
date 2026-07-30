@@ -322,8 +322,10 @@ sources.yaml
 **sources.yaml 项**
 
 ```yaml
-- {name: <tag>, behavior: domain|ipcidr|classical, url: "...", format: yaml|text}
+- {name: <tag>, behavior: domain|ipcidr|classical, sides: [geosite|geoip], url: "...", format: yaml|text}
 ```
+
+`sides` 为必填的独立正/负 tag 契约：普通源必须精确声明实际输出侧；`applications` 或仅含完整 `PROCESS-*` 家族规则的源只能声明 `sides: []`。
 
 **domain-list-custom**
 

@@ -25,4 +25,4 @@ sources:
   - {name: xiaolin-tiktok,    behavior: classical, sides: [geosite],        url: "https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/TikTok.txt"}
   # ===== Sukka（text classical，每行一条规则）=====
   - {name: sukka-ai,          behavior: classical, format: text, sides: [geosite], url: "https://ruleset.skk.moe/Clash/non_ip/ai.txt"}
-  # ===== 自定义接口：在此追加你自己的源，保持同样字段（name/behavior/url[/format]）=====
+  # ===== 自定义接口：在此追加你自己的源，保持同样字段（name/behavior/sides/url[/format]）=====
