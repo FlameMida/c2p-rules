@@ -11,9 +11,7 @@ spec_dev:
     - "README.md"
     - "context.md"
     - "requirements.txt"
-    - "/Users/flame/clash2passwall/clash2passwall.js"
-    - "/Users/flame/clash2passwall/**/*.sh"
-    - "/Users/flame/clash2passwall/output*/**"
+    - "tools/clash2passwall/**"
   sync_commit: null
 ---
 
@@ -28,7 +26,7 @@ spec_dev:
 1. Releases 提供 `geosite.dat`、`geoip.dat` 及对应 `.sha256sum`，格式可被 PassWall2 `rule_update.lua` 校验；sha 资源 URL 可由 dat URL 将最终路径段 `X` 换为 `X.sha256sum` 得到。
 2. 产物同时包含：geosite 侧 community 标准 list（至少 `cn`）+ 全部 `sources.yaml` 域名侧自定义 tag；geoip 侧官方底包 list + 全部 IP 侧自定义 tag。
 3. PassWall2 将 `geoip_url`/`geosite_url` 指向该 Releases 的 `.../releases/latest/download/{geoip,geosite}.dat` 后，xray 与 sing-box（经 geoview）均可使用 `geosite:loyalsoldier-gfw` 等引用。
-4. `clash2passwall --dat` 按固定映射表输出自定义 tag；安装脚本写入上述 URL，并覆盖导入分流规则（不删节点）。
+4. 仓库内 `clash2passwall --dat` 按固定映射表与本次构建 manifest 输出确实存在的 tag；安装脚本写入明确配置的 URL，并事务性覆盖导入具名分流规则（不删节点）。
 
 ## 非目标
 
@@ -44,9 +42,9 @@ spec_dev:
 - **自定义 tag**：写入 `.dat` 的 list 名，等于 `sources.yaml` 条目的 `name`（如 `loyalsoldier-gfw`）。_Avoid_：MetaCubeX 近似名、仅用 Script.js 短键作 dat list 名。
 - **轻量完整增强底**：geosite = `v2fly/domain-list-community` 的 `data/` 全量；geoip = `Loyalsoldier/geoip` 已发布的 `geoip.dat` 整包。_Avoid_：「Loyalsoldier 全量底」混称（易被理解成 geosite 也用 Loyalsoldier 增强包）、v2ray-rules-dat 全聚合流水线。
 - **启用源**：`sources.yaml` 中 `sources` 数组的每一个条目；本仓库无 enable 字段，数组内即启用。
-- **applications 跳过**：`name` 为 `applications` 的源，或解析后仅含 `PROCESS-NAME`（及同类进程规则）的源；不生成任何 dat list。
+- **applications 跳过**：`name` 为 `applications` 的源，或解析后仅含完整 `PROCESS-*` 家族规则的源；不生成任何 dat list。
 - **消费契约**：PassWall2 要求的文件名、sha256 伴随文件与 URL 派生、tag 引用方式。
-- **classical 拆分**：classical 源中域名 → geosite tag；IP-CIDR/IP-CIDR6 → **同名** geoip tag。
+- **classical 拆分**：classical 源中域名 → geosite tag；IP-CIDR/IP-CIDR6 → **同名** geoip tag；`IP-SUFFIX` 无法无损转为 CIDR，明确跳过。
 - **交付切片**：A 构建发布契约；B 转换映射；C 安装脚本（同一 spec，实施 plan 可分批）。
 
 ## 影响面
@@ -54,7 +52,7 @@ spec_dev:
 | 路径 | 影响 |
 |------|------|
 | `/Users/flame/clash-rules-srs/**` | 原地重构：build、CI、文档；`.srs` 不再作为发布产物 |
-| `/Users/flame/clash2passwall/**` | `--dat` 映射表、安装脚本 |
+| `tools/clash2passwall/**` | 已并入主仓的 `--dat` 映射、具名分流与事务安装脚本 |
 | PassWall2 运行时 UCI | 仅运维/脚本改 URL 与分流；**不改**上游包源码 |
 | 外部工具 | CI：`domain-list-custom`、`Loyalsoldier/geoip`；list 存在性探针工具不绑定特定实现 |
 
@@ -91,6 +89,8 @@ spec_dev:
 ### Requirement: 发布产物仅限 dat 与 sha256sum
 
 CI 发布到 GitHub Releases 的资产集合 SHALL 仅包含 `geosite.dat`、`geoip.dat`、`geosite.dat.sha256sum`、`geoip.dat.sha256sum`（允许附带构建日志 artifact，但**不得**将 `.srs` 作为 Release 资产发布）。
+
+构建 SHALL 在只读 token job 中运行，checkout 不持久化凭据，可执行上游工具固定到完整提交；独立写权限 job 只能消费已验证 artifact。新 Release SHALL 先保持 draft，上传后经 API 回读确认资产集合精确等于四项，再公开并切换 latest。
 
 #### Scenario: Release 资产列表无 srs
 
@@ -220,6 +220,8 @@ classical 源中的域名类规则 SHALL 写入 `geosite.dat` 的 list `<name>`�
 
 内置兜底 `GEOSITE,CN` / `GEOIP,CN` / `GEOIP,LAN` 在 dat 模式下 SHALL 分别映射为 `geosite:cn` / `geoip:cn` / `geoip:private`（依赖轻量完整增强底，不映射为自定义 tag）。
 
+`--dat` SHALL 强制读取构建产生的机器可读 tag manifest。映射表只表达 provider→tag 名关系；任何 tag 是否存在（包括 Netflix/Bilibili 的 IP 侧）均以 manifest 的 `required.geosite` / `required.geoip` 为准。输出中的每一个 geosite/geoip 引用 SHALL 能在该 manifest 对应侧找到。
+
 #### Scenario: gfw 映射
 
 - **GIVEN** 输入规则含 `RULE-SET,gfw,Proxy`
@@ -252,6 +254,10 @@ classical 源中的域名类规则 SHALL 写入 `geosite.dat` 的 list `<name>`�
    `https://github.com/<owner>/<repo>/releases/latest/download/geoip.dat` 与 `.../geosite.dat`（`<owner>/<repo>` 可配置，默认与本仓库发布一致）；
 2. 以 `clash2passwall --dat` 的输出（或脚本生成的等价 UCI 片段）为输入，**删除既有 `shunt_rules` section 后重新导入**（覆盖导入），且 SHALL NOT 删除 `nodes` / 用户节点 section；
 3. 在标准输出或注释中提示：使用 sing-box 内核时需要 `geoview >= 0.1.10`。
+
+在公开仓库尚未建立时，脚本 SHALL 拒绝未配置或占位 owner/repo，而不是生成无效默认 URL。生成的 `shunt_rules` SHALL 为稳定具名 section，原 Clash 分组名保存在 `remarks`；不得依赖 UCI 为匿名 section 生成 `cfg...` ID。所有 YAML 派生字段 SHALL 拒绝 CR/LF/NUL/控制字符，安装载荷不得直接插入固定 heredoc。
+
+安装 SHALL 在临时 UCI 配置中完成 URL、删除、导入与解析验证，随后原子替换真实配置；临时提交、载荷解码或最终提交失败时 SHALL 恢复备份。真实配置存在未提交 UCI 变更时 SHALL 拒绝覆盖。
 
 #### Scenario: 写入 URL
 

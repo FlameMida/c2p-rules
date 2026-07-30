@@ -10,7 +10,7 @@
 
 **架构**：Python 拉 sources → 五桶 → dlc 文本 + IP txt → domain-list-custom（community∪自定义）→ geosite.dat；geoip convert（官方 dat 底 + 自定义 CIDR）→ geoip.dat → sha256 → Releases。下游 `clash2passwall --dat` 与 install 脚本写 UCI URL 并覆盖导入 shunt_rules。
 
-**技术栈**：Python 3.11+、PyYAML、Go（domain-list-custom / Loyalsoldier-geoip）、GitHub Actions、Node.js（clash2passwall 零依赖）
+**技术栈**：Python 3.11+、PyYAML、Go（domain-list-custom / Loyalsoldier-geoip）、GitHub Actions、Node.js + 固定版 js-yaml
 
 ## 全局约束
 
@@ -20,7 +20,7 @@
 - sha256 行格式：`64hex` + 两个空格 + 纯文件名 + `\n`；latest URL：`.../releases/latest/download/<file>`。
 - 任一启用源失败 / 底包失败 / 撞名 / 期望 tag 空 → 非零退出且不更新 latest。
 - 切片：A 构建发布（任务 1–5）、B 转换（任务 6–7）、C 安装与文档（任务 8–9）。
-- 仓库根：`/Users/flame/clash-rules-srs`；转换器：`/Users/flame/clash2passwall`。
+- 仓库根：`/Users/flame/clash-rules-srs`；转换器已从本地仓 `5931483a258ddfe0b66fcd7d32274a1d685ea871` 以 subtree 并入 `tools/clash2passwall/`（导入提交 `30d14d1`），后续以主仓 revision 为唯一交付锚点。
 
 ---
 
@@ -1287,9 +1287,8 @@ cd /Users/flame/clash-rules-srs/.worktrees/plan-geodata-selfhost
 .venv/bin/python -m unittest discover -s tests -v
 # 若环境允许：完整 build.py + probe
 # clash2passwall tests
-node /Users/flame/clash2passwall/tests/test_dat_map.mjs 2>/dev/null || node /Users/flame/clash2passwall/tests/test_dat_map.cjs
-node /Users/flame/clash2passwall/tests/test_dat_e2e.cjs
-node /Users/flame/clash2passwall/tests/test_install_script.cjs
+npm --prefix tools/clash2passwall ci --ignore-scripts
+npm --prefix tools/clash2passwall test
 ```
 
 - [ ] **步骤 2：合并回来源分支**
@@ -1334,5 +1333,24 @@ git commit -m "chore(spec): sync_commit anchor ${SYNC:0:7}"
 | 文档 | T9 |
 
 Scenario → 测试：均在 T1/T2/T3/T6/T7/T8 有对应 assert。无 TBD 占位。
+
+## 审查修复增补（ADDED-IN-FLIGHT，2026-07-30）
+
+用户在收尾审查后授权“全部修复”，并追加“全面审查 clash2passwall、并入本项目、修复执行后分组名异常”。原 T0–T10 保留为实施历史，以下增补为交付对账依据：
+
+- [x] 严格 YAML payload/root/item 校验；完整 `PROCESS-*` 识别；`IP-SUFFIX` 明确跳过。
+- [x] `sources.yaml sides` 成为独立正/负 tag 预言机，最终 dat 同时做 required 与 forbidden 探针。
+- [x] geoip 构建读取 `config/geoip.base.json`，不再维护死模板。
+- [x] 将 companion commit `5931483` subtree 导入 `tools/clash2passwall/`；主仓 CI 统一执行 Node 测试。
+- [x] `--dat --tag-manifest` 取代静态 geoip tag 集，跨契约检查所有输出引用。
+- [x] 生成稳定具名 UCI section；保留原分组 `remarks`，解决匿名 `cfg...` 字符串名称。
+- [x] 拒绝 YAML 控制字符，base64 封装安装载荷，显式校验 repo slug。
+- [x] 临时 UCI staging + 原子替换 + rollback trap；fake-UCI 覆盖成功及三类故障注入。
+- [x] CI 拆分只读 build/写权限 publish；固定 Action/工具提交；draft 四资产回读后再 latest。
+- [x] CLI 失败快停覆盖 missing/404、畸形 YAML、冲突，证明不调用编译器且无完整发布集。
+- [ ] 完整在线构建、独立复审、验收报告与 Requirement Reconciliation 定稿。
+- [ ] T11 本地合并、worktree 清理与 sync_commit 锚定。
+
+公开仓库创建、remote 配置、push 与第一次线上 Release 未获授权，必须在最终对账中标记 DEFERRED，不得由实施代理自行执行。
 
 ---

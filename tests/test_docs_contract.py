@@ -35,6 +35,10 @@ class TestDocsContract(unittest.TestCase):
         self.assertIn("clash2passwall.js", self.readme)
         self.assertIn("--dat", self.readme)
         self.assertIn("geoview >= 0.1.10", self.readme)
+        self.assertIn("tools/clash2passwall", self.readme)
+        self.assertIn("--tag-manifest", self.readme)
+        self.assertIn("--repo", self.readme)
+        self.assertNotIn("/Users/flame/clash2passwall", self.readme + self.context)
 
 
 if __name__ == "__main__":
