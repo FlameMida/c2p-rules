@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 import yaml
 
@@ -20,5 +21,8 @@ def is_applications_source(
     return (
         sum(len(values) for values in buckets.values()) == 0
         and bool(skipped)
-        and all(rule.startswith("PROCESS-NAME") for rule in skipped)
+        and all(
+            re.fullmatch(r"PROCESS(?:-[A-Z0-9]+)+", rule.strip().split(",", 1)[0])
+            for rule in skipped
+        )
     )

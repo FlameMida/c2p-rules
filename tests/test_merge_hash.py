@@ -74,6 +74,7 @@ class TestMergeHash(unittest.TestCase):
                 ip_dir,
                 output_json,
                 publish_dir,
+                template_path=ROOT / "config" / "geoip.base.json",
             )
 
             config = json.loads(output_json.read_text(encoding="utf-8"))
@@ -83,6 +84,33 @@ class TestMergeHash(unittest.TestCase):
                 ["alpha", "zeta"],
             )
             self.assertEqual(config["output"][0]["args"]["outputName"], "geoip.dat")
+
+    def test_geoip_config_preserves_template_options(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            template = root / "template.json"
+            template.write_text(
+                json.dumps(
+                    {
+                        "input": [{"type": "v2rayGeoIPDat", "action": "add", "args": {"uri": "old", "wantedList": ["cn"]}}],
+                        "output": [{"type": "v2rayGeoIPDat", "action": "output", "args": {"outputDir": "old", "outputName": "old.dat", "onlyIPType": "IPv4"}}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output = root / "generated.json"
+
+            build_geoip_config(
+                "https://example.test/base.dat",
+                root / "ip",
+                output,
+                root / "publish",
+                template_path=template,
+            )
+
+            generated = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(generated["input"][0]["args"]["wantedList"], ["cn"])
+            self.assertEqual(generated["output"][0]["args"]["onlyIPType"], "IPv4")
 
 
 if __name__ == "__main__":

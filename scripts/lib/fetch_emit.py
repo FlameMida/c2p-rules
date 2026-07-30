@@ -20,8 +20,18 @@ def parse_source_content(
     skipped = []
 
     if source_format == "yaml":
-        document = yaml.safe_load(content) or {}
-        items = document.get("payload", []) or []
+        document = yaml.safe_load(content)
+        if document is None:
+            document = {}
+        if not isinstance(document, dict):
+            raise ValueError("YAML root must be a mapping")
+        items = document.get("payload")
+        if items is None:
+            items = []
+        if not isinstance(items, list):
+            raise ValueError("YAML payload must be a list")
+        if any(not isinstance(item, str) for item in items):
+            raise ValueError("YAML payload items must be strings")
     else:
         items = [
             line
@@ -30,7 +40,7 @@ def parse_source_content(
         ]
 
     for item in items:
-        value = str(item)
+        value = item
         if behavior == "domain":
             classify_domain(value, buckets)
         elif behavior == "ipcidr":

@@ -46,6 +46,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--side", choices=["geosite", "geoip"], required=True)
     parser.add_argument("--geoview", default="geoview")
     parser.add_argument("--also", nargs="*", default=["cn"])
+    parser.add_argument("--forbid", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -59,12 +60,17 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     expected = json.loads(args.expect.read_text(encoding="utf-8"))
-    tags = list(dict.fromkeys([*expected[args.side], *args.also]))
+    if args.forbid:
+        tags = expected.get("forbidden", {}).get(args.side, [])
+    else:
+        required = expected.get("required", expected)
+        tags = list(dict.fromkeys([*required[args.side], *args.also]))
     failed = []
     for tag in tags:
         success = probe_one(args.geoview, args.side, args.dat, tag)
-        print(("✓" if success else "✗"), tag)
-        if not success:
+        accepted = not success if args.forbid else success
+        print(("✓" if accepted else "✗"), tag, "(absent)" if args.forbid else "")
+        if not accepted:
             failed.append(tag)
     return 1 if failed else 0
 

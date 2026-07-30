@@ -11,9 +11,9 @@ from build import BuildError, emit_sources
 class TestBuildOrchestration(unittest.TestCase):
     def test_emit_sources_derives_expected_tags_and_skips_process_only(self):
         sources = [
-            {"name": "site", "behavior": "domain", "url": "site"},
-            {"name": "mixed", "behavior": "classical", "url": "mixed"},
-            {"name": "desktop", "behavior": "classical", "url": "desktop"},
+            {"name": "site", "behavior": "domain", "url": "site", "sides": ["geosite"]},
+            {"name": "mixed", "behavior": "classical", "url": "mixed", "sides": ["geosite", "geoip"]},
+            {"name": "desktop", "behavior": "classical", "url": "desktop", "sides": []},
         ]
         content = {
             "site": "payload:\n  - '+.example.com'\n",
@@ -32,7 +32,29 @@ class TestBuildOrchestration(unittest.TestCase):
 
             self.assertEqual(expected["geosite"], ["mixed", "site"])
             self.assertEqual(expected["geoip"], ["mixed"])
+            self.assertEqual(expected["required"]["geosite"], ["cn", "mixed", "site"])
+            self.assertEqual(expected["required"]["geoip"], ["cn", "mixed", "private"])
+            self.assertIn("desktop", expected["forbidden"]["geosite"])
+            self.assertIn("site", expected["forbidden"]["geoip"])
             self.assertFalse((root / "data" / "desktop").exists())
+
+    def test_declared_source_sides_are_an_independent_contract(self):
+        source = {
+            "name": "wrong-side",
+            "behavior": "classical",
+            "url": "source",
+            "sides": ["geosite"],
+        }
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+
+            with self.assertRaisesRegex(BuildError, "wrong-side.*declared sides"):
+                emit_sources(
+                    [source],
+                    lambda _: "payload:\n  - 'IP-CIDR,1.2.3.0/24'\n",
+                    root / "data",
+                    root / "ip",
+                )
 
     def test_domain_source_must_not_be_empty(self):
         source = {"name": "empty-domain", "behavior": "domain", "url": "empty"}

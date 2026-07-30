@@ -42,14 +42,17 @@ def build_geoip_config(
     ip_dir: Path,
     output_json: Path,
     publish_dir: Path,
+    *,
+    template_path: Path,
 ) -> None:
-    inputs = [
-        {
-            "type": "v2rayGeoIPDat",
-            "action": "add",
-            "args": {"uri": base_dat_uri},
-        }
-    ]
+    config = json.loads(template_path.read_text(encoding="utf-8"))
+    inputs = config.get("input")
+    outputs = config.get("output")
+    if not isinstance(inputs, list) or not inputs:
+        raise ValueError("geoip template input must be a non-empty list")
+    if not isinstance(outputs, list) or not outputs:
+        raise ValueError("geoip template output must be a non-empty list")
+    inputs[0].setdefault("args", {})["uri"] = base_dat_uri
     if ip_dir.is_dir():
         for path in sorted(ip_dir.glob("*.txt")):
             inputs.append(
@@ -60,17 +63,7 @@ def build_geoip_config(
                 }
             )
 
-    config = {
-        "input": inputs,
-        "output": [
-            {
-                "type": "v2rayGeoIPDat",
-                "action": "output",
-                "args": {
-                    "outputDir": str(publish_dir.resolve()),
-                    "outputName": "geoip.dat",
-                },
-            }
-        ],
-    }
+    output_args = outputs[0].setdefault("args", {})
+    output_args["outputDir"] = str(publish_dir.resolve())
+    output_args["outputName"] = "geoip.dat"
     output_json.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")

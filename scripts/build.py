@@ -63,6 +63,7 @@ def emit_sources(
     expected_site: set[str] = set()
     expected_ip: set[str] = set()
     seen_names: set[str] = set()
+    declared_sides: dict[str, set[str]] = {}
 
     for source in sources:
         name = source.get("name")
@@ -71,6 +72,16 @@ def emit_sources(
         if name in seen_names:
             raise BuildError(f"duplicate source name: {name}")
         seen_names.add(name)
+
+        declared = source.get("sides")
+        if declared is not None:
+            if not isinstance(declared, list) or not all(
+                side in {"geosite", "geoip"} for side in declared
+            ):
+                raise BuildError(f"{name}: sides must contain only geosite/geoip")
+            if len(set(declared)) != len(declared):
+                raise BuildError(f"{name}: duplicate declared side")
+            declared_sides[name] = set(declared)
 
         if name == "applications":
             print("  · skip applications")
@@ -87,6 +98,19 @@ def emit_sources(
             continue
 
         metadata = emit_source_files(name, buckets, data_dir, ip_dir)
+        actual_sides = {
+            side
+            for side, present in (
+                ("geosite", metadata["geosite"]),
+                ("geoip", metadata["geoip"]),
+            )
+            if present
+        }
+        if name in declared_sides and actual_sides != declared_sides[name]:
+            raise BuildError(
+                f"{name}: emitted sides {sorted(actual_sides)} do not match "
+                f"declared sides {sorted(declared_sides[name])}"
+            )
         behavior = source["behavior"]
         if behavior in {"domain", "classical"} and not metadata["geosite"]:
             raise BuildError(f"{name}: expected domain tag is empty")
@@ -104,9 +128,21 @@ def emit_sources(
             f"skipped={len(skipped):4d}"
         )
 
+    all_names = set(seen_names) | {"applications"}
+    required_site = expected_site | {"cn"}
+    required_ip = expected_ip | {"cn", "private"}
     return {
+        "schema_version": 1,
         "geosite": sorted(expected_site),
         "geoip": sorted(expected_ip),
+        "required": {
+            "geosite": sorted(required_site),
+            "geoip": sorted(required_ip),
+        },
+        "forbidden": {
+            "geosite": sorted(all_names - required_site),
+            "geoip": sorted(all_names - required_ip),
+        },
     }
 
 
@@ -204,7 +240,13 @@ def main(argv: list[str] | None = None) -> int:
             encoding="utf-8",
         )
         config_path = BUILD / "geoip-config.json"
-        build_geoip_config(GEOIP_BASE, IP_DIR, config_path, PUBLISH)
+        build_geoip_config(
+            GEOIP_BASE,
+            IP_DIR,
+            config_path,
+            PUBLISH,
+            template_path=ROOT / "config" / "geoip.base.json",
+        )
 
         if args.skip_compile:
             print("skip-compile: emit done")

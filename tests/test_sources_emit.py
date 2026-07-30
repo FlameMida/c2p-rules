@@ -41,6 +41,61 @@ class TestSources(unittest.TestCase):
 
         self.assertTrue(is_applications_source(source, buckets, skipped))
 
+    def test_all_process_rule_families_are_skipped_as_process_only(self):
+        source = {"name": "desktop-only", "behavior": "classical"}
+        buckets, _, skipped = parse_source_content(
+            source,
+            "payload:\n"
+            "  - ' PROCESS-NAME,Chrome '\n"
+            "  - 'PROCESS-PATH,/Applications/Browser.app'\n"
+            "  - 'PROCESS-PATH-REGEX,^/opt/.+'\n",
+        )
+
+        self.assertTrue(is_applications_source(source, buckets, skipped))
+
+    def test_process_and_unsupported_nonprocess_rules_are_not_process_only(self):
+        source = {"name": "mixed-unsupported", "behavior": "classical"}
+        buckets, _, skipped = parse_source_content(
+            source,
+            "payload:\n"
+            "  - 'PROCESS-NAME,Chrome'\n"
+            "  - 'IP-ASN,13335'\n",
+        )
+
+        self.assertFalse(is_applications_source(source, buckets, skipped))
+
+    def test_ip_suffix_is_not_emitted_as_cidr(self):
+        source = {"name": "ip-suffix", "behavior": "classical"}
+        buckets, _, skipped = parse_source_content(
+            source,
+            "payload:\n  - 'IP-SUFFIX,8.8.8.0/24'\n",
+        )
+
+        self.assertEqual(buckets["ip_cidr"], [])
+        self.assertEqual(skipped, ["IP-SUFFIX,8.8.8.0/24"])
+
+    def test_yaml_root_must_be_mapping(self):
+        source = {"name": "broken", "behavior": "domain", "format": "yaml"}
+
+        with self.assertRaisesRegex(ValueError, "root.*mapping"):
+            parse_source_content(source, "- example.com\n")
+
+    def test_yaml_payload_must_be_list(self):
+        source = {"name": "broken", "behavior": "domain", "format": "yaml"}
+
+        for content in ("payload: example.com\n", "payload: {domain: example.com}\n"):
+            with self.subTest(content=content):
+                with self.assertRaisesRegex(ValueError, "payload.*list"):
+                    parse_source_content(source, content)
+
+    def test_yaml_payload_items_must_be_strings(self):
+        source = {"name": "broken", "behavior": "domain", "format": "yaml"}
+
+        for item in ("123", "true", "{domain: example.com}", "[example.com]"):
+            with self.subTest(item=item):
+                with self.assertRaisesRegex(ValueError, "payload.*string"):
+                    parse_source_content(source, f"payload:\n  - {item}\n")
+
     def test_unknown_behavior_is_a_parse_error(self):
         source = {"name": "broken", "behavior": "mystery", "format": "yaml"}
 

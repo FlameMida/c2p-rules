@@ -77,6 +77,44 @@ class TestProbeTags(unittest.TestCase):
 
             self.assertEqual(result, 1)
 
+    def test_forbidden_probe_fails_when_tag_exists(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            dat = root / "geoip.dat"
+            dat.write_bytes(b"dat")
+            expected = root / "expected.json"
+            expected.write_text(
+                json.dumps(
+                    {
+                        "required": {"geosite": [], "geoip": []},
+                        "forbidden": {"geosite": [], "geoip": ["domain-only"]},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            converter = root / "fake-geoview"
+            converter.write_text(
+                "#!/bin/sh\n"
+                "while [ \"$#\" -gt 0 ]; do\n"
+                "  if [ \"$1\" = -output ]; then shift; printf converted > \"$1\"; exit 0; fi\n"
+                "  shift\n"
+                "done\n",
+                encoding="utf-8",
+            )
+            converter.chmod(0o755)
+
+            result = main(
+                [
+                    "--dat", str(dat),
+                    "--expect", str(expected),
+                    "--side", "geoip",
+                    "--forbid",
+                    "--geoview", str(converter),
+                ]
+            )
+
+            self.assertEqual(result, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

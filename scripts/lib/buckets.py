@@ -44,6 +44,7 @@ def classify_rule(
     buckets: dict[str, list[str]],
     skipped: list[str],
 ) -> None:
+    line = line.strip()
     parts = [part.strip() for part in line.split(",")]
     if not parts or not parts[0]:
         return
@@ -57,7 +58,6 @@ def classify_rule(
         "DOMAIN-REGEX": "domain_regex",
         "IP-CIDR": "ip_cidr",
         "IP-CIDR6": "ip_cidr",
-        "IP-SUFFIX": "ip_cidr",
     }.get(rule_type)
 
     if target is not None:
