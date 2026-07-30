@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"clash-rules-srs/internal/manifest"
 	"clash-rules-srs/internal/model"
@@ -64,7 +65,12 @@ func (p *Prober) Has(ctx context.Context, side model.Side, tag string) (bool, er
 		"-list", tag,
 		"-output", output,
 		"-lowmem=true",
+		"-strict=false",
 	); err != nil {
+		present, listErr := p.datListsTag(ctx, side, datPath, tag)
+		if listErr == nil && !present {
+			return false, nil
+		}
 		return false, fmt.Errorf("probe %s:%s: %w", side, tag, err)
 	}
 	outputInfo, err := os.Stat(output)
@@ -75,6 +81,23 @@ func (p *Prober) Has(ctx context.Context, side model.Side, tag string) (bool, er
 		return false, fmt.Errorf("stat probe output for %s:%s: %w", side, tag, err)
 	}
 	return outputInfo.Mode().IsRegular() && outputInfo.Size() > 0, nil
+}
+
+func (p *Prober) datListsTag(ctx context.Context, side model.Side, datPath, tag string) (bool, error) {
+	output, err := p.runner.Output(ctx, "geoview", "",
+		"-type", string(side),
+		"-action", "extract",
+		"-input", datPath,
+	)
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(output, "\n") {
+		if strings.EqualFold(strings.TrimSpace(line), tag) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func Required(ctx context.Context, lookup TagLookup, document manifest.Document) error {

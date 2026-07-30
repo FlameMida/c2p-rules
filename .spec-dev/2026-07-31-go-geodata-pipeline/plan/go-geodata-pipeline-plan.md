@@ -1461,7 +1461,7 @@ git commit -m "feat(T12): 迁移输出目标与默认分流"
 - 消费：任务 11 完整 app、任务 12 repository config、`.cache/bin` 三工具。
 - 产出：synthetic full-build integration harness；真实每日 build 前的离线回归门。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 `build_integration_test.go` 使用 `//go:build integration`，若 `.cache/bin` 缺工具则直接失败并提示先执行 bootstrap，不静默 skip。测试至少包含：
 
@@ -1494,7 +1494,7 @@ func TestSyntheticFullBuildMergesAndSeparatesApprovedTags(t *testing.T) {
 
 fixture 中 Google 含 `domain:googleapis.com`/`include:youtube`，YouTube 含 `full:youtubei.googleapis.com`，普通 bilibili 与 custom BilibiliHMT 含互不相同域名。GeoIP fixture 通过 pinned geoip 先生成含 `cn/private/netflix` 的本地 base dat，其中 netflix 为 `198.51.100.0/24`，再让 custom 合入同一 `/24` 与内部 `198.51.100.0/25`；测试分别探针 `.1` 与 `.200`，证明整个 `/24` 仍匹配。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：
 
@@ -1505,11 +1505,11 @@ go test -tags=integration ./internal/app -run TestSyntheticFullBuild -v
 
 预期：首次 FAIL 于尚未补齐的真实工具参数、fixture base 或 tag 语义断言；不能以 skip 代替红灯。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 补齐 integration fixture 构造器，只使用本地 `httptest.Server` 和临时文件，不依赖滚动远程 source。对生成的 `data-merged/google` / `youtube` / `BilibiliHMT` 文本做语义断言，再用真实 geoview 对最终 dat 做 required/forbidden 非空探针；GeoIP 重叠测试读取 converter 生成的 canonical list 证据或 geoview 转换输出，不在 wrapper 中重写 IPSet。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：
 
@@ -1521,7 +1521,7 @@ go vet ./...
 
 预期：integration PASS；普通测试和 vet 全绿；发布目录精确六资产。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/app/build_integration_test.go internal/app/testdata

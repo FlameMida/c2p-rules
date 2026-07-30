@@ -173,13 +173,21 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			if runner == nil {
 				return fmt.Errorf("tool runner is nil")
 			}
-			return runner.Run(ctx, "domain-list-custom", state.Options.Root,
+			if err := runner.Run(ctx, "domain-list-custom", state.Options.Root,
 				"--datapath="+state.Tx.Layout().DataMerged,
 				"--datname=geosite.dat",
 				"--outputpath="+state.Tx.Layout().Publish,
 				"--exportlists=",
 				"--togfwlist=",
-			)
+			); err != nil {
+				return err
+			}
+			// The pinned compiler creates an empty gfwlist.txt even when
+			// --togfwlist is empty. It is not part of the release contract.
+			if err := os.Remove(filepath.Join(state.Tx.Layout().Publish, "gfwlist.txt")); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("remove compiler side asset: %w", err)
+			}
+			return nil
 		},
 		CompileGeoIP: func(ctx context.Context, state *buildState) error {
 			if runner == nil {

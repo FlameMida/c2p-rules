@@ -1,0 +1,17 @@
+groups:
+  - id: youtube
+    remarks: YouTube
+    geosite: [youtube]
+    geoip: []
+  - id: google
+    remarks: Google 服务
+    geosite: [google]
+    geoip: []
+  - id: netflix
+    remarks: Netflix
+    geosite: [netflix]
+    geoip: [netflix]
+  - id: bilibili_hmt
+    remarks: 哔哩哔哩港澳台
+    geosite: [BilibiliHMT]
+    geoip: [BilibiliHMT]

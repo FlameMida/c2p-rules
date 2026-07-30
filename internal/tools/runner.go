@@ -18,19 +18,24 @@ type Runner struct {
 }
 
 func (r *Runner) Run(ctx context.Context, name, cwd string, args ...string) error {
+	_, err := r.Output(ctx, name, cwd, args...)
+	return err
+}
+
+func (r *Runner) Output(ctx context.Context, name, cwd string, args ...string) (string, error) {
 	if r == nil {
-		return fmt.Errorf("tool runner is nil")
+		return "", fmt.Errorf("tool runner is nil")
 	}
 	if filepath.Base(name) != name || name == "." || name == "" || strings.ContainsAny(name, `/\\`) {
-		return fmt.Errorf("unsafe tool name %q", name)
+		return "", fmt.Errorf("unsafe tool name %q", name)
 	}
 	tool := filepath.Join(r.BinRoot, name)
 	info, err := os.Stat(tool)
 	if err != nil {
-		return fmt.Errorf("tool %s missing at %s: %w", name, tool, err)
+		return "", fmt.Errorf("tool %s missing at %s: %w", name, tool, err)
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		return fmt.Errorf("tool %s is not executable at %s", name, tool)
+		return "", fmt.Errorf("tool %s is not executable at %s", name, tool)
 	}
 	timeout := r.Timeout
 	if timeout <= 0 {
@@ -53,11 +58,11 @@ func (r *Runner) Run(ctx context.Context, name, cwd string, args ...string) erro
 	command.Stderr = stderr
 	if err := command.Run(); err != nil {
 		if commandContext.Err() != nil {
-			return fmt.Errorf("tool %s timed out after %s: %w", name, timeout, commandContext.Err())
+			return stdout.String(), fmt.Errorf("tool %s timed out after %s: %w", name, timeout, commandContext.Err())
 		}
-		return fmt.Errorf("tool %s failed: %w; stderr=%s", name, err, stderr.String())
+		return stdout.String(), fmt.Errorf("tool %s failed: %w; stderr=%s", name, err, stderr.String())
 	}
-	return nil
+	return stdout.String(), nil
 }
 
 type cappedBuffer struct {

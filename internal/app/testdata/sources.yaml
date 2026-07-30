@@ -1,0 +1,23 @@
+sources:
+  - id: loyalsoldier-google
+    behavior: domain
+    url: "{{SERVER}}/google"
+    outputs:
+      geosite: {tag: google, mode: merge-base}
+  - id: xiaolin-youtube
+    behavior: classical
+    url: "{{SERVER}}/youtube"
+    outputs:
+      geosite: {tag: youtube, mode: merge-base}
+  - id: xiaolin-netflix
+    behavior: classical
+    url: "{{SERVER}}/netflix"
+    outputs:
+      geosite: {tag: netflix, mode: merge-base}
+      geoip: {tag: netflix, mode: merge-base}
+  - id: xiaolin-bilibili
+    behavior: classical
+    url: "{{SERVER}}/bilibili"
+    outputs:
+      geosite: {tag: BilibiliHMT, mode: create}
+      geoip: {tag: BilibiliHMT, mode: create}

@@ -50,6 +50,16 @@ func TestRunnerBoundsStderr(t *testing.T) {
 	}
 }
 
+func TestRunnerOutputReturnsBoundedStdout(t *testing.T) {
+	bin := t.TempDir()
+	writeExecutable(t, filepath.Join(bin, "output"), "#!/bin/sh\nprintf '1234567890'\n")
+	runner := tools.Runner{BinRoot: bin, Timeout: time.Second, MaxLogBytes: 4}
+	output, err := runner.Output(context.Background(), "output", "")
+	if err != nil || output != "1234" {
+		t.Fatalf("output=%q err=%v", output, err)
+	}
+}
+
 func writeExecutable(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {

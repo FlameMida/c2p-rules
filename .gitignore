@@ -5,6 +5,7 @@ __pycache__/
 .DS_Store
 .idea/
 .worktrees/
+.cache/
 build/
 publish/
 vendor/
