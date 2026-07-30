@@ -1,0 +1,13 @@
+config shunt_rules 'crs_apple_services'
+	option remarks '苹果服务'
+	option managed_by 'clash-rules-srs'
+	option network 'tcp,udp'
+	option domain_list 'geosite:apple
+geosite:icloud'
+
+config shunt_rules 'crs_china'
+	option remarks '中国大陆'
+	option managed_by 'clash-rules-srs'
+	option network 'tcp,udp'
+	option domain_list 'geosite:cn'
+	option ip_list 'geoip:cn'

@@ -1,0 +1,9 @@
+groups:
+  - id: youtube
+    remarks: YouTube
+    geosite: [youtube]
+    geoip: []
+  - id: google
+    remarks: Google 服务
+    geosite: [google]
+    geoip: []

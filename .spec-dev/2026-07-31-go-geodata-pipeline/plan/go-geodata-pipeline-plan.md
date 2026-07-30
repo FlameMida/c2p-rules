@@ -881,7 +881,7 @@ git commit -m "feat(T8): 事务切换构建与发布目录"
 - 消费：任务 2 的 `model.Group`，任务 7 的 group refs verifier。
 - 产出：`passwall.ValidateGroups(context.Context, []model.Group, verify.TagLookup) error`（内部委托 `verify.GroupRefs`）、`passwall.Render([]model.Group) ([]byte, error)`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 ```go
 func TestRenderAppleAndChinaWithStableOrder(t *testing.T) {
@@ -907,13 +907,13 @@ func TestYouTubePrecedesGoogle(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/passwall -run 'Test(Render|Missing|YouTube)' -v`
 
 预期：FAIL，报缺少 Render/ValidateGroups 或默认 groups 尚不存在。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 Renderer 固定每组输出：
 
@@ -928,13 +928,13 @@ geosite:icloud'
 
 ID = `crs_` + group ID，最长 64 字节；所有 UCI scalar 使用单引号并把 `'` 编码为 `'\''`，拒绝 CR/LF/NUL/C0/C1/U+2028/U+2029。组与 tag 顺序严格保留 YAML slice 顺序，不经 map range。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/passwall -run 'Test(Render|Missing|YouTube)' -v`
 
 预期：PASS；golden 精确匹配，缺 tag 错误包含组和引用，YouTube 在 Google 前。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/passwall/render.go internal/passwall/render_test.go internal/passwall/testdata
