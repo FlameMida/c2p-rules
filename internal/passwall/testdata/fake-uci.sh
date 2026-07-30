@@ -2,13 +2,20 @@
 set -eu
 
 config_dir=''
+save_dir=''
 while [ "$#" -gt 0 ]; do
 	case "$1" in
 		-c) config_dir=$2; shift 2 ;;
+		-P) save_dir=$2; shift 2 ;;
 		-q) shift ;;
 		*) break ;;
 	esac
 done
+
+if [ -n "$config_dir" ] && [ "${FAKE_UCI_REQUIRE_ISOLATED_SAVEDIR:-false}" = true ] && [ -z "$save_dir" ]; then
+	echo 'staging UCI did not isolate savedir' >&2
+	exit 12
+fi
 
 command=$1
 shift
@@ -51,6 +58,9 @@ case "$command" in
 		count=$((count + 1))
 		printf '%s' "$count" > "$counter"
 		[ "$count" -ne "${FAKE_UCI_FAIL_COMMIT:-0}" ] || exit 9
+		;;
+	revert)
+		[ -z "${FAKE_UCI_REVERT_MARKER:-}" ] || : > "$FAKE_UCI_REVERT_MARKER"
 		;;
 	*)
 		exit 2

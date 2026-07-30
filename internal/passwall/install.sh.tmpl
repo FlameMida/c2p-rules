@@ -28,20 +28,22 @@ IP="$ASSET_DIR/geoip.dat"
 
 ROOT=$(mktemp -d "${TMPDIR:-/tmp}/clash-rules-srs.XXXXXX")
 STAGE="$ROOT/passwall2"
+STAGE_SAVEDIR="$ROOT/uci-saved"
 FRAGMENT="$ROOT/managed-rules"
 BACKUP="$CONF.bak.$(date +%s).$$"
 CONF_NEW="$CONF.new.$$"
 cp "$CONF" "$BACKUP"
 chmod 600 "$BACKUP"
 cp "$CONF" "$STAGE"
+mkdir -p "$STAGE_SAVEDIR"
 [ ! -f "$SITE" ] || cp "$SITE" "$ROOT/geosite.dat.old"
 [ ! -f "$IP" ] || cp "$IP" "$ROOT/geoip.dat.old"
 SUCCESS=0
 
 restore() {
 	restore_status=0
+	uci -q revert passwall2 >/dev/null 2>&1 || restore_status=1
 	cp "$BACKUP" "$CONF" || restore_status=1
-	uci -q commit passwall2 >/dev/null 2>&1 || restore_status=1
 	if [ -f "$ROOT/geosite.dat.old" ]; then
 		cp "$ROOT/geosite.dat.old" "$SITE" || restore_status=1
 	else
@@ -53,7 +55,18 @@ restore() {
 		rm -f "$IP" || restore_status=1
 	fi
 	if [ "$restore_status" -ne 0 ]; then
-		echo "ERROR: automatic restore incomplete; config backup: $BACKUP" >&2
+		echo 'ERROR: automatic restore incomplete' >&2
+		echo "config backup: $BACKUP" >&2
+		if [ -f "$ROOT/geosite.dat.old" ]; then
+			echo "geosite backup: $ROOT/geosite.dat.old" >&2
+		else
+			echo "geosite was previously absent; remove manually if present: $SITE" >&2
+		fi
+		if [ -f "$ROOT/geoip.dat.old" ]; then
+			echo "geoip backup: $ROOT/geoip.dat.old" >&2
+		else
+			echo "geoip was previously absent; remove manually if present: $IP" >&2
+		fi
 		return 1
 	fi
 	return 0
@@ -62,11 +75,16 @@ restore() {
 cleanup() {
 	status=$?
 	trap - EXIT HUP INT TERM
+	restore_ok=1
 	if [ "$SUCCESS" -ne 1 ]; then
-		restore || status=1
+		restore || { status=1; restore_ok=0; }
 	fi
 	rm -f "$CONF_NEW"
-	rm -rf "$ROOT"
+	if [ "$SUCCESS" -eq 1 ] || [ "$restore_ok" -eq 1 ]; then
+		rm -rf "$ROOT"
+	else
+		echo "ERROR: recovery files preserved under $ROOT" >&2
+	fi
 	exit "$status"
 }
 trap cleanup EXIT
@@ -76,9 +94,9 @@ trap 'exit 143' TERM
 
 IMMUTABLE="https://github.com/$REPO/releases/download/$RELEASE_TAG"
 LATEST="https://github.com/$REPO/releases/latest/download"
-uci -c "$ROOT" -q set "passwall2.@global_rules[0].geosite_url=$IMMUTABLE/geosite.dat"
-uci -c "$ROOT" -q set "passwall2.@global_rules[0].geoip_url=$IMMUTABLE/geoip.dat"
-uci -c "$ROOT" -q commit passwall2
+uci -c "$ROOT" -P "$STAGE_SAVEDIR" -q set "passwall2.@global_rules[0].geosite_url=$IMMUTABLE/geosite.dat"
+uci -c "$ROOT" -P "$STAGE_SAVEDIR" -q set "passwall2.@global_rules[0].geoip_url=$IMMUTABLE/geoip.dat"
+uci -c "$ROOT" -P "$STAGE_SAVEDIR" -q commit passwall2
 
 printf '%s' "$FRAGMENT_B64" | base64 -d > "$FRAGMENT"
 awk '
@@ -104,7 +122,7 @@ awk '
 ' "$STAGE" > "$STAGE.filtered"
 mv "$STAGE.filtered" "$STAGE"
 cat "$FRAGMENT" >> "$STAGE"
-uci -c "$ROOT" -q show passwall2 >/dev/null
+uci -c "$ROOT" -P "$STAGE_SAVEDIR" -q show passwall2 >/dev/null
 
 cp "$STAGE" "$CONF_NEW"
 chmod 600 "$CONF_NEW"

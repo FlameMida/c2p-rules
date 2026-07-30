@@ -146,6 +146,45 @@ func TestInstallerRollsBackStageAndLiveCommitFailures(t *testing.T) {
 	}
 }
 
+func TestInstallerUsesIsolatedSavedirForStagingUCI(t *testing.T) {
+	harness := newHarness(t)
+	harness.seedConfig("")
+	harness.requireIsolatedSavedir = true
+	harness.run(harness.render(validInstallOptions()), true)
+}
+
+func TestInstallerPreservesManualRecoveryFilesWhenRestoreFails(t *testing.T) {
+	harness := newHarness(t)
+	harness.seedConfig("")
+	harness.siteContent = "wrong-site"
+	harness.ipContent = "wrong-ip"
+	harness.failRestoreSourceSuffix = "geosite.dat.old"
+	output := harness.run(harness.render(validInstallOptions()), false)
+	if !strings.Contains(output, "automatic restore incomplete") {
+		t.Fatalf("missing restore failure: %s", output)
+	}
+	for _, label := range []string{"config backup", "geosite backup", "geoip backup"} {
+		match := regexp.MustCompile(`(?m)` + label + `: (.+)$`).FindStringSubmatch(output)
+		if len(match) != 2 {
+			t.Fatalf("%s path missing from %q", label, output)
+		}
+		if _, err := os.Stat(strings.TrimSpace(match[1])); err != nil {
+			t.Fatalf("%s was not preserved: %v", label, err)
+		}
+	}
+}
+
+func TestInstallerClearsLiveUCIDeltaBeforeRestoringConfig(t *testing.T) {
+	harness := newHarness(t)
+	harness.seedConfig("")
+	harness.siteContent = "wrong-site"
+	harness.ipContent = "wrong-ip"
+	harness.requireRevertBeforeRestore = true
+	beforeConfig, beforeSite, beforeIP := harness.snapshot()
+	harness.run(harness.render(validInstallOptions()), false)
+	harness.assertSnapshot(beforeConfig, beforeSite, beforeIP)
+}
+
 func TestInstallerPreflightRejectsDirtyUCIAndMissingUpdater(t *testing.T) {
 	for name, mutate := range map[string]func(*installerHarness){
 		"dirty": func(h *installerHarness) { h.uciChanges = "passwall2.changed=1" },
@@ -202,18 +241,21 @@ func TestRenderInstallerValidatesInputsAndEmbedsOnlyBase64Fragment(t *testing.T)
 }
 
 type installerHarness struct {
-	t           *testing.T
-	root        string
-	bin         string
-	config      string
-	assets      string
-	sitePath    string
-	ipPath      string
-	updater     string
-	siteContent string
-	ipContent   string
-	uciChanges  string
-	failCommit  int
+	t                          *testing.T
+	root                       string
+	bin                        string
+	config                     string
+	assets                     string
+	sitePath                   string
+	ipPath                     string
+	updater                    string
+	siteContent                string
+	ipContent                  string
+	uciChanges                 string
+	failCommit                 int
+	requireIsolatedSavedir     bool
+	failRestoreSourceSuffix    string
+	requireRevertBeforeRestore bool
 }
 
 func newHarness(t *testing.T) *installerHarness {
@@ -229,6 +271,7 @@ func newHarness(t *testing.T) *installerHarness {
 	}
 	copyExecutable(t, "testdata/fake-uci.sh", filepath.Join(bin, "uci"))
 	copyExecutable(t, "testdata/fake-lua.sh", filepath.Join(bin, "lua"))
+	copyExecutable(t, "testdata/fake-cp.sh", filepath.Join(bin, "cp"))
 	updater := filepath.Join(root, "fake-rule-update.lua")
 	copyExecutable(t, "testdata/fake-rule-update.lua", updater)
 	harness := &installerHarness{
@@ -278,7 +321,12 @@ func (h *installerHarness) run(script []byte, wantSuccess bool) string {
 		"FAKE_EXPECTED_TAG=v1.2.3",
 		"FAKE_UCI_CHANGES="+h.uciChanges,
 		fmt.Sprintf("FAKE_UCI_FAIL_COMMIT=%d", h.failCommit),
+		fmt.Sprintf("FAKE_UCI_REQUIRE_ISOLATED_SAVEDIR=%t", h.requireIsolatedSavedir),
 		"FAKE_UCI_COUNTER="+filepath.Join(h.root, "uci-counter"),
+		"FAKE_UCI_REVERT_MARKER="+filepath.Join(h.root, "uci-reverted"),
+		"FAKE_CP_FAIL_SOURCE_SUFFIX="+h.failRestoreSourceSuffix,
+		fmt.Sprintf("FAKE_CP_REQUIRE_REVERT_FOR_BACKUP=%t", h.requireRevertBeforeRestore),
+		"FAKE_CP_REVERT_MARKER="+filepath.Join(h.root, "uci-reverted"),
 	)
 	output, err := command.CombinedOutput()
 	if wantSuccess && err != nil {
