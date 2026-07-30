@@ -28,6 +28,7 @@ const DAT_RULESET_MAP = {
 };
 
 function applyDatRuleset(name, output, options = {}) {
+  if (!Object.hasOwn(DAT_RULESET_MAP, name)) return false;
   const mapping = DAT_RULESET_MAP[name];
   if (mapping === null) return true;
   if (!mapping) return false;

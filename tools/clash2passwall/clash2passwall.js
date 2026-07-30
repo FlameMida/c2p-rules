@@ -221,7 +221,7 @@ function loadTagManifest(file) {
 // ============================================================
 function applyRuleset(name, out, providers, degrade) {
   if (MODE === "dat") {
-    if (DAT_RULESET_MAP[name] === null) {
+    if (Object.hasOwn(DAT_RULESET_MAP, name) && DAT_RULESET_MAP[name] === null) {
       degrade.push({ line: "RULE-SET," + name, reason: "进程类规则(applications)，路由器场景无意义，已跳过" });
       return;
     }
@@ -232,7 +232,7 @@ function applyRuleset(name, out, providers, degrade) {
     });
     return;
   }
-  const m = RULESET_MAP[name];
+  const m = Object.hasOwn(RULESET_MAP, name) ? RULESET_MAP[name] : undefined;
   if (m === null) {
     degrade.push({ line: "RULE-SET," + name, reason: "进程类规则(applications)，路由器场景无意义，已跳过" });
     return;
@@ -252,7 +252,7 @@ function applyRuleset(name, out, providers, degrade) {
     return;
   }
   // 不在映射表，尝试用 provider 声明推断
-  const p = providers[name];
+  const p = Object.hasOwn(providers, name) ? providers[name] : undefined;
   if (p && p.url && /\.srs(\?|$|#)/.test(p.url)) {
     if (MODE === "xray") {
       degrade.push({ line: "RULE-SET," + name, reason: `xray 模式不支持 .srs 订阅且无 geosite 映射，请手动转 geosite:/geoip: 或内联（provider url: ${p && p.url}）` });
@@ -569,12 +569,12 @@ function main() {
     process.exit(1);
   }
   const providers = cfg["rule-providers"];
-  const groupTypes = {};
+  const groupTypes = Object.create(null);
   for (const g of cfg["proxy-groups"]) if (g.name) groupTypes[g.name] = g.type || "";
 
   const degrade = [];
   const order = [];
-  const pr = {};
+  const pr = Object.create(null);
   let matchPolicy = null;
 
   for (const line of cfg.rules) {

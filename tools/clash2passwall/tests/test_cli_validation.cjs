@@ -31,6 +31,11 @@ const ids = [...config.matchAll(/^config shunt_rules '([^']+)'/gm)].map((match) 
 assert.strictEqual(new Set(ids).size, ids.length);
 assert.ok(ids.every((id) => id.length <= 64), "UCI section IDs must stay bounded");
 
+const prototypeNames = convert(`rules:\n  - DOMAIN,proto.example,__proto__\n  - DOMAIN,constructor.example,constructor\n  - RULE-SET,__proto__,Proxy\nproxy-groups: []\nrule-providers: {}\n`);
+assert.match(prototypeNames, /option remarks '__proto__'/);
+assert.match(prototypeNames, /option remarks 'constructor'/);
+assert.doesNotMatch(prototypeNames, /geosite:\[object Object\]/);
+
 for (const yaml of [
   "rules: DOMAIN,example.com,Proxy\n",
   "rules: []\nproxy-groups: nope\n",
