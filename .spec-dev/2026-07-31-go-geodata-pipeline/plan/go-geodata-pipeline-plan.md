@@ -563,7 +563,7 @@ git commit -m "feat(T4): 实现显式目标与 Geosite 合并"
 - 消费：任务 3 的 CIDR contributions。
 - 产出：`geoip.WriteInputs(string, []model.Contribution) ([]geoip.Input, error)`、`geoip.WriteConfig(string, []geoip.Input, string, string, string) error`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 创建 `internal/geoip/config_test.go`：
 
@@ -593,13 +593,13 @@ func TestCIDRsAreMaskedSortedAndDeduplicated(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/geoip -v`
 
 预期：FAIL，报缺少 `WriteInputs` / `WriteConfig`。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `Input`：
 
@@ -611,13 +611,13 @@ type Input struct { Tag, Path string }
 
 `WriteConfig` 解析 `config/geoip.base.json`，把第一项 URI 改为本地 base dat 绝对路径，按 tag 排序追加 text/action:add inputs，并把 outputDir/outputName 设为 staging publish 与 `geoip.dat`；未知或缺失模板字段直接报错。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/geoip -v`
 
 预期：PASS；base 永远第一，BilibiliHMT 大小写保留，CIDR 文本稳定。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/geoip config/geoip.base.json
