@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"clash-rules-srs/internal/workspace"
 )
@@ -108,6 +110,88 @@ func TestLayoutKeepsAllIntermediatesInsideStaging(t *testing.T) {
 	}
 }
 
+func TestConcurrentTransactionsNeverPublishMixedGenerations(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "build", "generation"), "old")
+	writeFile(t, filepath.Join(root, "publish", "generation"), "old")
+	paused := make(chan struct{})
+	release := make(chan struct{})
+	aFS := &barrierRenameFS{
+		FS: workspace.OSFS{}, pauseOldPath: filepath.Join(root, "publish"),
+		paused: paused, release: release,
+	}
+	a, err := workspace.BeginWithFS(root, aFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := workspace.Begin(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []struct {
+		tx         *workspace.Transaction
+		generation string
+	}{
+		{a, "A"},
+		{b, "B"},
+	} {
+		writeFile(t, filepath.Join(item.tx.Layout().Build, "generation"), item.generation)
+		writeFile(t, filepath.Join(item.tx.Layout().Publish, "generation"), item.generation)
+	}
+
+	aDone := make(chan error, 1)
+	go func() { aDone <- a.Commit() }()
+	select {
+	case <-paused:
+	case <-time.After(2 * time.Second):
+		t.Fatal("transaction A did not reach publish switch")
+	}
+	bDone := make(chan error, 1)
+	go func() { bDone <- b.Commit() }()
+	var bErr error
+	bFinished := false
+	select {
+	case bErr = <-bDone:
+		bFinished = true
+		// An unlocked implementation lets B finish inside A's switch window.
+	case <-time.After(200 * time.Millisecond):
+		// A root lock keeps B waiting until A releases the switch window.
+	}
+	close(release)
+	if err := <-aDone; err != nil {
+		t.Fatalf("transaction A: %v", err)
+	}
+	if !bFinished {
+		bErr = <-bDone
+	}
+	if bErr != nil {
+		t.Fatalf("transaction B: %v", bErr)
+	}
+	buildGeneration := string(mustReadFile(t, filepath.Join(root, "build", "generation")))
+	publishGeneration := string(mustReadFile(t, filepath.Join(root, "publish", "generation")))
+	if buildGeneration != publishGeneration {
+		t.Fatalf("mixed generation: build=%s publish=%s", buildGeneration, publishGeneration)
+	}
+}
+
+type barrierRenameFS struct {
+	workspace.FS
+	pauseOldPath string
+	paused       chan struct{}
+	release      chan struct{}
+	once         sync.Once
+}
+
+func (f *barrierRenameFS) Rename(oldPath, newPath string) error {
+	if oldPath == f.pauseOldPath {
+		f.once.Do(func() {
+			close(f.paused)
+			<-f.release
+		})
+	}
+	return f.FS.Rename(oldPath, newPath)
+}
+
 type failRenameFS struct {
 	workspace.FS
 	calls  int
@@ -143,4 +227,13 @@ func assertFile(t *testing.T, path, want string) {
 	if string(got) != want {
 		t.Fatalf("%s=%q want %q", path, got, want)
 	}
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }

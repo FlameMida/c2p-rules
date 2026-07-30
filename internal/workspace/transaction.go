@@ -89,7 +89,7 @@ func (t *Transaction) Layout() Layout {
 	return t.layout
 }
 
-func (t *Transaction) Commit() error {
+func (t *Transaction) Commit() (err error) {
 	if t == nil {
 		return fmt.Errorf("workspace transaction is nil")
 	}
@@ -98,6 +98,15 @@ func (t *Transaction) Commit() error {
 	if t.state != stateActive {
 		return fmt.Errorf("workspace transaction cannot commit in state %d", t.state)
 	}
+	commitLock, err := acquireCommitLock(t.root)
+	if err != nil {
+		return fmt.Errorf("lock workspace commit: %w", err)
+	}
+	defer func() {
+		if unlockErr := commitLock.release(); unlockErr != nil {
+			err = errors.Join(err, fmt.Errorf("unlock workspace commit: %w", unlockErr))
+		}
+	}()
 	operations := []switchOperation{
 		{name: "build", staged: t.layout.Build, final: filepath.Join(t.root, "build"), backup: filepath.Join(t.layout.Staging, ".backup-build")},
 		{name: "publish", staged: t.layout.Publish, final: filepath.Join(t.root, "publish"), backup: filepath.Join(t.layout.Staging, ".backup-publish")},
