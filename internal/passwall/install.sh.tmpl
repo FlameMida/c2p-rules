@@ -1,0 +1,126 @@
+#!/bin/sh
+set -eu
+
+CONF="${PASSWALL2_CONF:-/etc/config/passwall2}"
+UPDATER="${PASSWALL2_RULE_UPDATER:-/usr/share/passwall2/rule_update.lua}"
+REPO='{{.Repo}}'
+RELEASE_TAG='{{.ReleaseTag}}'
+SITE_SHA='{{.GeoSiteSHA}}'
+IP_SHA='{{.GeoIPSHA}}'
+FRAGMENT_B64='{{.FragmentBase64}}'
+
+command -v uci >/dev/null 2>&1 || { echo 'ERROR: uci not found' >&2; exit 2; }
+command -v lua >/dev/null 2>&1 || { echo 'ERROR: lua not found' >&2; exit 2; }
+command -v sha256sum >/dev/null 2>&1 || { echo 'ERROR: sha256sum not found' >&2; exit 2; }
+command -v base64 >/dev/null 2>&1 || { echo 'ERROR: base64 not found' >&2; exit 2; }
+[ -f "$CONF" ] || { echo "ERROR: missing $CONF" >&2; exit 2; }
+[ -f "$UPDATER" ] || { echo "ERROR: missing $UPDATER" >&2; exit 2; }
+[ -z "$(uci changes passwall2 2>/dev/null || true)" ] || { echo 'ERROR: uncommitted passwall2 changes' >&2; exit 2; }
+
+ASSET_DIR=$(uci -q get 'passwall2.@global_rules[0].v2ray_location_asset') || {
+	echo 'ERROR: missing passwall2 global_rules asset path' >&2
+	exit 2
+}
+ASSET_DIR=${ASSET_DIR%/}
+[ -n "$ASSET_DIR" ] && [ -d "$ASSET_DIR" ] || { echo "ERROR: invalid asset directory $ASSET_DIR" >&2; exit 2; }
+SITE="$ASSET_DIR/geosite.dat"
+IP="$ASSET_DIR/geoip.dat"
+
+ROOT=$(mktemp -d "${TMPDIR:-/tmp}/clash-rules-srs.XXXXXX")
+STAGE="$ROOT/passwall2"
+FRAGMENT="$ROOT/managed-rules"
+BACKUP="$CONF.bak.$(date +%s).$$"
+CONF_NEW="$CONF.new.$$"
+cp "$CONF" "$BACKUP"
+chmod 600 "$BACKUP"
+cp "$CONF" "$STAGE"
+[ ! -f "$SITE" ] || cp "$SITE" "$ROOT/geosite.dat.old"
+[ ! -f "$IP" ] || cp "$IP" "$ROOT/geoip.dat.old"
+SUCCESS=0
+
+restore() {
+	restore_status=0
+	cp "$BACKUP" "$CONF" || restore_status=1
+	uci -q commit passwall2 >/dev/null 2>&1 || restore_status=1
+	if [ -f "$ROOT/geosite.dat.old" ]; then
+		cp "$ROOT/geosite.dat.old" "$SITE" || restore_status=1
+	else
+		rm -f "$SITE" || restore_status=1
+	fi
+	if [ -f "$ROOT/geoip.dat.old" ]; then
+		cp "$ROOT/geoip.dat.old" "$IP" || restore_status=1
+	else
+		rm -f "$IP" || restore_status=1
+	fi
+	if [ "$restore_status" -ne 0 ]; then
+		echo "ERROR: automatic restore incomplete; config backup: $BACKUP" >&2
+		return 1
+	fi
+	return 0
+}
+
+cleanup() {
+	status=$?
+	trap - EXIT HUP INT TERM
+	if [ "$SUCCESS" -ne 1 ]; then
+		restore || status=1
+	fi
+	rm -f "$CONF_NEW"
+	rm -rf "$ROOT"
+	exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+IMMUTABLE="https://github.com/$REPO/releases/download/$RELEASE_TAG"
+LATEST="https://github.com/$REPO/releases/latest/download"
+uci -c "$ROOT" -q set "passwall2.@global_rules[0].geosite_url=$IMMUTABLE/geosite.dat"
+uci -c "$ROOT" -q set "passwall2.@global_rules[0].geoip_url=$IMMUTABLE/geoip.dat"
+uci -c "$ROOT" -q commit passwall2
+
+printf '%s' "$FRAGMENT_B64" | base64 -d > "$FRAGMENT"
+awk '
+	function emit() {
+		if (block == "") return
+		drop = section == "shunt_rules" && (managed || id ~ /^c2p_/)
+		if (!drop) printf "%s", block
+	}
+	$1 == "config" {
+		emit()
+		block = $0 ORS
+		section = $2
+		id = $3
+		gsub(/\047/, "", id)
+		managed = 0
+		next
+	}
+	{
+		block = block $0 ORS
+		if ($1 == "option" && $2 == "managed_by" && $3 == "\047clash-rules-srs\047") managed = 1
+	}
+	END { emit() }
+' "$STAGE" > "$STAGE.filtered"
+mv "$STAGE.filtered" "$STAGE"
+cat "$FRAGMENT" >> "$STAGE"
+uci -c "$ROOT" -q show passwall2 >/dev/null
+
+cp "$STAGE" "$CONF_NEW"
+chmod 600 "$CONF_NEW"
+mv "$CONF_NEW" "$CONF"
+uci -q commit passwall2
+
+lua "$UPDATER" log 'geoip,geosite'
+printf '%s  %s\n' "$SITE_SHA" "$SITE" | sha256sum -c -
+printf '%s  %s\n' "$IP_SHA" "$IP" | sha256sum -c -
+
+uci -q set "passwall2.@global_rules[0].geosite_url=$LATEST/geosite.dat"
+uci -q set "passwall2.@global_rules[0].geoip_url=$LATEST/geoip.dat"
+uci -q commit passwall2
+SUCCESS=1
+trap - EXIT HUP INT TERM
+rm -rf "$ROOT"
+echo '安装成功；用户分流优先于随后追加的托管分流。'
+echo 'sing-box 需要 geoview >= 0.1.10。'
+echo "备份: $BACKUP"

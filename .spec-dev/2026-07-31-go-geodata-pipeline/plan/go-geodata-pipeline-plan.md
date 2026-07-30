@@ -954,7 +954,7 @@ git commit -m "feat(T9): 生成有序托管分流规则"
 - 消费：任务 9 的 UCI fragment，任务 7 的 dat SHA。
 - 产出：`passwall.RenderInstaller(passwall.InstallOptions) ([]byte, error)`；`InstallOptions{Repo, ReleaseTag, GeoSiteSHA, GeoIPSHA string; Fragment []byte}`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 `installer_test.go` 必须执行生成脚本，不只匹配文本：
 
@@ -990,13 +990,13 @@ func TestInstallerRollsBackWhenUpdaterReturnsSuccessWithWrongHash(t *testing.T) 
 
 再覆盖：UCI 有未提交修改、缺 `rule_update.lua`、stage commit 失败、live commit 失败、仅一侧旧 dat 存在、成功时先用不可变 URL 后持久化 latest、备份路径输出、`sh -n`、模板无固定 heredoc、fragment 仅以 base64 嵌入。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/passwall -run 'TestInstaller' -v`
 
 预期：FAIL，报缺少 RenderInstaller/harness template。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `installer.go` 验证 repo 为 `^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`、release tag 为安全字符、SHA 为 64 hex，标准 base64 编码 fragment 后以 `text/template` 渲染 embedded `install.sh.tmpl`。模板必须完整实现以下状态机：
 
@@ -1084,13 +1084,13 @@ echo "备份: $BACKUP"
 
 执行时若 fake UCI 证明 `uci -c "$ROOT"` 需要配置文件名固定为 `$ROOT/passwall2`，不得改变 staging layout。补充所有 shell 变量引用与 sed 输入的安全测试。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/passwall -run 'TestInstaller' -v`
 
 预期：PASS；两次安装字节稳定，旧 c2p 清理，用户配置保留，假成功错误哈希完整回滚。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/passwall/installer.go internal/passwall/install.sh.tmpl internal/passwall/installer_test.go internal/passwall/testdata/fake-uci.sh internal/passwall/testdata/fake-rule-update.lua
