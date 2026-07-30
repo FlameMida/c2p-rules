@@ -2,7 +2,7 @@
 
 ## 状态
 
-Accepted — 2026-07-30
+Superseded by [ADR 0003](0003-source-output-targets.md) — 2026-07-31
 
 ## 背景
 
