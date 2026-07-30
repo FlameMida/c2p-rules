@@ -1115,7 +1115,7 @@ git commit -m "feat(T10): 生成可回滚 PassWall2 安装器"
 - 消费：任务 2–10 的全部公开 internal 接口。
 - 产出：`app.Commands() cli.Commands`、`app.Build(context.Context, app.BuildOptions, app.Dependencies) error`、`app.Bootstrap(context.Context, app.BootstrapOptions, tools.Executor) error`、`app.Verify(context.Context, app.VerifyOptions, *tools.Runner) error`；`BootstrapOptions{CacheRoot string}`、`VerifyOptions{Dat, Manifest string; Side model.Side; Forbid bool}`；正式 CLI flags 与 exit code。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 `internal/app/build_test.go` 使用 fake HTTP、fake tool runner/prober 和临时 community，覆盖完整调用顺序、source fetch 失败不发布、outputs 全部逐侧探针、Netflix 双侧标准 tag、最后 forbidden probe 失败保留旧目录：
 
@@ -1182,13 +1182,13 @@ func TestBuildForbiddenProbeFailurePreservesOldOutputs(t *testing.T) {
 
 `internal/cli/run_test.go` 增加 flag tests：build 缺 `--repo`/`--release-tag` 时 exit 2，未知 flag exit 2，verify side 非 geosite/geoip exit 2，bootstrap 默认 cache `.cache`。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/app ./internal/cli ./cmd/geodata-build -v`
 
 预期：FAIL，报缺少 app.Build/app.Commands 与新 flag parser。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `BuildOptions` 固定字段：
 
@@ -1310,13 +1310,13 @@ CLI 使用独立 `flag.FlagSet`（`ContinueOnError`）解析每个子命令；us
 func main() { os.Exit(cli.Run(context.Background(), os.Args[1:], os.Stdout, os.Stderr, app.Commands())) }
 ```
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/app ./internal/cli ./cmd/geodata-build -v`
 
 预期：PASS；fake build 完整通过，404/forbidden probe 不切换 publish，flags 返回稳定退出码。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/app internal/cli cmd/geodata-build
