@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "required": {
+    "geosite": [
+      "cn",
+      "loyalsoldier-gfw",
+      "loyalsoldier-proxy",
+      "loyalsoldier-reject",
+      "sukka-ai",
+      "xiaolin-netflix"
+    ],
+    "geoip": [
+      "cn",
+      "private",
+      "loyalsoldier-telegramcidr",
+      "xiaolin-netflix"
+    ]
+  },
+  "forbidden": {"geosite": ["applications"], "geoip": ["xiaolin-youtube"]}
+}

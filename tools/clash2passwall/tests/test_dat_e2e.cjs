@@ -14,6 +14,8 @@ execFileSync(
     path.join(root, "clash2passwall.js"),
     path.join(__dirname, "fixtures", "mini_clash.yaml"),
     "--dat",
+    "--tag-manifest",
+    path.join(__dirname, "fixtures", "tags_full.json"),
     "--out",
     output,
     "--no-install",

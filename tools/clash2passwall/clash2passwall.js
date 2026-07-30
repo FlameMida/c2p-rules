@@ -21,7 +21,6 @@
 const fs = require("fs");
 const path = require("path");
 const {
-  DAT_GEOIP_TAGS,
   DAT_RULESET_MAP,
   applyDatRuleset,
   mapBuiltinGeositeGeoip,
@@ -40,6 +39,7 @@ const MIRRORS = {
 };
 let MIRROR = MIRRORS["gh-proxy"];
 let MODE = "sing-box"; // "sing-box" | "xray" | "dat"
+let AVAILABLE_TAGS = null;
 const srs = (type, name) => `rule-set:remote:${MIRROR}/${type}/${name}.srs`;
 
 // ============================================================
@@ -152,13 +152,68 @@ function builtinParse(text) {
   return result;
 }
 
-function loadConfig(file) {
+function assertSafeScalar(value, label) {
+  if (typeof value !== "string") throw new Error(`${label} must be a string`);
+  if (/[\u0000-\u001f\u007f\u2028\u2029]/u.test(value)) {
+    throw new Error(`${label} contains a control character or newline`);
+  }
+  return value;
+}
+
+function validateConfig(cfg) {
+  if (!cfg || typeof cfg !== "object" || Array.isArray(cfg)) {
+    throw new Error("YAML root must be a mapping");
+  }
+  if (cfg.rules != null && !Array.isArray(cfg.rules)) throw new Error("rules must be a list");
+  if (cfg["proxy-groups"] != null && !Array.isArray(cfg["proxy-groups"])) {
+    throw new Error("proxy-groups must be a list");
+  }
+  const providers = cfg["rule-providers"];
+  if (providers != null && (typeof providers !== "object" || Array.isArray(providers))) {
+    throw new Error("rule-providers must be a mapping");
+  }
+  for (const [index, rule] of (cfg.rules || []).entries()) assertSafeScalar(rule, `rules[${index}]`);
+  for (const [index, group] of (cfg["proxy-groups"] || []).entries()) {
+    if (!group || typeof group !== "object" || Array.isArray(group)) {
+      throw new Error(`proxy-groups[${index}] must be a mapping`);
+    }
+    if (group.name != null) assertSafeScalar(group.name, `proxy-groups[${index}].name`);
+    if (group.type != null) assertSafeScalar(group.type, `proxy-groups[${index}].type`);
+  }
+  for (const [name, provider] of Object.entries(providers || {})) {
+    assertSafeScalar(name, "rule-provider name");
+    if (!provider || typeof provider !== "object" || Array.isArray(provider)) {
+      throw new Error(`rule-provider ${name} must be a mapping`);
+    }
+    for (const field of ["type", "behavior", "url"]) {
+      if (provider[field] != null) assertSafeScalar(provider[field], `rule-provider ${name}.${field}`);
+    }
+  }
+}
+
+function loadConfig(file, yamlEngine) {
   const text = fs.readFileSync(file, "utf8");
-  const cfg = jsyaml ? jsyaml.load(text) : builtinParse(text);
+  if (yamlEngine === "js-yaml" && !jsyaml) throw new Error("js-yaml engine requested but js-yaml is not installed");
+  const useJsYaml = yamlEngine === "js-yaml" || (yamlEngine === "auto" && jsyaml);
+  const cfg = useJsYaml ? jsyaml.load(text) : builtinParse(text);
+  validateConfig(cfg);
   cfg.rules = cfg.rules || [];
   cfg["rule-providers"] = cfg["rule-providers"] || {};
   cfg["proxy-groups"] = cfg["proxy-groups"] || [];
   return cfg;
+}
+
+function loadTagManifest(file) {
+  const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+  const required = manifest.required || manifest;
+  const tags = {};
+  for (const side of ["geosite", "geoip"]) {
+    if (!Array.isArray(required[side]) || !required[side].every((tag) => typeof tag === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(tag))) {
+      throw new Error(`tag manifest ${side} must be a list of valid tag names`);
+    }
+    tags[side] = new Set(required[side]);
+  }
+  return tags;
 }
 
 // ============================================================
@@ -170,7 +225,7 @@ function applyRuleset(name, out, providers, degrade) {
       degrade.push({ line: "RULE-SET," + name, reason: "进程类规则(applications)，路由器场景无意义，已跳过" });
       return;
     }
-    if (applyDatRuleset(name, out, { hasGeoip: DAT_GEOIP_TAGS })) return;
+    if (applyDatRuleset(name, out, { availableTags: AVAILABLE_TAGS })) return;
     degrade.push({
       line: "RULE-SET," + name,
       reason: "dat 模式没有该 provider 到自建 geodata tag 的固定映射，已跳过",
@@ -240,18 +295,29 @@ function mapRule(rawLine, providers, degrade) {
     case "DOMAIN-KEYWORD": out.domain.push(parts[1]);               setPol(2); break;
     case "DOMAIN-REGEX":   out.domain.push("regexp:" + parts[1]);   setPol(2); break;
     case "GEOSITE":
-      if (MODE === "dat") mapBuiltinGeositeGeoip(type, parts[1], out);
+      if (MODE === "dat") {
+        if (!mapBuiltinGeositeGeoip(type, parts[1], out, AVAILABLE_TAGS)) {
+          degrade.push({ line: rawLine, reason: `tag manifest 缺少 geosite:${parts[1].toLowerCase()}，已跳过` });
+        }
+      }
       else out.domain.push("geosite:" + parts[1]);
       setPol(2);
       break;
     case "GEOIP":
-      if (MODE === "dat") mapBuiltinGeositeGeoip(type, parts[1], out);
+      if (MODE === "dat") {
+        const normalized = parts[1].toUpperCase() === "LAN" ? "private" : parts[1].toLowerCase();
+        if (!mapBuiltinGeositeGeoip(type, parts[1], out, AVAILABLE_TAGS)) {
+          degrade.push({ line: rawLine, reason: `tag manifest 缺少 geoip:${normalized}，已跳过` });
+        }
+      }
       else out.ip.push("geoip:" + parts[1]);
       setPol(2);
       break;
     case "IP-CIDR":
-    case "IP-CIDR6":
-    case "IP-SUFFIX":      out.ip.push(parts[1]);                   setPol(2); break;
+    case "IP-CIDR6":       out.ip.push(parts[1]);                   setPol(2); break;
+    case "IP-SUFFIX":
+      degrade.push({ line: rawLine, reason: "PassWall2 ip_list 不支持 IP-SUFFIX 的无损语义，已跳过" });
+      return null;
     case "DST-PORT":       out.port.push(parts[1]);                 setPol(2); break;
     case "SRC-IP-CIDR":    out.source.push(parts[1]);               setPol(2); break;
     case "RULE-SET":       applyRuleset(parts[1], out, providers, degrade); setPol(2); break;
@@ -275,12 +341,42 @@ function uciMultiValue(lines) {
   return "'" + joined + "'";
 }
 
+function uciQuote(value) {
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+
+function makeSectionIds(order) {
+  const used = new Set();
+  return Object.fromEntries(order.map((policy) => {
+    let base = policy.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!base || /^[0-9]/.test(base)) base = "rule_" + base;
+    if (!base || base === "rule_") {
+      const digest = require("crypto").createHash("sha256").update(policy).digest("hex").slice(0, 10);
+      base = "rule_" + digest;
+    }
+    if (base.length > 48) {
+      const digest = require("crypto").createHash("sha256").update(policy).digest("hex").slice(0, 10);
+      base = `${base.slice(0, 48)}_${digest}`;
+    }
+    let candidate = base;
+    if (used.has(candidate)) {
+      const digest = require("crypto").createHash("sha256").update(policy).digest("hex").slice(0, 8);
+      candidate = `${base}_${digest}`;
+    }
+    let serial = 2;
+    while (used.has(candidate)) candidate = `${base}_${serial++}`;
+    used.add(candidate);
+    return [policy, candidate];
+  }));
+}
+
 function generateConf(order, pr) {
   let out = "";
+  const sectionIds = makeSectionIds(order);
   for (const policy of order) {
     const r = pr[policy];
-    out += "config shunt_rules\n";
-    out += "\toption remarks '" + policy.replace(/'/g, "") + "'\n";
+    out += "config shunt_rules " + uciQuote(sectionIds[policy]) + "\n";
+    out += "\toption remarks " + uciQuote(policy) + "\n";
     out += "\toption network 'tcp,udp'\n";
     if (r.domain.length) out += "\toption domain_list " + uciMultiValue(r.domain) + "\n";
     if (r.ip.length)     out += "\toption ip_list " + uciMultiValue(r.ip) + "\n";
@@ -291,73 +387,83 @@ function generateConf(order, pr) {
   return out;
 }
 
-function generateInstall(conf, order, mode) {
-  if (mode === "dat") {
-    return `#!/bin/sh
-# PassWall2 geodata + shunt install (dat mode)
-set -e
-CONF=/etc/config/passwall2
+function generateInstall(conf, order, mode, repoSlug) {
+  const encodedConf = Buffer.from(conf, "utf8").toString("base64");
+  const defaultRepo = mode === "dat" ? (repoSlug || "") : "";
+  const datSetup = mode === "dat" ? `
+REPO_SLUG="\${REPO_SLUG:-${defaultRepo}}"
+if [ -z "$REPO_SLUG" ] && [ -n "\${OWNER:-}" ] && [ -n "\${REPO:-}" ]; then
+  REPO_SLUG="$OWNER/$REPO"
+fi
+if ! printf '%s\n' "$REPO_SLUG" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
+  echo "ERROR: set REPO_SLUG=owner/repo (or regenerate with --repo owner/repo)" >&2
+  exit 2
+fi
+` : "";
+  const datCommands = mode === "dat" ? `
+uci -c "$STAGE_ROOT" -q set "passwall2.@global_rules[0].geosite_url=https://github.com/$REPO_SLUG/releases/latest/download/geosite.dat"
+uci -c "$STAGE_ROOT" -q set "passwall2.@global_rules[0].geoip_url=https://github.com/$REPO_SLUG/releases/latest/download/geoip.dat"
+` : "";
+  const datVerify = mode === "dat" ? `
+uci -q get passwall2.@global_rules[0].geosite_url >/dev/null
+uci -q get passwall2.@global_rules[0].geoip_url >/dev/null
+` : "";
+
+  return `#!/bin/sh
+# Generated PassWall2 shunt installer. Stages and validates before atomic replacement.
+set -eu
+CONF="\${PASSWALL2_CONF:-/etc/config/passwall2}"
+${datSetup}
+if [ ! -f "$CONF" ]; then
+  echo "ERROR: PassWall2 config not found: $CONF" >&2
+  exit 2
+fi
+if [ -n "$(uci changes passwall2 2>/dev/null || true)" ]; then
+  echo "ERROR: passwall2 has uncommitted UCI changes; commit or revert them first" >&2
+  exit 2
+fi
+
 TS=$(date +%s 2>/dev/null || echo bak)
-OWNER="\${OWNER:-YOUR_GITHUB_USER}"
-REPO="\${REPO:-clash-rules-srs}"
+BACKUP="$CONF.bak.$TS"
+STAGE_ROOT=$(mktemp -d "\${TMPDIR:-/tmp}/clash2passwall.XXXXXX")
+STAGED_CONF="$STAGE_ROOT/passwall2"
+LIVE_STAGE="$CONF.new.$$"
+SUCCESS=0
 
-cp "$CONF" "$CONF.bak.$TS"
-echo "已备份原配置: $CONF.bak.$TS"
+cleanup() {
+  status=$?
+  trap - EXIT HUP INT TERM
+  if [ "$SUCCESS" -ne 1 ] && [ -f "$BACKUP" ]; then
+    cp "$BACKUP" "$CONF" || true
+    uci -q commit passwall2 >/dev/null 2>&1 || true
+  fi
+  [ ! -e "$LIVE_STAGE" ] || rm -f "$LIVE_STAGE"
+  [ ! -d "$STAGE_ROOT" ] || rm -rf "$STAGE_ROOT"
+  exit "$status"
+}
+trap cleanup EXIT HUP INT TERM
 
-uci -q set passwall2.@global_rules[0].geosite_url="https://github.com/\${OWNER}/\${REPO}/releases/latest/download/geosite.dat"
-uci -q set passwall2.@global_rules[0].geoip_url="https://github.com/\${OWNER}/\${REPO}/releases/latest/download/geoip.dat"
+cp "$CONF" "$BACKUP"
+cp "$CONF" "$STAGED_CONF"
+${datCommands}
+while uci -c "$STAGE_ROOT" -q delete passwall2.@shunt_rules[0]; do :; done
+uci -c "$STAGE_ROOT" -q commit passwall2
+printf '%s' '${encodedConf}' | base64 -d >> "$STAGED_CONF"
+uci -c "$STAGE_ROOT" -q show passwall2 >/dev/null
 
-# 仅覆盖分流规则；不删除 nodes 或其他用户节点 section。
-while uci -q delete passwall2.@shunt_rules[0]; do :; done
-uci commit passwall2
+cp "$STAGED_CONF" "$LIVE_STAGE"
+chmod 600 "$LIVE_STAGE"
+mv "$LIVE_STAGE" "$CONF"
+uci -q commit passwall2
+${datVerify}
+SUCCESS=1
+trap - EXIT HUP INT TERM
+rm -rf "$STAGE_ROOT"
 
-cat >> "$CONF" <<'PWEOF'
-${conf}PWEOF
-uci commit passwall2
-
-echo "✅ 已写入 geodata URL，并覆盖导入 ${order.length} 条 shunt_rules。"
-echo "NOTE: sing-box kernel requires geoview >= 0.1.10"
-echo "请在 PassWall2 执行规则更新或重启，以下载新的 dat。"
-echo "若要撤销：cp \$CONF.bak.$TS \$CONF && uci commit passwall2 && /etc/init.d/passwall2 restart"
+echo "✅ 已事务性覆盖导入 ${order.length} 条 shunt_rules；其他 section 保持不变。"
+${mode === "dat" ? 'echo "NOTE: sing-box kernel requires geoview >= 0.1.10"' : ""}
+echo "备份: $BACKUP"
 `;
-  }
-  // 自包含安装脚本：备份 → 清空所有旧 shunt_rules（含自带）→ 写入新规则 → commit
-  const core = mode === "xray" ? "Xray" : "Sing-Box";
-  const install = `#!/bin/sh
-# 自动生成 — 清空所有旧 shunt_rules（含自带）后写入 Clash 转换的新规则
-set -e
-CONF=/etc/config/passwall2
-TS=$(date +%s 2>/dev/null || echo bak)
-cp "$CONF" "$CONF.bak.$TS"
-echo "已备份原配置: $CONF.bak.$TS"
-
-# ---- 清空所有现有 shunt_rules（自带的 DirectGame/ProxyGame/Direct/China/QUIC/UDP… 及之前手建的）----
-deleted=0
-for sec in $(uci show passwall2 2>/dev/null | awk -F'[.=]' '/=shunt_rules$/{print $2}'); do
-	echo "  删除旧规则: $(uci -q get passwall2.$sec.remarks 2>/dev/null) ($sec)"
-	uci -q delete passwall2.$sec
-	deleted=$((deleted + 1))
-done
-echo "已清空 $deleted 条旧分流规则。"
-uci commit passwall2
-
-# ---- 写入新的 Clash 分流规则 ----
-cat >> "$CONF" <<'PWEOF'
-${conf}PWEOF
-uci commit passwall2
-echo ""
-echo "✅ 已清空旧规则并写入 ${order.length} 条新分流规则。"
-echo ""
-echo "下一步（在 LuCI 操作）："
-echo "  1) 节点列表 → 编辑/新建一个 ${core} 的 Shunt 类型节点"
-echo "  2) 在节点编辑页底部表格里，为每条新分流规则选出站节点："
-echo "     广告类 → Blackhole(阻断)；直连类 → Direct Connection；其余 → 你的代理节点"
-echo "  3) 把 Default（漏网之鱼）设为想要的兜底节点"
-echo "  4) 基本设置 → TCP 节点 / UDP 节点 → 选该 Shunt 节点 → 保存并应用"
-echo ""
-echo "若要撤销：cp \$CONF.bak.$TS \$CONF && uci commit passwall2 && /etc/init.d/passwall2 restart"
-`;
-  return install;
 }
 
 function suggestOutbound(policy) {
@@ -394,29 +500,55 @@ function generateGuide(order, matchPolicy, groupTypes, degrade) {
 // 主流程
 // ============================================================
 function parseArgs(argv) {
-  const a = { positional: [], mirror: "gh-proxy", out: null, noInstall: false, xray: false, dat: false };
+  const a = { positional: [], mirror: "gh-proxy", out: null, noInstall: false, xray: false, dat: false, tagManifest: null, repo: null, yamlEngine: "auto" };
+  const takeValue = (flag, index) => {
+    if (index + 1 >= argv.length || argv[index + 1].startsWith("--")) throw new Error(`${flag} requires a value`);
+    return argv[index + 1];
+  };
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i];
-    if (t === "--mirror") a.mirror = argv[++i];
-    else if (t === "--out") a.out = argv[++i];
+    if (t === "--mirror") a.mirror = takeValue(t, i++);
+    else if (t === "--out") a.out = takeValue(t, i++);
+    else if (t === "--tag-manifest") a.tagManifest = takeValue(t, i++);
+    else if (t === "--repo") a.repo = takeValue(t, i++);
+    else if (t === "--yaml-engine") a.yamlEngine = takeValue(t, i++);
     else if (t === "--no-install") a.noInstall = true;
     else if (t === "--xray") a.xray = true;
     else if (t === "--dat") a.dat = true;
     else if (t === "-h" || t === "--help") a.help = true;
+    else if (t.startsWith("-")) throw new Error(`unknown option: ${t}`);
     else a.positional.push(t);
   }
   return a;
 }
 
 function main() {
-  const args = parseArgs(process.argv.slice(2));
+  let args;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error("ERROR: " + error.message);
+    process.exit(1);
+  }
   if (args.help || !args.positional.length) {
-    console.error("用法: node clash2passwall.js <clash.yaml> [--mirror gh-proxy|ghfast|jsdelivr|fastly|raw] [--out dir] [--xray|--dat] [--no-install]");
+    console.error("用法: node clash2passwall.js <clash.yaml> [--mirror name] [--out dir] [--xray|--dat --tag-manifest expected_tags.json] [--repo owner/repo] [--yaml-engine auto|builtin|js-yaml] [--no-install]");
     process.exit(args.help ? 0 : 1);
   }
 
   if (args.xray && args.dat) {
     console.error("--xray 与 --dat 不能同时使用");
+    process.exit(1);
+  }
+  if (!["auto", "builtin", "js-yaml"].includes(args.yamlEngine)) {
+    console.error("未知 YAML 引擎: " + args.yamlEngine);
+    process.exit(1);
+  }
+  if (args.repo && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(args.repo)) {
+    console.error("--repo 必须是 owner/repo");
+    process.exit(1);
+  }
+  if (args.dat && !args.tagManifest) {
+    console.error("--dat 必须提供 --tag-manifest <expected_tags.json>");
     process.exit(1);
   }
 
@@ -428,7 +560,14 @@ function main() {
   MIRROR = MIRRORS[args.mirror];
   MODE = args.dat ? "dat" : (args.xray ? "xray" : "sing-box");
 
-  const cfg = loadConfig(inputFile);
+  let cfg;
+  try {
+    if (args.dat) AVAILABLE_TAGS = loadTagManifest(args.tagManifest);
+    cfg = loadConfig(inputFile, args.yamlEngine);
+  } catch (error) {
+    console.error("ERROR: " + error.message);
+    process.exit(1);
+  }
   const providers = cfg["rule-providers"];
   const groupTypes = {};
   for (const g of cfg["proxy-groups"]) if (g.name) groupTypes[g.name] = g.type || "";
@@ -443,6 +582,7 @@ function main() {
     if (!mapped) continue;
     if (mapped.match) { matchPolicy = mapped.policy; continue; }
     if (!mapped.policy) continue;
+    if (![...mapped.domain, ...mapped.ip, ...mapped.port, ...mapped.source].length) continue;
     if (!pr[mapped.policy]) {
       pr[mapped.policy] = { domain: [], ip: [], port: [], source: [] };
       order.push(mapped.policy);
@@ -466,7 +606,7 @@ function main() {
   fs.writeFileSync(path.join(outDir, confFile), conf, "utf8");
   fs.writeFileSync(path.join(outDir, guideFile), guide, "utf8");
   if (!args.noInstall) {
-    fs.writeFileSync(path.join(outDir, installFile), generateInstall(conf, order, MODE), "utf8");
+    fs.writeFileSync(path.join(outDir, installFile), generateInstall(conf, order, MODE, args.repo), { encoding: "utf8", mode: 0o700 });
   }
 
   // 终端摘要
@@ -477,7 +617,8 @@ function main() {
   console.log(" Clash → PassWall2 转换完成  [" + MODE + " 模式" + modeDetail + "]");
   console.log("============================================================");
   console.log(" 输入:        " + inputFile);
-  console.log(" YAML 引擎:   " + (jsyaml ? "js-yaml" : "内置解析器"));
+  const selectedEngine = args.yamlEngine === "auto" ? (jsyaml ? "js-yaml" : "builtin") : args.yamlEngine;
+  console.log(" YAML 引擎:   " + selectedEngine);
   console.log(" 内核模式:    " + MODE);
   if (MODE === "sing-box") console.log(" .srs 镜像:   " + args.mirror + "  (" + MIRROR + "/...)");
   console.log(" 解析到规则:  " + cfg.rules.length + " 条");

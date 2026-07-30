@@ -27,36 +27,45 @@ const DAT_RULESET_MAP = {
   applications: null,
 };
 
-const DAT_GEOIP_TAGS = new Set(["xiaolin-netflix", "xiaolin-bilibili"]);
-
 function applyDatRuleset(name, output, options = {}) {
   const mapping = DAT_RULESET_MAP[name];
   if (mapping === null) return true;
   if (!mapping) return false;
+  const availableTags = options.availableTags;
+  if (!availableTags || !(availableTags.geosite instanceof Set) || !(availableTags.geoip instanceof Set)) {
+    throw new Error("available geosite/geoip tag manifest is required");
+  }
 
   if (mapping.side === "domain") {
+    if (!availableTags.geosite.has(mapping.name)) return false;
     output.domain.push("geosite:" + mapping.name);
-    const hasGeoip = options.hasGeoip || DAT_GEOIP_TAGS;
-    if (mapping.alsoIp && hasGeoip.has(mapping.name)) {
+    if (mapping.alsoIp && availableTags.geoip.has(mapping.name)) {
       output.ip.push("geoip:" + mapping.name);
     }
   } else {
+    if (!availableTags.geoip.has(mapping.name)) return false;
     output.ip.push("geoip:" + mapping.name);
   }
   return true;
 }
 
-function mapBuiltinGeositeGeoip(type, value, output) {
+function mapBuiltinGeositeGeoip(type, value, output, availableTags) {
+  if (!availableTags || !(availableTags.geosite instanceof Set) || !(availableTags.geoip instanceof Set)) {
+    throw new Error("available geosite/geoip tag manifest is required");
+  }
   if (type === "GEOSITE") {
-    output.domain.push("geosite:" + value.toLowerCase());
+    const normalized = value.toLowerCase();
+    if (!availableTags.geosite.has(normalized)) return false;
+    output.domain.push("geosite:" + normalized);
   } else if (type === "GEOIP") {
     const normalized = value.toUpperCase() === "LAN" ? "private" : value.toLowerCase();
+    if (!availableTags.geoip.has(normalized)) return false;
     output.ip.push("geoip:" + normalized);
   }
+  return true;
 }
 
 module.exports = {
-  DAT_GEOIP_TAGS,
   DAT_RULESET_MAP,
   applyDatRuleset,
   mapBuiltinGeositeGeoip,

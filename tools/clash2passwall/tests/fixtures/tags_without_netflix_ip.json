@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "required": {
+    "geosite": ["cn", "loyalsoldier-gfw", "xiaolin-netflix"],
+    "geoip": ["cn", "private"]
+  },
+  "forbidden": {"geosite": [], "geoip": ["xiaolin-netflix"]}
+}

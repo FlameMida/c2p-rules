@@ -11,6 +11,11 @@ function emptyOutput() {
   return { domain: [], ip: [], policy: null };
 }
 
+const fullTags = {
+  geosite: new Set(Object.values(DAT_RULESET_MAP).filter(Boolean).filter((m) => m.side === "domain").map((m) => m.name).concat(["cn"])),
+  geoip: new Set(Object.values(DAT_RULESET_MAP).filter(Boolean).filter((m) => m.side === "ip" || m.alsoIp).map((m) => m.name).concat(["cn", "private"])),
+};
+
 
 const expectedMappings = {
   reject: ["domain", "loyalsoldier-reject"],
@@ -42,14 +47,14 @@ for (const [provider, [side, tag]] of Object.entries(expectedMappings)) {
 
 {
   const output = emptyOutput();
-  applyDatRuleset("gfw", output);
+  applyDatRuleset("gfw", output, { availableTags: fullTags });
   assert.ok(output.domain.includes("geosite:loyalsoldier-gfw"));
   assert.ok(!output.domain.includes("geosite:gfw"));
 }
 
 {
   const output = emptyOutput();
-  applyDatRuleset("proxy", output);
+  applyDatRuleset("proxy", output, { availableTags: fullTags });
   assert.ok(output.domain.includes("geosite:loyalsoldier-proxy"));
   assert.ok(!output.domain.includes("geosite:geolocation-!cn"));
 }
@@ -58,9 +63,9 @@ for (const [provider, [side, tag]] of Object.entries(expectedMappings)) {
   const reject = emptyOutput();
   const ai = emptyOutput();
   const telegram = emptyOutput();
-  applyDatRuleset("reject", reject);
-  applyDatRuleset("AI", ai);
-  applyDatRuleset("telegramcidr", telegram);
+  applyDatRuleset("reject", reject, { availableTags: fullTags });
+  applyDatRuleset("AI", ai, { availableTags: fullTags });
+  applyDatRuleset("telegramcidr", telegram, { availableTags: fullTags });
   assert.ok(reject.domain.includes("geosite:loyalsoldier-reject"));
   assert.ok(ai.domain.includes("geosite:sukka-ai"));
   assert.ok(telegram.ip.includes("geoip:loyalsoldier-telegramcidr"));
@@ -69,7 +74,10 @@ for (const [provider, [side, tag]] of Object.entries(expectedMappings)) {
 {
   const output = emptyOutput();
   applyDatRuleset("Netflix", output, {
-    hasGeoip: new Set(["xiaolin-netflix"]),
+    availableTags: {
+      geosite: new Set(["xiaolin-netflix"]),
+      geoip: new Set(["xiaolin-netflix"]),
+    },
   });
   assert.ok(output.domain.includes("geosite:xiaolin-netflix"));
   assert.ok(output.ip.includes("geoip:xiaolin-netflix"));
@@ -77,9 +85,21 @@ for (const [provider, [side, tag]] of Object.entries(expectedMappings)) {
 
 {
   const output = emptyOutput();
-  mapBuiltinGeositeGeoip("GEOSITE", "CN", output);
-  mapBuiltinGeositeGeoip("GEOIP", "CN", output);
-  mapBuiltinGeositeGeoip("GEOIP", "LAN", output);
+  applyDatRuleset("Netflix", output, {
+    availableTags: {
+      geosite: new Set(["xiaolin-netflix"]),
+      geoip: new Set(),
+    },
+  });
+  assert.deepStrictEqual(output.domain, ["geosite:xiaolin-netflix"]);
+  assert.deepStrictEqual(output.ip, []);
+}
+
+{
+  const output = emptyOutput();
+  mapBuiltinGeositeGeoip("GEOSITE", "CN", output, fullTags);
+  mapBuiltinGeositeGeoip("GEOIP", "CN", output, fullTags);
+  mapBuiltinGeositeGeoip("GEOIP", "LAN", output, fullTags);
   assert.deepStrictEqual(output.domain, ["geosite:cn"]);
   assert.deepStrictEqual(output.ip, ["geoip:cn", "geoip:private"]);
 }
