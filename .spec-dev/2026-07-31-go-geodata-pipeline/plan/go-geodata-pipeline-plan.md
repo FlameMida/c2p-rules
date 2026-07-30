@@ -729,7 +729,7 @@ git commit -m "feat(T6): 固定下载与上游工具边界"
 - 消费：任务 2 的 sources/groups，任务 4 registry，任务 6 tools runner。
 - 产出：`manifest.Build([]model.Source, []model.Group) manifest.Document`、`manifest.Write(string, manifest.Document) error`、`verify.TagLookup`（`Has(context.Context, model.Side, string) (bool, error)`）、`verify.NewProber(*tools.Runner, string, string) *verify.Prober`、`verify.Required(context.Context, verify.TagLookup, manifest.Document) error`、`verify.Forbidden(context.Context, verify.TagLookup, manifest.Document) error`、`verify.GroupRefs(context.Context, verify.TagLookup, []model.Group) error`、`verify.Assets(string, []string) error`、`verify.WriteSHA256(string) (string, error)`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 `internal/manifest/manifest_test.go`：
 
@@ -746,13 +746,13 @@ func TestManifestUsesOutputTagsAndForbidsLegacyTags(t *testing.T) {
 
 `internal/verify/geoview_test.go` 用 fake geoview 写/不写临时 `.srs`，验证 required 非空、forbidden 缺失和 mixed-case `BilibiliHMT` 参数不转小写。`assets_test.go` 验证精确六项与 sha 内容 `hex + 两空格 + basename + newline`。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/manifest ./internal/verify -v`
 
 预期：FAIL，报缺少 manifest/verify 实现。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 Manifest JSON schema 固定为：
 
@@ -778,13 +778,13 @@ geoview -type <geosite|geoip> -action convert -input <dat> -list <tag> -output <
 
 只有命令成功且输出非空才算存在。`verify.GroupRefs` 对每个 group 引用调用 Has，错误同时包含 remarks 与 side:tag。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/manifest ./internal/verify -v`
 
 预期：PASS；manifest 无旧 tag，BilibiliHMT 大小写传给 geoview，六资产集合严格。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/manifest internal/verify
