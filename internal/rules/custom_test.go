@@ -85,12 +85,15 @@ func TestCustomEmptyTemplateIsSemanticNoOp(t *testing.T) {
 
 func TestCustomRejectsUnknownDuplicateAliasMergeAndControlYAML(t *testing.T) {
 	tests := map[string]string{
-		"unknown field": "paylaod:\n  - DOMAIN-SUFFIX,example.test\n",
-		"duplicate key": "metadata: one\nmetadata: two\npayload: []\n",
-		"alias":         "metadata: &value one\nother: *value\npayload: []\n",
-		"merge key":     "defaults: &defaults\n  payload: []\n<<: *defaults\npayload: []\n",
-		"control":       "metadata: \"bad\\u0085value\"\npayload: []\n",
-		"second doc":    "payload: []\n---\npayload: []\n",
+		"unknown field":   "paylaod:\n  - DOMAIN-SUFFIX,example.test\n",
+		"duplicate key":   "metadata: one\nmetadata: two\npayload: []\n",
+		"alias":           "metadata: &value one\nother: *value\npayload: []\n",
+		"merge key":       "defaults: &defaults\n  payload: []\n<<: *defaults\npayload: []\n",
+		"control":         "metadata: \"bad\\u0085value\"\npayload: []\n",
+		"second doc":      "payload: []\n---\npayload: []\n",
+		"null root":       "null\n",
+		"null item":       "payload:\n  - null\n",
+		"mixed null item": "payload:\n  - null\n  - DOMAIN-SUFFIX,example.test\n",
 	}
 	for name, document := range tests {
 		t.Run(name, func(t *testing.T) {

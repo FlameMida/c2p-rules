@@ -10,7 +10,7 @@ import (
 )
 
 type StrictOptions struct {
-	AllowNull bool
+	AllowedNullPaths []string
 }
 
 func DecodeStrict(r io.Reader, out any, options StrictOptions) error {
@@ -27,7 +27,7 @@ func DecodeStrict(r io.Reader, out any, options StrictOptions) error {
 	if len(document.Content) != 1 {
 		return fmt.Errorf("YAML must contain one document")
 	}
-	if err := validateNode(document.Content[0], options); err != nil {
+	if err := validateNode(document.Content[0], options, ""); err != nil {
 		return err
 	}
 	var extra yaml.Node
@@ -52,7 +52,7 @@ func DecodeStrict(r io.Reader, out any, options StrictOptions) error {
 	return nil
 }
 
-func validateNode(node *yaml.Node, options StrictOptions) error {
+func validateNode(node *yaml.Node, options StrictOptions, path string) error {
 	if node.Anchor != "" || node.Kind == yaml.AliasNode {
 		return fmt.Errorf("YAML aliases are not allowed at line %d", node.Line)
 	}
@@ -74,18 +74,23 @@ func validateNode(node *yaml.Node, options StrictOptions) error {
 				return fmt.Errorf("duplicate YAML key %q at line %d", key.Value, key.Line)
 			}
 			seen[key.Value] = struct{}{}
-			if err := validateNode(node.Content[index+1], options); err != nil {
+			childPath := key.Value
+			if path != "" {
+				childPath = path + "." + key.Value
+			}
+			if err := validateNode(node.Content[index+1], options, childPath); err != nil {
 				return err
 			}
 		}
 	case yaml.SequenceNode, yaml.DocumentNode:
-		for _, child := range node.Content {
-			if err := validateNode(child, options); err != nil {
+		for index, child := range node.Content {
+			childPath := fmt.Sprintf("%s[%d]", path, index)
+			if err := validateNode(child, options, childPath); err != nil {
 				return err
 			}
 		}
 	case yaml.ScalarNode:
-		if node.Tag != "!!str" && !(options.AllowNull && node.Tag == "!!null") {
+		if node.Tag != "!!str" && !(node.Tag == "!!null" && nullAllowed(path, options.AllowedNullPaths)) {
 			return fmt.Errorf("YAML scalar at line %d must be a string", node.Line)
 		}
 		if HasForbiddenControl(node.Value) {
@@ -93,6 +98,15 @@ func validateNode(node *yaml.Node, options StrictOptions) error {
 		}
 	}
 	return nil
+}
+
+func nullAllowed(path string, allowed []string) bool {
+	for _, candidate := range allowed {
+		if candidate == path {
+			return true
+		}
+	}
+	return false
 }
 
 func HasForbiddenControl(value string) bool {

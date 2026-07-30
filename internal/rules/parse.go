@@ -75,7 +75,7 @@ func readYAMLPayload(r io.Reader, strict bool) ([]string, error) {
 		var document struct {
 			Payload []string `yaml:"payload"`
 		}
-		if err := yamlutil.DecodeStrict(r, &document, yamlutil.StrictOptions{AllowNull: true}); err != nil {
+		if err := yamlutil.DecodeStrict(r, &document, yamlutil.StrictOptions{AllowedNullPaths: []string{"payload"}}); err != nil {
 			return nil, fmt.Errorf("decode custom rule YAML: %w", err)
 		}
 		return document.Payload, nil
