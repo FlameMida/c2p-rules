@@ -802,7 +802,7 @@ git commit -m "feat(T7): 建立标签与发布验证门禁"
 - 消费：标准文件系统。
 - 产出：`workspace.Begin(string) (*Transaction, error)`、测试专用 `workspace.BeginWithFS(string, workspace.FS) (*Transaction, error)`、`(*Transaction).Layout() Layout`、`(*Transaction).Commit() error`、`(*Transaction).Abort() error`；`FS` 精确包含 `MkdirTemp/MkdirAll/Rename/RemoveAll/Stat`，`Layout` 暴露 staging `Build/Publish/DataMerged/IP/Manifest/GeoIPConfig` 路径。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 ```go
 func TestAbortAfterFinalProbePreservesOldBuildAndPublish(t *testing.T) {
@@ -832,13 +832,13 @@ func TestCommitSwitchesBothDirectoriesOrRollsBack(t *testing.T) {
 
 另用注入式 `FS.Rename` 在第二次 rename 失败，断言第一目录恢复。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/workspace -v`
 
 预期：FAIL，报缺少 Transaction。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `FS` 固定签名，生产使用 `os` 适配器，故障测试包装该适配器并只覆盖 `Rename`：
 
@@ -854,13 +854,13 @@ type FS interface {
 
 `Begin` 在 `<root>/.staging-<random>` 建 `build/`、`publish/`，所有 atomic file write 使用同目录 `CreateTemp → Write → Sync → Close → Rename`。`Commit` 对 build、publish 逐个执行 `final→backup`、`staged→final`，任何失败逆序恢复；成功删除 backup 和 staging。`Abort` 只删除 staging，不触碰 final。接口名明确称“可恢复切换”，不声称跨目录原子事务。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/workspace -v`
 
 预期：PASS；成功、abort、第二次 rename 故障均保持定义的目录状态。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/workspace
