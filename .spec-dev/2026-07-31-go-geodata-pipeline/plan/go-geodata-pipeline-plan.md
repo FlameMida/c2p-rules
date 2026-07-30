@@ -1336,7 +1336,7 @@ git commit -m "feat(T11): 编排全 Go geodata 构建"
 - 消费：任务 2 的严格 loaders，任务 9 的顺序/引用 renderer。
 - 产出：Spec 中 18 个 source output 契约、16 个默认托管组和两个语义空模板。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 `repository_contract_test.go` 载入真实仓库文件并精确比较：
 
@@ -1395,13 +1395,13 @@ func TestDefaultTemplatesAreSemanticNoOps(t *testing.T) {
 
 另断言默认 groups 精确为 Spec 表中的 16 行、YouTube index < Google、Apple geosite 为 `[apple,icloud]`、China 双侧为 cn。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/config -run 'TestRepository|TestDefault' -v`
 
 预期：FAIL，旧 `sides` 被严格 loader 拒绝，groups/templates 不存在。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 把 `sources.yaml` 的每条 `name` 改为 `id`，删除 `sides`，逐侧写完整 outputs；URL/behavior/format 保持现值。示例：
 
@@ -1433,13 +1433,13 @@ payload:
 
 geoip 模板对应列出 `IP-CIDR`、`IP-CIDR6` 与可选 `no-resolve`。注释项不得进入 payload。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/config ./internal/rules ./internal/passwall -v`
 
 预期：PASS；18 个 source、16 个组、两个空模板全部通过严格 loader。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add sources.yaml config/passwall2-groups.yaml custom internal/config/repository_contract_test.go

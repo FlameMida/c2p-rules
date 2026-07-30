@@ -1,0 +1,66 @@
+# 数组顺序即托管分流优先级；每组必须显式包含 geosite 与 geoip。
+groups:
+  - id: reject
+    remarks: 广告拦截
+    geosite: [reject]
+    geoip: []
+  - id: bilibili_hmt
+    remarks: 哔哩哔哩港澳台
+    geosite: [BilibiliHMT]
+    geoip: [BilibiliHMT]
+  - id: youtube
+    remarks: YouTube
+    geosite: [youtube]
+    geoip: []
+  - id: netflix
+    remarks: Netflix
+    geosite: [netflix]
+    geoip: [netflix]
+  - id: spotify
+    remarks: Spotify
+    geosite: [spotify]
+    geoip: []
+  - id: tiktok
+    remarks: TikTok
+    geosite: [tiktok]
+    geoip: []
+  - id: ai
+    remarks: AI 服务
+    geosite: [ai]
+    geoip: []
+  - id: apple_services
+    remarks: 苹果服务
+    geosite: [apple, icloud]
+    geoip: []
+  - id: telegram
+    remarks: Telegram
+    geosite: []
+    geoip: [telegram]
+  - id: google
+    remarks: Google 服务
+    geosite: [google]
+    geoip: []
+  - id: gfw
+    remarks: GFW
+    geosite: [gfw]
+    geoip: []
+  - id: proxy
+    remarks: 代理规则
+    geosite: [proxy]
+    geoip: []
+  - id: tld_not_cn
+    remarks: 非中国域名
+    geosite: [tld-not-cn]
+    geoip: []
+  - id: private
+    remarks: 私有网络
+    geosite: [private]
+    geoip: [private]
+  - id: cn
+    remarks: 中国大陆
+    geosite: [cn]
+    geoip: [cn]
+  - id: direct
+    remarks: 直连规则
+    geosite: [direct]
+    geoip: []
