@@ -481,7 +481,7 @@ git commit -m "feat(T3): 解析远程与本地 Clash 规则"
 - 消费：任务 1 的 `model.Source`/`Contribution`，任务 2 的 sources，任务 3 的 domain rules。
 - 产出：`targets.New([]model.Source, BaseLookup) (*Registry, error)`、`(*Registry).Require(model.Side, string) error`、`geosite.Merge(string, string, []model.Contribution) error`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 `internal/targets/registry_test.go`：
 
@@ -520,13 +520,13 @@ func TestMergeDeduplicatesExactRulesButPreservesKindAndAttrs(t *testing.T) {
 
 另测：未声明 community collision 在 registry 阶段失败；create 输出生成新文件；Google 保留 `domain:googleapis.com`、YouTube 保留 `full:youtubei.googleapis.com`；合并后的 `BilibiliHMT` 不修改 `bilibili`。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/targets ./internal/geosite -v`
 
 预期：FAIL，报缺少 registry/merge 实现。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `BaseLookup` 精确签名：
 
@@ -539,13 +539,13 @@ type Registry struct { final map[model.Side]map[string]struct{}; lookup BaseLook
 
 `geosite.Merge` 先复制 community 文件到新输出目录，再按 `(tag, SourceID)` 排序 contributions；每个目标将 base 原行与编码后的 `domain/full/keyword/regexp` 行合并。canonical key 为 `kind + NUL + value + NUL + 完整 attrs`；注释、include 和无法归类的 community 行原样保留，不执行父域覆盖删除。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/targets ./internal/geosite -v`
 
 预期：PASS；精确重复删除，full/属性规则保留，Google/YouTube 与 Bilibili fixtures 隔离。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/targets internal/geosite
