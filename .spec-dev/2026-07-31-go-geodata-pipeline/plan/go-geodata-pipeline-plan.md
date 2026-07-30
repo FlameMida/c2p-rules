@@ -638,7 +638,7 @@ git commit -m "feat(T5): 生成规范 GeoIP 合并输入"
 - 消费：任务 1 的 context/CLI 基础。
 - 产出：`fetch.New(fetch.Options) *fetch.Client`、`(*fetch.Client).Get(context.Context, string, int64) ([]byte, error)`、`(*tools.Runner).Run(context.Context, string, string, ...string) error`、`tools.Executor`（`Run(context.Context, string, string, ...string) error`，参数依次为 cwd/program/args）、`tools.Bootstrap(context.Context, string, tools.Executor) error`、固定 `tools.Pins`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 `internal/fetch/client_test.go` 使用 `httptest.Server` 覆盖成功、404、总超时、Content-Length 超限、chunked 超限、redirect loop；关键测试：
 
@@ -672,13 +672,13 @@ func TestRunnerUsesOnlyConfiguredBinRoot(t *testing.T) {
 
 bootstrap 测试给 fake `Executor`，断言三个工具使用精确 commit，domain-list-custom/geoip/geoview 都执行 `go build -o .cache/bin/<name>`，community 执行滚动 `fetch origin HEAD` 并记录 HEAD。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/fetch ./internal/tools -v`
 
 预期：FAIL，报缺少 Client/Runner/Bootstrap。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `fetch.Options` 固定包含 `Timeout`、`DialTimeout`、`TLSHandshakeTimeout`、`ResponseHeaderTimeout`、`MaxRedirects` 和测试专用 HTTP 开关；生产 URL 只接受 HTTPS，redirect 禁止从 HTTPS 降级。`Get` 先检查状态与 Content-Length，再用 `io.LimitReader(body, max+1)`，超限或非 2xx 返回含 URL 的稳定错误。
 
@@ -702,13 +702,13 @@ func (r *Runner) Run(ctx context.Context, name, cwd string, args ...string) erro
 
 `tools.Pins` 写入全局约束三个完整 commit；bootstrap checkout 根为 `<cache>/upstream`、bin 为 `<cache>/bin`，所有 git/go 调用通过可测试 `Executor` 参数数组执行，不调用 shell。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/fetch ./internal/tools -v`
 
 预期：PASS；超限响应、未知 PATH 工具和错误 commit 均被测试阻断。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/fetch internal/tools
