@@ -1,0 +1,4 @@
+{
+  "findings": [],
+  "coverage_note": "以最终 HEAD 64d7d6a、diff 460e739...HEAD 为准，只读复审此前 final-tests-ci 三项发现及后续修复。三项均已关闭：test_build_cli_failfast 改用 sys.executable；git archive 干净 checkout 使用已安装 PyYAML 的当前解释器复跑 fail-fast、orchestration、workflow 19/19 通过，证明不再依赖 checkout 内 .venv；声明 geosite/geoip 的 process-only 源均确定性抛 BuildError，sides 成为必填并有双侧回归测试；publish draft 使用 --target GITHUB_SHA，发布前后回读 tag SHA，workflow 合约测试覆盖绑定顺序。完整复跑 Python unittest 50/50 通过，tools/clash2passwall npm test 的 7 个 test_*.cjs 全部通过。额外审查 6d32337 的 c2p_ 命名空间、顺序稳定 ID、现存 UCI section 冲突回退、C0/C1 控制字符拒绝、fake-UCI 成功与三类事务回滚测试，未发现新增高/中严重度测试或 CI 问题。首次运行未安装 PyYAML 的系统 Python 在干净归档失败属于缺少 requirements.txt 安装步骤，不代表 CI：workflow 在测试前明确 pip install，随后用具备依赖的干净归档复跑已通过。未执行完整联网 dat build、真实 GitHub Release 或真实 OpenWrt/libuci；这些外部边界未被记为已验证。"
+}

@@ -1280,7 +1280,7 @@ grep -E 'releases/latest/download|轻量完整增强|geosite.dat|rule-set:remote
 
 ### 任务 11：合并与清理
 
-- [ ] **步骤 1：全量验证**
+- [x] **步骤 1：全量验证**
 
 ```bash
 cd /Users/flame/clash-rules-srs/.worktrees/plan-geodata-selfhost
@@ -1348,7 +1348,7 @@ Scenario → 测试：均在 T1/T2/T3/T6/T7/T8 有对应 assert。无 TBD 占位
 - [x] 临时 UCI staging + 原子替换 + rollback trap；fake-UCI 覆盖成功及三类故障注入。
 - [x] CI 拆分只读 build/写权限 publish；固定 Action/工具提交；draft 四资产回读后再 latest。
 - [x] CLI 失败快停覆盖 missing/404、畸形 YAML、冲突，证明不调用编译器且无完整发布集。
-- [ ] 完整在线构建、独立复审、验收报告与 Requirement Reconciliation 定稿。
+- [x] 完整在线构建、独立复审、验收报告与 Requirement Reconciliation 定稿。
 - [ ] T11 本地合并、worktree 清理与 sync_commit 锚定。
 
 公开仓库创建、remote 配置、push 与第一次线上 Release 未获授权，必须在最终对账中标记 DEFERRED，不得由实施代理自行执行。

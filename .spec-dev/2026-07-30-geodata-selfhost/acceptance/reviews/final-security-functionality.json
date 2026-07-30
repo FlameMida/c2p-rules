@@ -1,0 +1,4 @@
+{
+  "findings": [],
+  "coverage_note": "以 HEAD 64d7d6a 为准，对 tools/clash2passwall 的 YAML 输入到 UCI 配置/安装脚本状态变更链做独立聚焦安全与功能复审。确定性复跑 `test_security.cjs`、`test_cli_validation.cjs`、`test_install_script.cjs`、`test_install_transaction.cjs`，四项全部通过；`git diff --check 460e739...HEAD` 通过。覆盖证据包括：解析后的 rule、group name/type、provider name/type/behavior/url 统一拒绝 C0、DEL、C1、U+2028/U+2029；恶意换行与 C1 fixture 非零退出且不生成注入载荷；生成 section ID 使用稳定 `c2p_` 命名空间、长度不超过 64、与规则顺序无关，并防护 __proto__/constructor；安装时在已删除旧 shunt_rules 的 staging 配置中探测与 nodes 等保留 section 的同名冲突，从 8 个独立哈希候选中选择空闲 ID；含既有 nodes `c2p_Proxy` 的成功用例验证节点保留、旧 shunt 删除、生成规则改用 fallback ID。shell 载荷不使用 heredoc，UCI fragment 仅以 base64 解码到临时文件，repo slug 受严格字符白名单约束；staging commit、base64 decode、live commit 三类故障均非零退出且配置逐字恢复，成功路径在临时配置解析通过后才原子替换 live 文件。未发现高/中严重度安全或功能问题。未在真实 OpenWrt/BusyBox/libuci 设备上执行，fake-UCI 无法证明所有真实 libuci 解析和持久化细节，因此该外部边界保持未验证，未静默计为通过。"
+}

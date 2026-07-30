@@ -28,6 +28,8 @@ spec_dev:
 3. PassWall2 将 `geoip_url`/`geosite_url` 指向该 Releases 的 `.../releases/latest/download/{geoip,geosite}.dat` 后，xray 与 sing-box（经 geoview）均可使用 `geosite:loyalsoldier-gfw` 等引用。
 4. 仓库内 `clash2passwall --dat` 按固定映射表与本次构建 manifest 输出确实存在的 tag；安装脚本写入明确配置的 URL，并事务性覆盖导入具名分流规则（不删节点）。
 
+> **DEFERRED（2026-07-30，成功标准 3 的真实环境证据）**：当前无可丢弃 OpenWrt/PassWall2 设备；本地 dat、转换器与 fake-UCI 已验收，真实 `rule_update`、xray、sing-box/geoview 消费待设备环境具备后补验。
+
 ## 非目标
 
 - 产出或维护 `.srs` / `rule-set:remote:` 作为发布产物（本版仅 `.dat` + `.sha256sum`）。
@@ -82,6 +84,8 @@ spec_dev:
 
 #### Scenario: Releases latest URL 与 sha 派生
 
+> **DEFERRED（2026-07-30）**：公开仓库创建、remote、push 与第一次线上 Release 属外部写入，尚未获得授权；workflow 与本地产物已交付，四个 latest URL 的实时证据待授权后补验。
+
 - **GIVEN** 仓库已完成一次成功发布
 - **WHEN** 分别请求 `.../releases/latest/download/geosite.dat`、`.../geosite.dat.sha256sum`、`.../geoip.dat`、`.../geoip.dat.sha256sum`
 - **THEN** 均 HTTP 成功，且 dat 与 sha 互相匹配
@@ -93,6 +97,8 @@ CI 发布到 GitHub Releases 的资产集合 SHALL 仅包含 `geosite.dat`、`ge
 构建 SHALL 在只读 token job 中运行，checkout 不持久化凭据，可执行上游工具固定到完整提交；独立写权限 job 只能消费已验证 artifact。新 Release SHALL 先保持 draft，上传后经 API 回读确认资产集合精确等于四项，再公开并切换 latest。
 
 #### Scenario: Release 资产列表无 srs
+
+> **DEFERRED（2026-07-30，仅线上证据）**：draft 精确四资产回读门禁已实现；真实 Release asset 列表待首次发布授权后验证。
 
 - **GIVEN** 一次成功的 latest Release
 - **WHEN** 列举该 Release 的 asset 文件名
@@ -260,6 +266,8 @@ classical 源中的域名类规则 SHALL 写入 `geosite.dat` 的 list `<name>`�
 安装 SHALL 在临时 UCI 配置中完成 URL、删除、导入与解析验证，随后原子替换真实配置；临时提交、载荷解码或最终提交失败时 SHALL 恢复备份。真实配置存在未提交 UCI 变更时 SHALL 拒绝覆盖。
 
 #### Scenario: 写入 URL
+
+> **DEFERRED（2026-07-30，仅真实设备证据）**：fake-UCI 确定性验收已交付；真实 OpenWrt/libuci、PassWall2 `rule_update`、xray 与 sing-box/geoview 消费因无可丢弃设备环境延期。
 
 - **GIVEN** 目标设备可写 UCI，且脚本参数指定 owner/repo
 - **WHEN** 执行安装脚本
