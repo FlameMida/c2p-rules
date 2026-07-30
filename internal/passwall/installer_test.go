@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"clash-rules-srs/internal/config"
 	"clash-rules-srs/internal/passwall"
 )
 
@@ -37,7 +38,12 @@ config shunt_rules 'crs_old'
 	if first != second {
 		t.Fatalf("not idempotent\nfirst=%s\nsecond=%s", first, second)
 	}
-	for _, want := range []string{"Keep Node", "Keep Rule", "crs_apple_services", "releases/latest/download/geosite.dat"} {
+	for _, want := range []string{
+		"config nodes 'node1'\n\toption remarks 'Keep Node'",
+		"config shunt_rules 'user_rule'\n\toption remarks 'Keep Rule'",
+		"crs_apple_services",
+		"releases/latest/download/geosite.dat",
+	} {
 		if !strings.Contains(second, want) {
 			t.Fatalf("missing %s in %s", want, second)
 		}
@@ -55,6 +61,47 @@ config shunt_rules 'crs_old'
 		if _, err := os.Stat(backup); err != nil {
 			t.Fatalf("backup %s: %v", backup, err)
 		}
+	}
+}
+
+func TestInstallerSuccessInstallsAllRepositoryGroupsAndValidData(t *testing.T) {
+	groups, err := config.LoadGroups("../../config/passwall2-groups.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fragment, err := passwall.Render(groups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := validInstallOptions()
+	options.Fragment = fragment
+	harness := newHarness(t)
+	harness.seedConfig("config nodes 'node1'\n\toption remarks 'Keep Node'\n")
+	output := harness.run(harness.render(options), true)
+	installed := harness.readConfig()
+	if strings.Count(installed, "option managed_by 'clash-rules-srs'") != 16 {
+		t.Fatalf("managed group count is not 16:\n%s", installed)
+	}
+	for _, group := range groups {
+		if !strings.Contains(installed, "config shunt_rules 'crs_"+group.ID+"'") {
+			t.Fatalf("missing managed group %s", group.ID)
+		}
+	}
+	for _, required := range []string{"Keep Node", "releases/latest/download/geosite.dat", "releases/latest/download/geoip.dat"} {
+		if !strings.Contains(installed, required) {
+			t.Fatalf("missing %s in installed config", required)
+		}
+	}
+	if string(mustRead(t, harness.sitePath)) != "new-site" || string(mustRead(t, harness.ipPath)) != "new-ip" {
+		t.Fatal("installed dat bytes do not match validated payload")
+	}
+	backup := backupPath(t, output)
+	backupInfo, err := os.Stat(backup)
+	if err != nil {
+		t.Fatalf("success backup is not recoverable: %v", err)
+	}
+	if backupInfo.Mode().Perm() != 0o600 || !strings.Contains(string(mustRead(t, backup)), "Keep Node") {
+		t.Fatalf("backup mode/content invalid: mode=%o content=%q", backupInfo.Mode().Perm(), mustRead(t, backup))
 	}
 }
 
@@ -87,7 +134,7 @@ func TestInstallerRollsBackWhenOnlyOneOldDatExists(t *testing.T) {
 }
 
 func TestInstallerRollsBackStageAndLiveCommitFailures(t *testing.T) {
-	for _, failCommit := range []int{1, 2} {
+	for _, failCommit := range []int{1, 2, 3} {
 		t.Run(fmt.Sprintf("commit-%d", failCommit), func(t *testing.T) {
 			harness := newHarness(t)
 			harness.seedConfig("")

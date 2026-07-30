@@ -21,6 +21,8 @@ func TestWorkflowBuildsAndPublishesExactSixAssets(t *testing.T) {
 		"install_passwall2_rules.sh.sha256sum",
 		"persist-credentials: false",
 		"permissions:\n      contents: read",
+		"gh release download \"$TAG\"",
+		"readback=$(mktemp -d)",
 	} {
 		if !bytes.Contains(data, []byte(required)) {
 			t.Errorf("workflow missing %q", required)
@@ -33,6 +35,12 @@ func TestWorkflowBuildsAndPublishesExactSixAssets(t *testing.T) {
 		if bytes.Count(data, []byte(name)) < 2 {
 			t.Errorf("workflow does not verify and upload %q", name)
 		}
+	}
+	upload := bytes.Index(data, []byte("gh release upload"))
+	download := bytes.Index(data, []byte("gh release download"))
+	publish := bytes.Index(data, []byte("gh release edit \"$TAG\" --draft=false --latest"))
+	if upload < 0 || download <= upload || publish <= download {
+		t.Errorf("release upload/readback/publish order is not enforced")
 	}
 }
 

@@ -134,6 +134,16 @@ jobs:
           test "$target" = "$GITHUB_SHA"
           tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')
           test "$tag_sha" = "$GITHUB_SHA"
+          readback=$(mktemp -d)
+          gh release download "$TAG" --dir "$readback"
+          actual_readback=$(find "$readback" -maxdepth 1 -type f -exec basename {} \; | sort)
+          test "$actual_readback" = "$expected"
+          (
+            cd "$readback"
+            sha256sum -c geoip.dat.sha256sum
+            sha256sum -c geosite.dat.sha256sum
+            sha256sum -c install_passwall2_rules.sh.sha256sum
+          )
           gh release edit "$TAG" --draft=false --latest
           tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')
           test "$tag_sha" = "$GITHUB_SHA"
