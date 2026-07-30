@@ -3,14 +3,13 @@ package app
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
 	"clash-rules-srs/internal/config"
 	"clash-rules-srs/internal/fetch"
+	"clash-rules-srs/internal/fileutil"
 	"clash-rules-srs/internal/geoip"
 	"clash-rules-srs/internal/geosite"
 	"clash-rules-srs/internal/manifest"
@@ -53,11 +52,12 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 				return fmt.Errorf("source fetcher is nil")
 			}
 			templatePath := filepath.Join(state.Options.Root, "config", "geoip.base.json")
-			uri, err := baseGeoIPURI(templatePath)
+			template, err := geoip.LoadTemplate(templatePath)
 			if err != nil {
 				return err
 			}
-			data, err := fetcher.Get(ctx, uri, maxBaseGeoIPDat)
+			state.GeoIPTemplate = template
+			data, err := fetcher.Get(ctx, template.BaseURI(), maxBaseGeoIPDat)
 			if err != nil {
 				return fmt.Errorf("download base geoip: %w", err)
 			}
@@ -65,7 +65,7 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 				return fmt.Errorf("downloaded base geoip is empty")
 			}
 			state.BaseGeoIP = state.Tx.Layout().BaseGeoIP
-			return atomicWrite(state.BaseGeoIP, data, 0o644)
+			return fileutil.AtomicWrite(state.BaseGeoIP, data, 0o644)
 		},
 		BuildRegistry: func(ctx context.Context, state *buildState) error {
 			if runner == nil {
@@ -158,7 +158,7 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			}
 			state.GeoInputs = inputs
 			return geoip.WriteConfig(
-				filepath.Join(state.Options.Root, "config", "geoip.base.json"),
+				state.GeoIPTemplate,
 				inputs,
 				state.BaseGeoIP,
 				state.Tx.Layout().Publish,
@@ -228,7 +228,7 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 				return err
 			}
 			installerPath := filepath.Join(publish, "install_passwall2_rules.sh")
-			if err := atomicWrite(installerPath, installer, 0o755); err != nil {
+			if err := fileutil.AtomicWrite(installerPath, installer, 0o755); err != nil {
 				return err
 			}
 			_, err = verify.WriteSHA256(installerPath)
@@ -277,72 +277,6 @@ func (c *cachedTagLookup) Has(ctx context.Context, side model.Side, tag string) 
 	present, err := c.delegate.Has(ctx, side, tag)
 	c.results[key] = tagLookupResult{present: present, err: err}
 	return present, err
-}
-
-func baseGeoIPURI(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", fmt.Errorf("open geoip template %s: %w", path, err)
-	}
-	defer file.Close()
-	var document struct {
-		Input []struct {
-			Type   string `json:"type"`
-			Action string `json:"action"`
-			Args   struct {
-				URI string `json:"uri"`
-			} `json:"args"`
-		} `json:"input"`
-	}
-	decoder := json.NewDecoder(file)
-	if err := decoder.Decode(&document); err != nil {
-		return "", fmt.Errorf("decode geoip template %s: %w", path, err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return "", fmt.Errorf("geoip template %s contains trailing JSON", path)
-	}
-	if len(document.Input) == 0 || document.Input[0].Type != "v2rayGeoIPDat" || document.Input[0].Action != "add" || document.Input[0].Args.URI == "" {
-		return "", fmt.Errorf("geoip template %s has no valid base URI", path)
-	}
-	return document.Input[0].Args.URI, nil
-}
-
-func atomicWrite(path string, data []byte, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".app-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	remove := true
-	defer func() {
-		if remove {
-			_ = os.Remove(temporaryPath)
-		}
-	}()
-	if err := temporary.Chmod(mode); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(data); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return err
-	}
-	remove = false
-	return nil
 }
 
 var _ SourceFetcher = (*fetch.Client)(nil)

@@ -10,14 +10,15 @@ import (
 	"unicode"
 
 	"clash-rules-srs/internal/model"
+	"clash-rules-srs/internal/yamlutil"
 	"go.yaml.in/yaml/v3"
 )
 
-var classicalDomainKinds = map[string]string{
-	"DOMAIN-SUFFIX":  "domain",
-	"DOMAIN":         "full",
-	"DOMAIN-KEYWORD": "keyword",
-	"DOMAIN-REGEX":   "regexp",
+var classicalDomainKinds = map[string]model.DomainKind{
+	"DOMAIN-SUFFIX":  model.DomainSuffix,
+	"DOMAIN":         model.DomainFull,
+	"DOMAIN-KEYWORD": model.DomainKeyword,
+	"DOMAIN-REGEX":   model.DomainRegexp,
 }
 
 func Parse(r io.Reader, format model.Format, behavior model.Behavior) (model.Buckets, error) {
@@ -70,6 +71,15 @@ func parse(r io.Reader, format model.Format, behavior model.Behavior, strictYAML
 }
 
 func readYAMLPayload(r io.Reader, strict bool) ([]string, error) {
+	if strict {
+		var document struct {
+			Payload []string `yaml:"payload"`
+		}
+		if err := yamlutil.DecodeStrict(r, &document, yamlutil.StrictOptions{AllowNull: true}); err != nil {
+			return nil, fmt.Errorf("decode custom rule YAML: %w", err)
+		}
+		return document.Payload, nil
+	}
 	decoder := yaml.NewDecoder(r)
 	var document yaml.Node
 	if err := decoder.Decode(&document); err != nil {
@@ -79,11 +89,6 @@ func readYAMLPayload(r io.Reader, strict bool) ([]string, error) {
 		return nil, fmt.Errorf("rule YAML root must be a mapping")
 	}
 	root := document.Content[0]
-	if strict {
-		if err := validateCustomYAML(root); err != nil {
-			return nil, err
-		}
-	}
 	var payload *yaml.Node
 	for index := 0; index < len(root.Content); index += 2 {
 		key := root.Content[index]
@@ -123,55 +128,6 @@ func readYAMLPayload(r io.Reader, strict bool) ([]string, error) {
 	return items, nil
 }
 
-func validateCustomYAML(root *yaml.Node) error {
-	seen := make(map[string]struct{}, len(root.Content)/2)
-	for index := 0; index < len(root.Content); index += 2 {
-		key := root.Content[index]
-		if key.Kind != yaml.ScalarNode || key.Tag != "!!str" {
-			return fmt.Errorf("custom rule YAML mapping keys must be strings")
-		}
-		if hasControl(key.Value) {
-			return fmt.Errorf("custom rule YAML key contains a control character")
-		}
-		if key.Value == "<<" {
-			return fmt.Errorf("custom rule YAML merge keys are not allowed")
-		}
-		if _, exists := seen[key.Value]; exists {
-			return fmt.Errorf("custom rule YAML contains duplicate key %q", key.Value)
-		}
-		seen[key.Value] = struct{}{}
-		if key.Value != "payload" {
-			return fmt.Errorf("custom rule YAML contains unknown field %q", key.Value)
-		}
-		if err := validateCustomYAMLValue(root.Content[index+1]); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateCustomYAMLValue(node *yaml.Node) error {
-	if node.Anchor != "" || node.Kind == yaml.AliasNode {
-		return fmt.Errorf("custom rule YAML aliases are not allowed")
-	}
-	switch node.Kind {
-	case yaml.MappingNode, yaml.SequenceNode:
-		for _, child := range node.Content {
-			if err := validateCustomYAMLValue(child); err != nil {
-				return err
-			}
-		}
-	case yaml.ScalarNode:
-		if node.Tag != "!!str" && node.Tag != "!!null" {
-			return fmt.Errorf("custom rule YAML scalar must be a string")
-		}
-		if hasControl(node.Value) {
-			return fmt.Errorf("custom rule YAML string contains a control character")
-		}
-	}
-	return nil
-}
-
 func readTextRules(r io.Reader) ([]string, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
@@ -202,19 +158,19 @@ func parseDomainValue(value string) (model.DomainRule, error) {
 		if err := validatePlainDomainValue(value); err != nil {
 			return model.DomainRule{}, err
 		}
-		return model.DomainRule{Kind: "domain", Value: value}, nil
+		return model.DomainRule{Kind: model.DomainSuffix, Value: value}, nil
 	}
 	if strings.ContainsAny(value, "*?") {
 		expression := globToRegexp(value)
 		if _, err := regexp.Compile(expression); err != nil {
 			return model.DomainRule{}, fmt.Errorf("invalid domain glob %q: %w", value, err)
 		}
-		return model.DomainRule{Kind: "regexp", Value: expression}, nil
+		return model.DomainRule{Kind: model.DomainRegexp, Value: expression}, nil
 	}
 	if err := validatePlainDomainValue(value); err != nil {
 		return model.DomainRule{}, err
 	}
-	return model.DomainRule{Kind: "full", Value: value}, nil
+	return model.DomainRule{Kind: model.DomainFull, Value: value}, nil
 }
 
 func parseClassical(value string, buckets *model.Buckets) error {
@@ -226,7 +182,7 @@ func parseClassical(value string, buckets *model.Buckets) error {
 	typeName = strings.TrimSpace(typeName)
 	if kind, ok := classicalDomainKinds[typeName]; ok {
 		domainValue := strings.TrimSpace(remainder)
-		if kind == "regexp" {
+		if kind == model.DomainRegexp {
 			if _, err := regexp.Compile(domainValue); err != nil {
 				return fmt.Errorf("invalid domain regexp %q: %w", domainValue, err)
 			}

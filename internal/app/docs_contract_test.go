@@ -34,5 +34,22 @@ func TestDocsDescribeGoOnlyWorkflowAndManagedInstall(t *testing.T) {
 				t.Errorf("%s contains legacy instruction %q", name, forbidden)
 			}
 		}
+		previous := -1
+		for _, step := range []string{
+			"事务顺序固定为",
+			"备份",
+			"staging UCI",
+			"安装并提交 live 配置",
+			"调用 updater 更新两个 dat",
+			"校验两个 dat SHA-256",
+			"持久 URL 切到 `latest`",
+		} {
+			index := bytes.Index(data, []byte(step))
+			if index < 0 || index <= previous {
+				t.Errorf("%s does not document install step %q in order", name, step)
+				break
+			}
+			previous = index
+		}
 	}
 }

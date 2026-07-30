@@ -26,7 +26,14 @@ func TestWriteConfigKeepsBaseFirstAndSortsTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "config.json")
-	if err := geoip.WriteConfig("../../config/geoip.base.json", inputs, base, filepath.Join(dir, "publish"), path); err != nil {
+	template, err := geoip.LoadTemplate("../../config/geoip.base.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if template.BaseURI() == "" {
+		t.Fatal("validated template did not expose its base URI")
+	}
+	if err := geoip.WriteConfig(template, inputs, base, filepath.Join(dir, "publish"), path); err != nil {
 		t.Fatal(err)
 	}
 	var got converterConfig
@@ -100,7 +107,11 @@ func TestWriteConfigPreservesTemplateOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	output := filepath.Join(dir, "generated.json")
-	if err := geoip.WriteConfig(template, nil, base, filepath.Join(dir, "publish"), output); err != nil {
+	loaded, err := geoip.LoadTemplate(template)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := geoip.WriteConfig(loaded, nil, base, filepath.Join(dir, "publish"), output); err != nil {
 		t.Fatal(err)
 	}
 	var got map[string]any
@@ -133,7 +144,11 @@ func TestWriteConfigRejectsInvalidTemplates(t *testing.T) {
 			if err := os.WriteFile(template, []byte(document), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if err := geoip.WriteConfig(template, nil, base, filepath.Join(dir, "publish"), filepath.Join(dir, name+"-out.json")); err == nil {
+			loaded, loadErr := geoip.LoadTemplate(template)
+			if loadErr == nil {
+				loadErr = geoip.WriteConfig(loaded, nil, base, filepath.Join(dir, "publish"), filepath.Join(dir, name+"-out.json"))
+			}
+			if loadErr == nil {
 				t.Fatal("expected error")
 			}
 		})

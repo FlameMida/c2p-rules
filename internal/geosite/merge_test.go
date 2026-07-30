@@ -72,6 +72,24 @@ func TestMergeIsDeterministicAcrossContributionOrder(t *testing.T) {
 	}
 }
 
+func TestMergeWritesGeneratedTargetsWithRepositoryFileMode(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "merged")
+	contributions := []model.Contribution{{
+		SourceID: "custom", Side: model.GeoSite, Tag: "new-tag",
+		Domains: []model.DomainRule{{Kind: "domain", Value: "example.test"}},
+	}}
+	if err := geosite.Merge("testdata/community", out, contributions); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(out, "new-tag"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("mode=%o, want 644", info.Mode().Perm())
+	}
+}
+
 func TestMergeRejectsNonGeositeAndUnsafeTags(t *testing.T) {
 	for name, contribution := range map[string]model.Contribution{
 		"wrong side": {SourceID: "x", Side: model.GeoIP, Tag: "x"},

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"clash-rules-srs/internal/fileutil"
 )
 
 func WriteSHA256(path string) (string, error) {
@@ -35,7 +37,7 @@ func WriteSHA256(path string) (string, error) {
 	}
 	digest := hex.EncodeToString(hash.Sum(nil))
 	content := []byte(digest + "  " + filepath.Base(path) + "\n")
-	if err := writeAtomic(path+".sha256sum", content, 0o644); err != nil {
+	if err := fileutil.AtomicWrite(path+".sha256sum", content, 0o644); err != nil {
 		return "", fmt.Errorf("write checksum for %s: %w", path, err)
 	}
 	return digest, nil
@@ -123,42 +125,5 @@ func verifyChecksum(path string) error {
 	if actual != digest {
 		return fmt.Errorf("checksum mismatch for %s", targetName)
 	}
-	return nil
-}
-
-func writeAtomic(path string, data []byte, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".verify-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	remove := true
-	defer func() {
-		if remove {
-			_ = os.Remove(temporaryPath)
-		}
-	}()
-	if err := temporary.Chmod(mode); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(data); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return err
-	}
-	remove = false
 	return nil
 }

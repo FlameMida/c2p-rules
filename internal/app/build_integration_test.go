@@ -186,7 +186,7 @@ func TestProductionDependenciesFailuresPreservePreviousGeneration(t *testing.T) 
 					t.Fatal(err)
 				}
 			},
-			want: []string{"BilibiliHMT.yaml", "unknown field"},
+			want: []string{"BilibiliHMT.yaml", "field paylaod not found"},
 		},
 		{
 			name: "create collision",

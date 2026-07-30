@@ -12,12 +12,19 @@ import (
 	"sort"
 	"strings"
 
+	"clash-rules-srs/internal/fileutil"
 	"clash-rules-srs/internal/model"
 )
 
 type Input struct {
 	Tag  string
 	Path string
+}
+
+type Template struct {
+	path     string
+	document map[string]any
+	baseURI  string
 }
 
 var tagPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -73,7 +80,7 @@ func WriteInputs(directory string, contributions []model.Contribution) ([]Input,
 			previous = prefix
 		}
 		path := filepath.Join(directory, tag+".txt")
-		if err := writeAtomic(path, []byte(builder.String()), 0o644); err != nil {
+		if err := fileutil.AtomicWrite(path, []byte(builder.String()), 0o644); err != nil {
 			return nil, fmt.Errorf("write geoip input %s: %w", path, err)
 		}
 		inputs = append(inputs, Input{Tag: tag, Path: path})
@@ -81,7 +88,65 @@ func WriteInputs(directory string, contributions []model.Contribution) ([]Input,
 	return inputs, nil
 }
 
-func WriteConfig(templatePath string, inputs []Input, baseDatPath, publishDir, outputPath string) error {
+func LoadTemplate(path string) (*Template, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read geoip template %s: %w", path, err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var document map[string]any
+	if err := decoder.Decode(&document); err != nil {
+		return nil, fmt.Errorf("decode geoip template %s: %w", path, err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("geoip template %s contains trailing JSON", path)
+		}
+		return nil, fmt.Errorf("decode trailing geoip template %s: %w", path, err)
+	}
+	inputArray, err := requireArray(document, "input")
+	if err != nil || len(inputArray) == 0 {
+		return nil, fmt.Errorf("geoip template input must be a non-empty list")
+	}
+	baseEntry, err := requireEntry(inputArray[0], "input[0]", "v2rayGeoIPDat", "add")
+	if err != nil {
+		return nil, err
+	}
+	baseArgs, err := requireObject(baseEntry, "args", "input[0]")
+	if err != nil {
+		return nil, err
+	}
+	baseURI, ok := baseArgs["uri"].(string)
+	if !ok || baseURI == "" {
+		return nil, fmt.Errorf("geoip template input[0].args.uri must be a non-empty string")
+	}
+	outputArray, err := requireArray(document, "output")
+	if err != nil || len(outputArray) == 0 {
+		return nil, fmt.Errorf("geoip template output must be a non-empty list")
+	}
+	outputEntry, err := requireEntry(outputArray[0], "output[0]", "v2rayGeoIPDat", "output")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := requireObject(outputEntry, "args", "output[0]"); err != nil {
+		return nil, err
+	}
+	return &Template{path: path, document: document, baseURI: baseURI}, nil
+}
+
+func (t *Template) BaseURI() string {
+	if t == nil {
+		return ""
+	}
+	return t.baseURI
+}
+
+func WriteConfig(template *Template, inputs []Input, baseDatPath, publishDir, outputPath string) error {
+	if template == nil {
+		return fmt.Errorf("geoip template is nil")
+	}
 	baseInfo, err := os.Stat(baseDatPath)
 	if err != nil {
 		return fmt.Errorf("open base geoip dat %s: %w", baseDatPath, err)
@@ -98,23 +163,7 @@ func WriteConfig(templatePath string, inputs []Input, baseDatPath, publishDir, o
 		return fmt.Errorf("resolve publish directory %s: %w", publishDir, err)
 	}
 
-	data, err := os.ReadFile(templatePath)
-	if err != nil {
-		return fmt.Errorf("read geoip template %s: %w", templatePath, err)
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	var document map[string]any
-	if err := decoder.Decode(&document); err != nil {
-		return fmt.Errorf("decode geoip template %s: %w", templatePath, err)
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		if err == nil {
-			return fmt.Errorf("geoip template %s contains trailing JSON", templatePath)
-		}
-		return fmt.Errorf("decode trailing geoip template %s: %w", templatePath, err)
-	}
+	document := cloneObject(template.document)
 
 	inputArray, err := requireArray(document, "input")
 	if err != nil || len(inputArray) == 0 {
@@ -175,10 +224,33 @@ func WriteConfig(templatePath string, inputs []Input, baseDatPath, publishDir, o
 		return fmt.Errorf("encode geoip config: %w", err)
 	}
 	encoded = append(encoded, '\n')
-	if err := writeAtomic(outputPath, encoded, 0o644); err != nil {
+	if err := fileutil.AtomicWrite(outputPath, encoded, 0o644); err != nil {
 		return fmt.Errorf("write geoip config %s: %w", outputPath, err)
 	}
 	return nil
+}
+
+func cloneObject(value map[string]any) map[string]any {
+	cloned := make(map[string]any, len(value))
+	for key, item := range value {
+		cloned[key] = cloneValue(item)
+	}
+	return cloned
+}
+
+func cloneValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneObject(typed)
+	case []any:
+		cloned := make([]any, len(typed))
+		for index, item := range typed {
+			cloned[index] = cloneValue(item)
+		}
+		return cloned
+	default:
+		return value
+	}
 }
 
 func requireArray(document map[string]any, key string) ([]any, error) {
@@ -214,41 +286,4 @@ func requireObject(entry map[string]any, key, location string) (map[string]any, 
 		return nil, fmt.Errorf("geoip template %s.%s must be an object", location, key)
 	}
 	return object, nil
-}
-
-func writeAtomic(path string, data []byte, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".geoip-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	remove := true
-	defer func() {
-		if remove {
-			_ = os.Remove(temporaryPath)
-		}
-	}()
-	if err := temporary.Chmod(mode); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(data); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return err
-	}
-	remove = false
-	return nil
 }

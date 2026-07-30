@@ -134,6 +134,47 @@ func TestCachedTagLookupProbesEachExactTagOnce(t *testing.T) {
 	}
 }
 
+func TestProductionDependenciesReuseOneValidatedGeoIPTemplate(t *testing.T) {
+	root := t.TempDir()
+	templatePath := filepath.Join(root, "config", "geoip.base.json")
+	writeAppTestFile(t, templatePath, `{
+  "input": [{"type":"v2rayGeoIPDat","action":"add","args":{"uri":"https://example.test/base.dat"}}],
+  "output": [{"type":"v2rayGeoIPDat","action":"output","args":{"outputDir":"unused","outputName":"unused.dat"}}]
+}`)
+	tx, err := workspace.Begin(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Abort()
+	state := &buildState{Options: BuildOptions{Root: root}, Tx: tx}
+	dependencies := ProductionDependencies(staticSourceFetcher{data: []byte("base")}, nil)
+	if err := dependencies.FetchBaseGeoIP(context.Background(), state); err != nil {
+		t.Fatal(err)
+	}
+	writeAppTestFile(t, templatePath, "not valid JSON")
+	if err := dependencies.PrepareGeoIP(context.Background(), state); err != nil {
+		t.Fatalf("template was parsed more than once: %v", err)
+	}
+}
+
+type staticSourceFetcher struct {
+	data []byte
+}
+
+func (f staticSourceFetcher) Get(context.Context, string, int64) ([]byte, error) {
+	return append([]byte(nil), f.data...), nil
+}
+
+func writeAppTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type countingTagLookup struct {
 	calls int
 }

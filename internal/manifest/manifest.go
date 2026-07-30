@@ -3,10 +3,10 @@ package manifest
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 
+	"clash-rules-srs/internal/fileutil"
 	"clash-rules-srs/internal/model"
 )
 
@@ -116,39 +116,9 @@ func Write(path string, document Document) error {
 		return fmt.Errorf("encode manifest: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create manifest directory: %w", err)
+	if err := fileutil.AtomicWrite(path, data, 0o644); err != nil {
+		return fmt.Errorf("write manifest %s: %w", filepath.Clean(path), err)
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".manifest-*")
-	if err != nil {
-		return fmt.Errorf("create manifest temporary file: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	remove := true
-	defer func() {
-		if remove {
-			_ = os.Remove(temporaryPath)
-		}
-	}()
-	if err := temporary.Chmod(0o644); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(data); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return err
-	}
-	remove = false
 	return nil
 }
 

@@ -31,6 +31,24 @@ const (
 	Text Format = "text"
 )
 
+type DomainKind string
+
+const (
+	DomainSuffix  DomainKind = "domain"
+	DomainFull    DomainKind = "full"
+	DomainKeyword DomainKind = "keyword"
+	DomainRegexp  DomainKind = "regexp"
+)
+
+func (kind DomainKind) Valid() bool {
+	switch kind {
+	case DomainSuffix, DomainFull, DomainKeyword, DomainRegexp:
+		return true
+	default:
+		return false
+	}
+}
+
 type Output struct {
 	Tag  string
 	Mode Mode
@@ -57,7 +75,7 @@ type Group struct {
 }
 
 type DomainRule struct {
-	Kind  string
+	Kind  DomainKind
 	Value string
 	Attrs []string
 }

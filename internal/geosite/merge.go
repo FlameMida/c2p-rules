@@ -10,15 +10,9 @@ import (
 	"strings"
 	"unicode"
 
+	"clash-rules-srs/internal/fileutil"
 	"clash-rules-srs/internal/model"
 )
-
-var ruleKinds = map[string]struct{}{
-	"domain":  {},
-	"full":    {},
-	"keyword": {},
-	"regexp":  {},
-}
 
 func Merge(communityDir, outputDir string, contributions []model.Contribution) error {
 	for _, contribution := range contributions {
@@ -136,7 +130,7 @@ func mergeTarget(path string, additions []model.DomainRule) error {
 	if len(merged) != 0 {
 		content = strings.Join(merged, "\n") + "\n"
 	}
-	return writeAtomic(path, []byte(content))
+	return fileutil.AtomicWrite(path, []byte(content), 0o644)
 }
 
 func readLines(path string) ([]string, error) {
@@ -169,14 +163,15 @@ func canonicalLine(line string) (string, bool) {
 	if !found || value == "" {
 		return "", false
 	}
-	if _, ok := ruleKinds[kind]; !ok {
+	domainKind := model.DomainKind(kind)
+	if !domainKind.Valid() {
 		return "", false
 	}
-	return canonicalKey(kind, value, fields[1:]), true
+	return canonicalKey(domainKind, value, fields[1:]), true
 }
 
 func encodeRule(rule model.DomainRule) (string, string, error) {
-	if _, ok := ruleKinds[rule.Kind]; !ok {
+	if !rule.Kind.Valid() {
 		return "", "", fmt.Errorf("unsupported domain rule kind %q", rule.Kind)
 	}
 	if rule.Value == "" || hasUnsafeText(rule.Value) || strings.ContainsAny(rule.Value, " \t") {
@@ -187,15 +182,15 @@ func encodeRule(rule model.DomainRule) (string, string, error) {
 			return "", "", fmt.Errorf("unsafe %s rule attribute %q", rule.Kind, attribute)
 		}
 	}
-	line := rule.Kind + ":" + rule.Value
+	line := string(rule.Kind) + ":" + rule.Value
 	if len(rule.Attrs) != 0 {
 		line += " " + strings.Join(rule.Attrs, " ")
 	}
 	return line, canonicalKey(rule.Kind, rule.Value, rule.Attrs), nil
 }
 
-func canonicalKey(kind, value string, attributes []string) string {
-	return kind + "\x00" + value + "\x00" + strings.Join(attributes, "\x00")
+func canonicalKey(kind model.DomainKind, value string, attributes []string) string {
+	return string(kind) + "\x00" + value + "\x00" + strings.Join(attributes, "\x00")
 }
 
 func contributionKey(contribution model.Contribution) string {
@@ -213,37 +208,4 @@ func hasUnsafeText(value string) bool {
 		}
 	}
 	return false
-}
-
-func writeAtomic(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".geosite-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	remove := true
-	defer func() {
-		if remove {
-			_ = os.Remove(temporaryPath)
-		}
-	}()
-	if _, err := temporary.Write(data); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return err
-	}
-	remove = false
-	return nil
 }

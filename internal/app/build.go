@@ -33,6 +33,7 @@ type buildState struct {
 	Registry      *targets.Registry
 	Contributions []model.Contribution
 	BaseGeoIP     string
+	GeoIPTemplate *geoip.Template
 	GeoInputs     []geoip.Input
 	Manifest      manifest.Document
 	GeoSiteSHA    string

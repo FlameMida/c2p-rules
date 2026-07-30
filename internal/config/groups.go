@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"clash-rules-srs/internal/model"
+	"clash-rules-srs/internal/yamlutil"
 )
 
 var groupIDPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,47}$`)
@@ -42,7 +43,7 @@ func ParseGroups(r io.Reader) ([]model.Group, error) {
 			return nil, fmt.Errorf("duplicate group id %q", raw.ID)
 		}
 		seen[raw.ID] = struct{}{}
-		if raw.Remarks == "" || strings.TrimSpace(raw.Remarks) != raw.Remarks || hasForbiddenControl(raw.Remarks) {
+		if raw.Remarks == "" || strings.TrimSpace(raw.Remarks) != raw.Remarks || yamlutil.HasForbiddenControl(raw.Remarks) {
 			return nil, fmt.Errorf("group %q has invalid remarks", raw.ID)
 		}
 		if raw.GeoSite == nil {

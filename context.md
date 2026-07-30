@@ -52,7 +52,7 @@ GeoSite 去重键是完整的 `kind + value + attrs`，不会做父子域覆盖�
 
 renderer 生成稳定 `crs_<id>` section，并设置 `managed_by=clash-rules-srs`。安装器只清理旧 `c2p_` 分流和该标记下的托管 section，保留用户规则、节点及其原顺序。
 
-安装器先使用不可变 Release URL 更新两个 dat，再以嵌入 SHA-256 验证真实文件；随后在临时 UCI 配置中渲染、提交和检查，最后才安装到 live 配置并把 URL 切换到 `latest`。任何 dat、updater 或 UCI 失败都会逆序回滚配置与 dat；成功后仍保留权限为 0600 的配置备份供人工恢复。
+事务顺序固定为：备份 → staging UCI 写入不可变 URL 并验证托管组 → 安装并提交 live 配置 → 调用 updater 更新两个 dat → 校验两个 dat SHA-256 → 持久 URL 切到 `latest`。任何 dat、updater 或 UCI 失败都会逆序回滚配置与 dat；恢复本身失败时保留临时目录并打印各备份路径，完整成功后仍保留权限为 0600 的配置备份供人工恢复。
 
 ## 6. 本地维护命令
 
