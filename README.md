@@ -1,115 +1,95 @@
 # clash-rules-srs
 
-把 `sources.yaml` 中的 Clash 规则源注入一套可供 PassWall2 双核使用的自建 geodata：
+本仓库用单一 Go CLI 把 Clash 规则与标准 GeoSite/GeoIP 底包合成 PassWall2 可由 Xray、sing-box 共同消费的 `geosite.dat` / `geoip.dat`，并生成自动配置分流组的安装脚本。生产构建不需要 Python、Node 或 clash2passwall。
 
-- `geosite.dat`：`v2fly/domain-list-community` 全量标准 list + 每个域名侧自定义 tag。
-- `geoip.dat`：`Loyalsoldier/geoip` 官方增强包 + 每个 IP 侧自定义 tag。
-- 两个同名 `.sha256sum`：可直接由 PassWall2 `rule_update` 校验。
+## 产物与语义
 
-这套组合称为“轻量完整增强底”。Release 只发布上述两个 dat 和两个校验文件；本项目不发布 `.srs`，也不再维护 `rule-set:remote:`/jsDelivr 交付路径。
-
-## Release URL
-
-把 `OWNER` 换成 GitHub 仓库所有者：
+每次 Release 精确包含六个文件：
 
 ```text
-https://github.com/OWNER/clash-rules-srs/releases/latest/download/geosite.dat
-https://github.com/OWNER/clash-rules-srs/releases/latest/download/geosite.dat.sha256sum
-https://github.com/OWNER/clash-rules-srs/releases/latest/download/geoip.dat
-https://github.com/OWNER/clash-rules-srs/releases/latest/download/geoip.dat.sha256sum
+geoip.dat
+geoip.dat.sha256sum
+geosite.dat
+geosite.dat.sha256sum
+install_passwall2_rules.sh
+install_passwall2_rules.sh.sha256sum
 ```
 
-sha URL 就是对应 dat URL 的最终文件名后追加 `.sha256sum`。校验文件格式为 `64hex`、两个空格、纯文件名和换行。
+`sources.yaml` 为远程源的唯一真源。每个 output 显式指定最终 tag 和模式：
 
-## PassWall2 配置
+- `merge-base`：与底包同名 tag 做精确规则去重后合并，例如 Google、YouTube、Netflix。
+- `create`：只允许底包中不存在该 tag 时新建，例如 `BilibiliHMT`；它不会与普通 `bilibili` 合并。
+- source ID 只用于追踪，不再作为 dat tag，也不需要 PassWall2 前缀。
 
-在 PassWall2 规则管理中将：
+GeoSite 只对完全相同的 `kind + value + attrs` 去重，不把父域和子域互相消除。GeoIP 对 CIDR 做掩码规范化、排序和精确去重，保留 `/24` 内有明确声明的 `/25`。
 
-- `geosite_url` 设为 `https://github.com/OWNER/clash-rules-srs/releases/latest/download/geosite.dat`
-- `geoip_url` 设为 `https://github.com/OWNER/clash-rules-srs/releases/latest/download/geoip.dat`
+## 自定义规则
 
-更新规则后，xray 与 sing-box 都可在 `shunt_rules` 中使用同一套引用，例如：
+自定义目录分为 `custom/geosite` 和 `custom/geoip`。文件名就是要扩展的现有最终 tag；例如 `custom/geosite/apple.yaml` 扩展 `geosite:apple`，`custom/geoip/cn.yaml` 扩展 `geoip:cn`。拼错或不存在的目标会让构建失败，不会悄悄创建新组。
 
-```text
-domain_list: geosite:loyalsoldier-gfw
-ip_list:     geoip:loyalsoldier-telegramcidr
-```
-
-标准兜底仍可使用 `geosite:cn`、`geoip:cn` 和 `geoip:private`。sing-box 路径要求设备上的 `geoview >= 0.1.10`。
-
-## sources 与自定义 tag
-
-自定义 tag 的唯一真源是 [`sources.yaml`](sources.yaml)，tag 等于条目的 `name`：
+GeoSite YAML 支持：
 
 ```yaml
-sources:
-  - {name: my-domain-list, behavior: domain, sides: [geosite], url: "https://example.com/domain.yaml"}
-  - {name: my-ip-list, behavior: ipcidr, sides: [geoip], url: "https://example.com/ip.yaml"}
+payload:
+  - DOMAIN-SUFFIX,example.com
+  - DOMAIN,api.example.com
+  - DOMAIN-KEYWORD,example
+  - DOMAIN-REGEX,^.+\.example\.com$
 ```
 
-- `domain` 源写入同名 geosite tag。
-- `ipcidr` 源写入同名 geoip tag。
-- `classical` 源按域名/IP 拆分；有哪一侧就写哪一侧的同名 tag。
-- `applications` 或仅含 `PROCESS-*`（包括 PATH/REGEX）的源会跳过。
-- `IP-SUFFIX` 无法无损转换为 CIDR，会明确记为 skipped，不写入 geoip。
-- 下载/解析失败、期望侧为空或与 community 文件撞名会让整个构建失败，Release 不更新。
+GeoIP YAML 支持 `IP-CIDR`、`IP-CIDR6`，以及唯一可选尾随属性 `no-resolve`：
 
-Clash provider 到自定义 tag 的映射实现已并入 [`tools/clash2passwall/map_dat.cjs`](tools/clash2passwall/map_dat.cjs)。
-
-## clash2passwall `--dat`
-
-使用仓库内转换器把 Clash rules 转成 `geosite:<tag>` / `geoip:<tag>` 的 PassWall2 UCI 片段。`--tag-manifest` 是当前构建产生的机器可读标签真源；`--repo` 显式确定安装脚本的下载仓库：
-
-```bash
-node tools/clash2passwall/clash2passwall.js \
-  /path/to/clash.yaml \
-  --dat \
-  --tag-manifest build/expected_tags.json \
-  --repo OWNER/clash-rules-srs \
-  --out /tmp/passwall2-dat
+```yaml
+payload:
+  - IP-CIDR,192.0.2.0/24,no-resolve
+  - IP-CIDR6,2001:db8::/32
 ```
 
-输出包括 `passwall2_shunt_rules_dat.conf`、映射说明和 `install_shunt_rules_dat.sh`。分流使用稳定具名 UCI section，原 Clash 分组名保存在 `remarks`，不会再出现匿名 `cfg...` 名称。安装脚本先在临时 UCI 目录完成 URL 修改、规则替换和语法验证，再原子替换真实配置；任一步失败都会从备份恢复，节点与其他 section 不会删除。
+仓库自带的两份模板只有注释，默认是语义空集，不会改变 dat。
 
-未在生成时传 `--repo` 时，执行前必须显式提供仓库；脚本不会使用占位 URL：
+## 默认 PassWall2 分流
 
-```sh
-REPO_SLUG=OWNER/clash-rules-srs sh install_shunt_rules_dat.sh
-```
+`config/passwall2-groups.yaml` 的数组顺序就是托管分流优先级：广告拦截、哔哩哔哩港澳台、YouTube、Netflix、Spotify、TikTok、AI 服务、苹果服务、Telegram、Google 服务、GFW、代理规则、非中国域名、私有网络、中国大陆、直连规则。
 
-脚本会同时写入 geosite/geoip latest URL，并提示 geoview 版本要求。
+其中苹果服务配置 `geosite:apple` 与 `geosite:icloud`；中国大陆同时配置 `geosite:cn` 与 `geoip:cn`；BilibiliHMT 同时配置独立的 GeoSite/GeoIP tag。生成的具名 UCI section 使用 `crs_` 命名空间并带 `managed_by=clash-rules-srs` 标记，用户已有分流组和节点不会被纳入托管清理范围。
 
 ## 本地构建与验证
 
-需要 Python 3.11+、Go，以及网络访问：
+需要 Go 1.26.x、Git 和网络访问：
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-bash scripts/bootstrap_vendor.sh
-export PATH="$PWD/vendor/bin:$PATH"
-
-.venv/bin/python -m unittest discover -s tests -v
-npm --prefix tools/clash2passwall ci --ignore-scripts
-npm --prefix tools/clash2passwall test
-.venv/bin/python scripts/build.py
-.venv/bin/python scripts/probe_tags.py \
-  --dat publish/geosite.dat --expect build/expected_tags.json --side geosite
-.venv/bin/python scripts/probe_tags.py \
-  --dat publish/geosite.dat --expect build/expected_tags.json --side geosite --forbid
-.venv/bin/python scripts/probe_tags.py \
-  --dat publish/geoip.dat --expect build/expected_tags.json --side geoip
-.venv/bin/python scripts/probe_tags.py \
-  --dat publish/geoip.dat --expect build/expected_tags.json --side geoip --forbid
-(cd publish && sha256sum -c geosite.dat.sha256sum && sha256sum -c geoip.dat.sha256sum)
+go run ./cmd/geodata-build bootstrap --cache-root .cache
+go test ./...
+go test -tags=integration ./internal/app
+go run ./cmd/geodata-build build --repo OWNER/REPO --release-tag local-test
 ```
 
-`scripts/bootstrap_vendor.sh` 会拉取 community、domain-list-custom、Loyalsoldier/geoip 和 geoview；`scripts/build.py --skip-compile` 可只验证拉源、分桶和中间树。
+`geodata-build bootstrap` 把滚动的 domain-list-community 和三个固定 commit 的 Go 工具放入 `.cache/`。`geodata-build build` 事务性生成 `build/`、`publish/`；任一步失败都保留上一次完整目录。只准备和检查输入可加 `--skip-compile`，此模式不切换正式产物。
 
-## CI 与边界
+也可单独执行正向或负向 tag 验证：
 
-`.github/workflows/build.yml` 每天 02:17 UTC 或手动执行。只读 build job 完成 Python/Node 测试、完整构建、正负 tag 探针和 sha 校验，再把精确四件套交给独立写权限 publish job。publish job 创建新的草稿 Release，上传并经 API 回读确认资产集合恰为四项后才公开并切为 latest，避免用户看到混合代际文件。
+```bash
+go run ./cmd/geodata-build verify --dat publish/geosite.dat --manifest build/expected_tags.json --side geosite
+go run ./cmd/geodata-build verify --dat publish/geosite.dat --manifest build/expected_tags.json --side geosite --forbid
+go run ./cmd/geodata-build verify --dat publish/geoip.dat --manifest build/expected_tags.json --side geoip
+go run ./cmd/geodata-build verify --dat publish/geoip.dat --manifest build/expected_tags.json --side geoip --forbid
+```
 
-当前本地仓库尚未配置获授权的远端；仓库创建、推送和第一次线上 Release 明确延期，不能把上面的 `OWNER` 模板当作已存在的公开 URL。
+## 安装到 PassWall2
 
-本项目不做 `.srs` 发布、mihomo 规则交付、PassWall2 源码修改或无断流热更新；规则更新仍由 PassWall2 现有 geodata 更新机制负责。
+下载同一不可变 Release tag 中的脚本和校验文件，先校验再执行：
+
+```sh
+sha256sum -c install_passwall2_rules.sh.sha256sum
+sh install_passwall2_rules.sh
+```
+
+脚本会检查 UCI 无未提交改动、备份 `/etc/config/passwall2`、下载并校验两个 dat、在临时 UCI 目录生成托管组、验证后提交真实配置，成功后再把更新 URL 切到 `latest`。重复执行保持幂等；只清理旧 `c2p_` 与本项目 `managed_by=clash-rules-srs` 的 section。配置提交、更新器或哈希验证任一步失败都会回滚配置和两个 dat，并打印可人工恢复的备份路径。
+
+设备必须已有 PassWall2、`rule_update.lua`、`uci`、`lua`、`sha256sum` 与 `base64`。真实路由器上的首次安装、双内核实际分流和断网恢复仍属于设备侧验收，仓库 CI 不假装覆盖这一边界。
+
+## CI 与发布边界
+
+`.github/workflows/build.yml` 的只读 build job 运行 Go 单元测试、固定工具 bootstrap、真实工具集成测试、完整构建及三份 checksum 校验。独立 publish job 才获得 `contents: write`，创建与构建注入相同的不可变 tag，上传并通过 GitHub API 回读六资产和 target commit，之后才公开并切换 `latest`。
+
+本项目不发布 `.srs`，不修改 PassWall2 源码，也不承诺无断流热更新。仓库/Release 的首次线上创建需要仓库所有者另行授权；示例中的 `OWNER/REPO` 不是可直接使用的公开地址。

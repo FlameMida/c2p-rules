@@ -29,68 +29,43 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: "3.13"
+      - name: Run Go tests
+        run: go test ./...
 
-      - name: Install Python dependencies
-        run: python -m pip install -r requirements.txt
+      - name: Bootstrap pinned tools
+        run: go run ./cmd/geodata-build bootstrap --cache-root .cache
 
-      - name: Install converter dependencies
-        working-directory: tools/clash2passwall
-        run: npm ci --ignore-scripts
+      - name: Run real-tool integration test
+        run: go test -tags=integration ./internal/app
 
-      - name: Run Python tests
-        run: python -m unittest discover -s tests -v
-
-      - name: Run converter tests in builtin and js-yaml modes
-        working-directory: tools/clash2passwall
-        run: npm test
-
-      - name: Bootstrap pinned build tools
+      - name: Build exact release payload
         run: |
-          bash scripts/bootstrap_vendor.sh
-          echo "$PWD/vendor/bin" >> "$GITHUB_PATH"
+          set -euo pipefail
+          TAG="geodata-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          go run ./cmd/geodata-build build \
+            --repo "$GITHUB_REPOSITORY" \
+            --release-tag "$TAG"
 
-      - name: Build and verify geodata
+      - name: Verify all checksums
         run: |
-          python scripts/build.py
-          node tools/clash2passwall/clash2passwall.js \
-            tools/clash2passwall/tests/fixtures/mini_clash.yaml \
-            --dat \
-            --tag-manifest build/expected_tags.json \
-            --out build/clash2passwall-smoke \
-            --no-install
-          node tools/clash2passwall/scripts/verify_manifest_refs.cjs \
-            build/clash2passwall-smoke/passwall2_shunt_rules_dat.conf \
-            build/expected_tags.json
-          python scripts/probe_tags.py \
-            --dat publish/geosite.dat \
-            --expect build/expected_tags.json \
-            --side geosite
-          python scripts/probe_tags.py \
-            --dat publish/geosite.dat \
-            --expect build/expected_tags.json \
-            --side geosite \
-            --forbid
-          python scripts/probe_tags.py \
-            --dat publish/geoip.dat \
-            --expect build/expected_tags.json \
-            --side geoip
-          python scripts/probe_tags.py \
-            --dat publish/geoip.dat \
-            --expect build/expected_tags.json \
-            --side geoip \
-            --forbid
+          set -euo pipefail
           cd publish
-          sha256sum -c geosite.dat.sha256sum
           sha256sum -c geoip.dat.sha256sum
+          sha256sum -c geosite.dat.sha256sum
+          sha256sum -c install_passwall2_rules.sh.sha256sum
 
-      - name: Upload verified release payload
+      - name: Upload verified six-asset payload
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: verified-geodata
-          path: publish/
+          path: |
+            publish/geoip.dat
+            publish/geoip.dat.sha256sum
+            publish/geosite.dat
+            publish/geosite.dat.sha256sum
+            publish/install_passwall2_rules.sh
+            publish/install_passwall2_rules.sh.sha256sum
           if-no-files-found: error
           retention-days: 1
 
@@ -110,12 +85,19 @@ jobs:
       - name: Verify exact payload and checksums
         run: |
           set -euo pipefail
-          expected=$(printf '%s\n' geoip.dat geoip.dat.sha256sum geosite.dat geosite.dat.sha256sum)
+          expected=$(printf '%s\n' \
+            geoip.dat \
+            geoip.dat.sha256sum \
+            geosite.dat \
+            geosite.dat.sha256sum \
+            install_passwall2_rules.sh \
+            install_passwall2_rules.sh.sha256sum)
           actual=$(find publish -maxdepth 1 -type f -exec basename {} \; | sort)
           test "$actual" = "$expected"
           cd publish
-          sha256sum -c geosite.dat.sha256sum
           sha256sum -c geoip.dat.sha256sum
+          sha256sum -c geosite.dat.sha256sum
+          sha256sum -c install_passwall2_rules.sh.sha256sum
 
       - name: Stage, read back, and publish exact Release
         env:
@@ -133,18 +115,26 @@ jobs:
             --title "geodata ${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}" \
             --notes "Verified geodata build from ${GITHUB_SHA}"
           gh release upload "$TAG" \
-            publish/geosite.dat \
             publish/geoip.dat \
+            publish/geoip.dat.sha256sum \
+            publish/geosite.dat \
             publish/geosite.dat.sha256sum \
-            publish/geoip.dat.sha256sum
-          expected=$(printf '%s\n' geoip.dat geoip.dat.sha256sum geosite.dat geosite.dat.sha256sum)
+            publish/install_passwall2_rules.sh \
+            publish/install_passwall2_rules.sh.sha256sum
+          expected=$(printf '%s\n' \
+            geoip.dat \
+            geoip.dat.sha256sum \
+            geosite.dat \
+            geosite.dat.sha256sum \
+            install_passwall2_rules.sh \
+            install_passwall2_rules.sh.sha256sum)
           actual=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[].name' | sort)
           test "$actual" = "$expected"
-          TARGET_COMMITISH=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.target_commitish')
-          test "$TARGET_COMMITISH" = "$GITHUB_SHA"
-          TAG_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')
-          test "$TAG_SHA" = "$GITHUB_SHA"
+          target=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.target_commitish')
+          test "$target" = "$GITHUB_SHA"
+          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')
+          test "$tag_sha" = "$GITHUB_SHA"
           gh release edit "$TAG" --draft=false --latest
-          TAG_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')
-          test "$TAG_SHA" = "$GITHUB_SHA"
+          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')
+          test "$tag_sha" = "$GITHUB_SHA"
           trap - ERR

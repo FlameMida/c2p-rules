@@ -1609,7 +1609,7 @@ git commit -m "refactor(T14): 移除 Python 与 Node 构建链"
 - 消费：任务 11 CLI、任务 13 integration、任务 14 runtime guard。
 - 产出：只读 build job → verified six-asset artifact → 独立 write publish job；Go-only 用户文档。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 `workflow_contract_test.go` 解析 workflow 文本并断言：
 
@@ -1660,13 +1660,13 @@ func TestDocsDescribeGoOnlyWorkflowAndManagedInstall(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/app -run 'Test(Workflow|Docs)' -v`
 
 预期：FAIL，旧 workflow 与文档仍引用 Python/Node、四资产与 clash2passwall。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `.github/workflows/build.yml` 的 build job 顺序固定为：checkout（只读、不持久化凭据）→ setup-go 1.26.x → `go test ./...` → `go run ... bootstrap` → integration test → 计算 `TAG=geodata-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}` → `go run ... build --repo "$GITHUB_REPOSITORY" --release-tag "$TAG"` → 三份 `sha256sum -c` → 上传 `publish/`。publish job 下载 artifact，精确比较：
 
@@ -1692,7 +1692,7 @@ go run ./cmd/geodata-build build --repo OWNER/REPO --release-tag local-test
 
 说明 custom YAML 支持类型、groups 顺序、默认分流映射、installer 校验命令与真实设备 deferred 边界。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：
 
@@ -1704,7 +1704,7 @@ go test -tags=integration ./internal/app
 
 预期：全部 PASS；runtime/workflow/docs contract 不含 Python/Node，integration 产出六资产。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add .github/workflows/build.yml README.md context.md internal/app/workflow_contract_test.go internal/app/docs_contract_test.go
