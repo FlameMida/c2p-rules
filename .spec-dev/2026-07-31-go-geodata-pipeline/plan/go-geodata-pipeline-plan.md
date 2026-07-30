@@ -275,7 +275,7 @@ git commit -m "feat(T1): 建立 Go 模型与 CLI 入口"
 - 消费：任务 1 的 `model.Source`、`model.Group`。
 - 产出：`config.ParseSources(io.Reader) ([]model.Source, error)`、`config.LoadSources(string) ([]model.Source, error)`、`config.ParseGroups(io.Reader) ([]model.Group, error)`、`config.LoadGroups(string) ([]model.Group, error)`、`config.DecodeStrict(io.Reader, any) error`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `internal/config/config_test.go` 写 table tests，至少包含：
 
@@ -325,13 +325,13 @@ func TestGroupsPreserveOrderAndRejectMissingSides(t *testing.T) {
 
 另加非法 tag、未知 mode、重复 source ID、重复 group ID、第二个 YAML document、非字符串 scalar 和控制字符用例。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/config -v`
 
 预期：FAIL，报 `undefined: config.ParseSources` / `ParseGroups`。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `internal/config/yaml.go` 使用 `yaml.Node` 递归拒绝同一 mapping 的重复 key，再用 `yaml.Decoder.KnownFields(true)` 解码 typed document，并第二次 `Decode` 必须得到 `io.EOF`。
 
@@ -355,13 +355,13 @@ type outputYAML struct { Tag string `yaml:"tag"`; Mode model.Mode `yaml:"mode"` 
 
 `internal/config/groups.go` 要求 `id` 匹配 `^[a-z][a-z0-9_]{0,47}$`，remarks 非空且无控制字符，两个 side 字段都必须出现，group ID 唯一，每侧 tag 列表去重。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/config -v`
 
 预期：PASS，所有严格 YAML 与顺序用例通过。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/config

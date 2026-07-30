@@ -1,0 +1,6 @@
+sources:
+  - id: google
+    behavior: domain
+    url: https://example.test/google
+    outputs:
+      geosite: {tag: google, mode: merge-base}

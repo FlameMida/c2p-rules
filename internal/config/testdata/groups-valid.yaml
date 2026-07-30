@@ -1,0 +1,5 @@
+groups:
+  - id: google
+    remarks: Google 服务
+    geosite: [google]
+    geoip: []
