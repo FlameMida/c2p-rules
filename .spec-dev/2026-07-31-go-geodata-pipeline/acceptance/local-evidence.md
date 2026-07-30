@@ -1,6 +1,6 @@
 # Local deterministic acceptance evidence
 
-- Source commit: `58b3586032dc4376194af8ec886b73dea8178529`
+- Verified code commit: `da5a5680c19eebfe3e910b9fb969030c2a122d3e`
 - Date: 2026-07-31 CST
 - Host: `Darwin 25.5.0 x86_64`
 - Go: `go1.26.5 darwin/amd64`
@@ -66,9 +66,9 @@ install_passwall2_rules.sh.sha256sum                   93 bytes  0644
 SHA-256 values from this run:
 
 ```text
-221763f037576a96963bf6700a3270782035ea0078e3455de928343cae347609  geosite.dat
+5736ab2f3e0428b5ef7564f82c7f7d9e3d37fd29212dc04e5d2c4a406cf16e5e  geosite.dat
 9662f248b12972ae7ffbfbb785d1b006b51d533bf6697e86245e83dd50b983d0  geoip.dat
-843d0616b957099f12aa98af258712534ddca644eebdfb93a30d2d1ca4729e74  install_passwall2_rules.sh
+b9120625e67c5e797f367447e7e62f8c7c66bcbdd9bfe41dcfcda3dcf32cb3ba  install_passwall2_rules.sh
 ```
 
 ## Additional review-fix verification
@@ -80,4 +80,4 @@ go test -race -count=1 ./internal/workspace ./internal/passwall ./internal/rules
 GOOS=linux GOARCH=amd64 go test -c ./internal/workspace
 ```
 
-The first command covers the concurrent workspace switch, installer recovery, YAML parsing, and production orchestration fixes under the race detector. The second confirms the Unix lock implementation compiles for the Ubuntu/OpenWrt Linux target.
+The first command covers the concurrent workspace switch, installer recovery, YAML parsing, and production orchestration fixes under the race detector. It includes injected post-publish lock-release failure and faithful UCI `-P` NOCOMMIT modeling while the generated installer uses `-t`. The second confirms the Unix lock implementation compiles for the Ubuntu/OpenWrt Linux target.
