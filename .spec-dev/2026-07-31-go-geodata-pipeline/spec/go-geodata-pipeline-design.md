@@ -73,7 +73,7 @@ spec_dev:
 
 ### Requirement: 本地 Clash YAML 可扩展任一最终 tag
 
-构建器 SHALL 将 `custom/geosite/<tag>.yaml` 与 `custom/geoip/<tag>.yaml` 中的合法 Clash 规则合入同 side 的既有最终 tag；目标不存在、side 与规则类型不符或规则非法时 SHALL 在调用最终编译器前失败。
+构建器 SHALL 将 `custom/geosite/<tag>.yaml` 与 `custom/geoip/<tag>.yaml` 中的合法 Clash 规则合入同 side 的既有最终 tag，并在目标不存在、side 与规则类型不符或规则非法时于调用最终编译器前失败。
 
 #### Scenario: 扩展远程 source 创建的 BilibiliHMT
 
@@ -89,7 +89,7 @@ spec_dev:
 
 ### Requirement: 仓库提供带规则说明的空自定义模板
 
-仓库 SHALL 提供默认 `custom/geosite/apple.yaml` 与 `custom/geoip/cn.yaml`，以注释列出对应目录支持的 Clash 匹配规则，且默认内容 SHALL 为语义空集。
+仓库 SHALL 提供默认 `custom/geosite/apple.yaml` 与 `custom/geoip/cn.yaml`，以注释列出对应目录支持的 Clash 匹配规则，且默认内容为语义空集。
 
 #### Scenario: 未编辑模板不改变产物
 
@@ -99,7 +99,7 @@ spec_dev:
 
 ### Requirement: 声明式配置生成有序 PassWall2 分流组
 
-构建器 SHALL 按 `config/passwall2-groups.yaml` 的数组顺序生成具名 `shunt_rules`，并在生成前以最终 dat 实际探针验证每个 geosite/geoip 引用；任一声明引用不存在时 SHALL 构建失败。
+构建器 SHALL 按 `config/passwall2-groups.yaml` 的数组顺序生成具名 `shunt_rules`，在生成前以最终 dat 实际探针验证每个 geosite/geoip 引用，并在任一声明引用不存在时使构建失败。
 
 #### Scenario: 苹果服务包含声明的 tag
 
@@ -115,7 +115,7 @@ spec_dev:
 
 ### Requirement: 默认分流组按逻辑服务提供
 
-默认配置 SHALL 分别提供广告拦截、苹果服务、Google 服务、代理规则、直连规则、私有网络、GFW、非中国域名、Telegram、中国大陆、YouTube、Netflix、Spotify、哔哩哔哩港澳台、TikTok 与 AI 服务；同一业务的多个 tag MAY 合入同一组，互不相干的具体服务 SHALL NOT 被聚合为单一代理组。
+默认配置 SHALL 分别提供广告拦截、苹果服务、Google 服务、代理规则、直连规则、私有网络、GFW、非中国域名、Telegram、中国大陆、YouTube、Netflix、Spotify、哔哩哔哩港澳台、TikTok 与 AI 服务；同一业务的多个 tag MAY 合入同一组，互不相干的具体服务不聚合为单一代理组。
 
 #### Scenario: YouTube 优先于 Google
 
@@ -129,19 +129,9 @@ spec_dev:
 - **WHEN** 生成中国大陆分流组
 - **THEN** 该 section 同时包含 `geosite:cn` 与 `geoip:cn`
 
-### Requirement: 安装脚本仅替换托管分流组
-
-安装脚本 SHALL 只删除或替换带 `managed_by=clash-rules-srs` 标记的 `shunt_rules`，保留用户创建的其他分流组、全部节点和其他 section；用户分流组 SHALL 保持原顺序并位于重新追加的托管组之前。
-
-#### Scenario: 重复安装保持用户配置与托管组幂等
-
-- **GIVEN** PassWall2 同时包含用户分流组、节点和一套旧托管组
-- **WHEN** 连续执行同一版本安装脚本两次
-- **THEN** 用户分流组与节点字节语义不变，每个托管 ID 仅存在一次，托管组顺序与 groups 配置一致
-
 ### Requirement: 安装脚本自动更新并验证 geodata
 
-安装脚本 SHALL 在事务性写入 UCI 后同步调用 `/usr/share/passwall2/rule_update.lua` 更新 geosite/geoip，并以构建时嵌入的两个 SHA-256 校验实际资产目录中的 dat；任一步失败 SHALL 恢复执行前的 PassWall2 配置与两个 dat。
+安装脚本 SHALL 先以本次不可变 Release tag 的 URL 事务性写入 UCI，同步调用 `/usr/share/passwall2/rule_update.lua` 更新 geosite/geoip，以构建时嵌入的两个 SHA-256 校验实际 dat，成功后把持久更新 URL 切换为同仓库 `latest`，并在任一步失败时恢复执行前的 PassWall2 配置与两个 dat。
 
 #### Scenario: 更新器成功退出但 dat 哈希错误
 
@@ -157,9 +147,25 @@ spec_dev:
 
 ## MODIFIED Requirements
 
+### Requirement: 安装脚本写入 URL 并托管更新分流规则（替换全量覆盖导入）
+
+安装脚本 SHALL 从 `config/passwall2-groups.yaml` 的已验证结果生成稳定具名 section，只删除或替换带 `managed_by=clash-rules-srs` 标记的当前托管 `shunt_rules` 及旧转换器保留的 `c2p_` 命名空间 section，保留用户创建的其他分流组、全部节点和其他 section，让用户分流组保持原顺序且位于重新追加的托管组之前，并在成功后把 geosite/geoip 持久更新 URL 设为同仓库 `latest`；脚本拒绝未提交 UCI 修改、占位仓库名与控制字符，使用临时 UCI 配置验证后再替换真实配置，并继续提示 sing-box 需要 `geoview >= 0.1.10`。
+
+#### Scenario: 重复安装保持用户配置与托管组幂等
+
+- **GIVEN** PassWall2 同时包含用户分流组、节点和一套旧托管组
+- **WHEN** 连续执行同一版本安装脚本两次
+- **THEN** 用户分流组与节点字节语义不变，每个托管 ID 仅存在一次，托管组顺序与 groups 配置一致
+
+#### Scenario: 首次安装清理旧转换器分流
+
+- **GIVEN** PassWall2 含旧 clash2passwall 生成的 `c2p_` 具名分流、一个非 `c2p_` 用户分流和节点
+- **WHEN** 首次执行新安装脚本
+- **THEN** 旧 `c2p_` 分流被新托管组替换，用户分流与节点保留，后续执行不再触发旧命名空间迁移
+
 ### Requirement: source 身份与输出目标显式解耦（替换 tag 等于 source name）
 
-每个启用 source SHALL 以唯一 Source ID 标识，并通过 `outputs.geosite` / `outputs.geoip` 分别声明最终 tag 与 `create|merge-base` 模式；旧 `sides` 字段、隐式同名 tag 与双 schema SHALL 被拒绝。
+每个启用 source SHALL 以唯一 Source ID 标识，通过 `outputs.geosite` / `outputs.geoip` 分别声明最终 tag 与 `create|merge-base` 模式，并拒绝旧 `sides` 字段、隐式同名 tag 与双 schema。
 
 #### Scenario: Google 合并标准 tag
 
@@ -173,9 +179,45 @@ spec_dev:
 - **WHEN** 校验 outputs
 - **THEN** 构建在写入目标文件前失败并指出 source、side、tag 和违反的 mode
 
+### Requirement: 产物包含轻量完整增强底与 outputs 最终 tag（替换 sources 自定义 tag）
+
+最终 `geosite.dat` 与 `geoip.dat` SHALL 保留既有 community/官方增强底，并包含每个启用 source 在 `outputs` 中声明的非空最终 tag；期望集合从 outputs 与显式底包必需项生成，不再从 Source ID 推导。
+
+#### Scenario: 对全部 outputs 逐侧探针
+
+- **GIVEN** 当前 `sources.yaml` 的所有启用 source 均成功解析
+- **WHEN** 完整构建结束
+- **THEN** 每个 outputs 声明在对应 dat 中存在且非空，`geosite:cn`、`geoip:cn` 与 `geoip:private` 仍存在
+
+### Requirement: classical 混合源按逐侧 outputs 拆分（替换同名 tag）
+
+classical source SHALL 将域名 bucket 写入显式 `outputs.geosite.tag`、将 IP-CIDR/IP-CIDR6 bucket 写入显式 `outputs.geoip.tag`，并要求实际非空 side 与 outputs side 精确一致，而不再使用 Source ID 作为两侧同名 tag。
+
+#### Scenario: Netflix 合入标准双侧 tag
+
+- **GIVEN** `xiaolin-netflix` 同时解析出域名与 CIDR，outputs 分别声明 `geosite:netflix` 与 `geoip:netflix`
+- **WHEN** 构建完成
+- **THEN** 两个标准 `netflix` tag 均非空，且两侧都不存在 `xiaolin-netflix`
+
+### Requirement: 构建失败条件与 fail-fast 发布门禁（允许显式 merge-base）
+
+构建进程 SHALL 在远程源下载或解析失败、官方 GeoIP 底包不可达或无效、`create|merge-base` 前置条件不成立、未声明碰撞、本地 custom 非法、声明 side 为空、分流引用缺失、外部工具失败或最终探针失败时非零退出，并保持既有 publish 不变；只有显式 `merge-base` 的同名底包目标允许继续合并。
+
+#### Scenario: 未声明的 community 碰撞仍失败
+
+- **GIVEN** 一个 create 输出或未授权输出与 community data 同名
+- **WHEN** 构建器校验 target registry
+- **THEN** 构建在调用 domain-list-custom 前非零退出，错误指出碰撞 source 与 tag，旧 publish 不变
+
+#### Scenario: 上游源失败不发布
+
+- **GIVEN** 任一启用 source 下载返回非成功状态或 payload 无法解析
+- **WHEN** 执行完整构建
+- **THEN** 构建非零退出，不切换 build/publish，也不创建新 Release artifact
+
 ### Requirement: 同 tag 安全并集合并（替换 geosite 全碰撞失败）
 
-构建器 SHALL 在同一 geosite 目标内对规范化后完全相同的规则去重，同时保留不同匹配类型、属性、keyword 与 regexp；GeoIP 同名目标 SHALL 通过 IPSet 形成底包、远程 source 与本地 custom 的 CIDR 并集。
+构建器 SHALL 在同一 geosite 目标内对规范化后完全相同的规则去重、保留不同匹配类型/属性/keyword/regexp，并让 GeoIP 同名目标通过 IPSet 形成底包、远程 source 与本地 custom 的 CIDR 并集。
 
 #### Scenario: Geosite 精确去重不扩大语义
 
@@ -191,7 +233,7 @@ spec_dev:
 
 ### Requirement: Google 与 YouTube 允许重叠并靠优先级分流（替换跨 tag 去重设想）
 
-构建 SHALL 保留 Google 与 YouTube 各自完整的 tag 内并集，不尝试从 Google 删除能匹配 YouTube 的父域、keyword 或 regexp；默认 PassWall2 分流顺序 SHALL 让 YouTube 高于 Google。
+构建 SHALL 保留 Google 与 YouTube 各自完整的 tag 内并集，不尝试从 Google 删除能匹配 YouTube 的父域、keyword 或 regexp，并让默认 PassWall2 分流顺序中 YouTube 高于 Google。
 
 #### Scenario: Google 父域不被破坏
 
@@ -201,7 +243,7 @@ spec_dev:
 
 ### Requirement: BilibiliHMT 独立于普通 bilibili
 
-构建 SHALL 创建大小写保真的 `geosite:BilibiliHMT` 与 `geoip:BilibiliHMT`，普通 `Bilibili`/`bilibili` 语义 SHALL 继续指向底包 `geosite:bilibili`，两者不得互相合并。
+构建 SHALL 创建大小写保真的 `geosite:BilibiliHMT` 与 `geoip:BilibiliHMT`，让普通 `Bilibili`/`bilibili` 语义继续指向底包 `geosite:bilibili`，且两者不得互相合并。
 
 #### Scenario: 港澳台规则不污染普通 bilibili
 
@@ -211,7 +253,7 @@ spec_dev:
 
 ### Requirement: Release 资产扩展为严格六项
 
-每次 Release SHALL 精确包含 `geosite.dat`、`geoip.dat`、两个对应 `.sha256sum`、`install_passwall2_rules.sh` 与 `install_passwall2_rules.sh.sha256sum`；publish job SHALL 在公开 Release 前回读并验证集合与三份校验文件。
+每次 Release SHALL 精确包含 `geosite.dat`、`geoip.dat`、两个对应 `.sha256sum`、`install_passwall2_rules.sh` 与 `install_passwall2_rules.sh.sha256sum`，且 publish job 在公开 Release 前回读并验证集合与三份校验文件。
 
 #### Scenario: 草稿 Release 六资产回读
 
@@ -221,7 +263,7 @@ spec_dev:
 
 ### Requirement: 第一方构建链统一为 Go
 
-仓库 SHALL 通过根目录 Go module 提供 `geodata-build bootstrap|build|verify`，CI 与文档 SHALL 不再要求 Python、Node 或 npm；固定上游工具只能从 `.cache/bin/` 或显式测试替身调用，并受超时控制。
+仓库 SHALL 通过根目录 Go module 提供 `geodata-build bootstrap|build|verify`，让 CI 与文档不再要求 Python、Node 或 npm，并只从 `.cache/bin/` 或显式测试替身调用受超时控制的固定上游工具。
 
 #### Scenario: 干净环境完成全链路
 
@@ -231,7 +273,7 @@ spec_dev:
 
 ### Requirement: 构建输出以 staging 成功切换
 
-完整构建 SHALL 先在同文件系统 staging 中完成下载、合并、编译、探针、脚本生成和六资产验证；任一步失败 SHALL 保留上一次成功的 `build/` 与 `publish/`，成功时再执行可恢复目录切换。
+完整构建 SHALL 先在同文件系统 staging 中完成下载、合并、编译、探针、脚本生成和六资产验证，任一步失败时保留上一次成功的 `build/` 与 `publish/`，全部成功时再执行可恢复目录切换。
 
 #### Scenario: 最后一个探针失败不破坏旧发布物
 
@@ -241,15 +283,7 @@ spec_dev:
 
 ## REMOVED Requirements
 
-### Requirement: 自定义 tag 必须等于 sources.yaml name
-
-移除原因：Source ID、最终 tag 与合并模式已显式分离；旧前缀 tag 将列入 forbidden，不提供兼容别名。
-
-### Requirement: 自定义 geosite 与 community 同名时无条件失败
-
-移除原因：只有未授权碰撞或 mode 前置条件不成立才失败；显式 `merge-base` 必须合并同名目标。
-
-### Requirement: clash2passwall 转换 Clash 配置
+### Requirement: clash2passwall dat 模式使用固定 provider→tag 映射
 
 移除原因：系统统一使用本项目 dat 与声明式 PassWall2 分流配置，不再保留 sing-box、xray、dat 三种转换模式及其 JavaScript/Go CLI。
 
@@ -318,6 +352,29 @@ sources:
 
 `create` 要求底包不存在目标；`merge-base` 要求底包已存在目标。一个 source 可声明一个或两个 side，实际解析 side 必须与 outputs 精确一致。
 
+完整 source 输出契约：
+
+| Source ID | geosite 输出 | geoip 输出 |
+|---|---|---|
+| `loyalsoldier-reject` | `reject` / create | — |
+| `loyalsoldier-icloud` | `icloud` / merge-base | — |
+| `loyalsoldier-apple` | `apple` / merge-base | — |
+| `loyalsoldier-google` | `google` / merge-base | — |
+| `loyalsoldier-proxy` | `proxy` / create | — |
+| `loyalsoldier-direct` | `direct` / create | — |
+| `loyalsoldier-private` | `private` / merge-base | — |
+| `loyalsoldier-gfw` | `gfw` / create | — |
+| `loyalsoldier-tld-not-cn` | `tld-not-cn` / create | — |
+| `loyalsoldier-telegramcidr` | — | `telegram` / merge-base |
+| `loyalsoldier-cncidr` | — | `cn` / merge-base |
+| `loyalsoldier-lancidr` | — | `private` / merge-base |
+| `xiaolin-youtube` | `youtube` / merge-base | — |
+| `xiaolin-netflix` | `netflix` / merge-base | `netflix` / merge-base |
+| `xiaolin-spotify` | `spotify` / merge-base | — |
+| `xiaolin-bilibili` | `BilibiliHMT` / create | `BilibiliHMT` / create |
+| `xiaolin-tiktok` | `tiktok` / merge-base | — |
+| `sukka-ai` | `ai` / create | — |
+
 本地规则 schema：
 
 ```yaml
@@ -340,6 +397,27 @@ groups:
 
 `id` 必须是稳定、合法、唯一的 UCI section ID 片段；renderer 加仓库命名空间并写入 `managed_by` 标记。数组顺序为托管组优先级；用户既有组保留原顺序并整体优先。
 
+默认托管组精确顺序与引用：
+
+| 顺序 | remarks | geosite | geoip |
+|---:|---|---|---|
+| 1 | 广告拦截 | `reject` | — |
+| 2 | 哔哩哔哩港澳台 | `BilibiliHMT` | `BilibiliHMT` |
+| 3 | YouTube | `youtube` | — |
+| 4 | Netflix | `netflix` | `netflix` |
+| 5 | Spotify | `spotify` | — |
+| 6 | TikTok | `tiktok` | — |
+| 7 | AI 服务 | `ai` | — |
+| 8 | 苹果服务 | `apple`, `icloud` | — |
+| 9 | Telegram | — | `telegram` |
+| 10 | Google 服务 | `google` | — |
+| 11 | GFW | `gfw` | — |
+| 12 | 代理规则 | `proxy` | — |
+| 13 | 非中国域名 | `tld-not-cn` | — |
+| 14 | 私有网络 | `private` | `private` |
+| 15 | 中国大陆 | `cn` | `cn` |
+| 16 | 直连规则 | `direct` | — |
+
 CLI：
 
 ```text
@@ -347,11 +425,12 @@ geodata-build bootstrap [--cache-root .cache]
 geodata-build build [--sources sources.yaml] [--custom custom]
                      [--groups config/passwall2-groups.yaml]
                      [--community .cache/upstream/domain-list-community/data]
-                     [--work-root PATH] [--repo OWNER/REPO] [--skip-compile]
+                     [--work-root PATH] [--repo OWNER/REPO]
+                     [--release-tag TAG] [--skip-compile]
 geodata-build verify --dat FILE --manifest FILE --side geosite|geoip [--forbid]
 ```
 
-CI 生成正式 installer 时必须提供真实 `OWNER/REPO`；本地无 `--repo` 的编译产物可要求执行时提供安全格式的 `REPO_SLUG`，但正式 Release 禁止占位仓库名。
+CI 生成正式 installer 时必须提供真实 `OWNER/REPO` 和即将创建的不可变 Release tag；publish job 必须创建同名 tag。正式 Release 禁止占位仓库名或只绑定 `latest` 的初次安装 URL。
 
 ### 错误处理
 
@@ -365,18 +444,30 @@ CI 生成正式 installer 时必须提供真实 `OWNER/REPO`；本地无 `--repo
 
 | Scenario / 检查项 | 维度 | 执行方式 | 验收证据 |
 |---|---|---|---|
-| Source/output schema、custom/groups 严格 YAML | unit | 任务内 TDD | Go table tests 与错误路径断言 |
-| custom 扩展 BilibiliHMT、未知目标失败 | integration | 任务内 TDD | synthetic registry 与 golden |
-| 默认模板语义为空 | unit | 任务内 TDD | 有/无模板输出等价 |
-| Geosite 精确去重、类型与属性保留 | unit/integration | 任务内 TDD | 合并文本与 dat probe |
-| GeoIP 重叠 CIDR 并集 | integration | 任务内 TDD | synthetic base dat + address probe |
-| Google/YouTube 重叠且顺序正确 | integration | 任务内 TDD | 两 tag 内容 probe + UCI order golden |
-| BilibiliHMT 与 bilibili 隔离 | integration | 任务内 TDD | 双侧正负 probe |
-| groups 任一缺 tag 即失败 | integration | 任务内 TDD | fake geoview 调用断言 |
-| 用户规则保留、托管组幂等 | e2e | 验收任务 (D) | fake-UCI 前后配置对比 |
-| rule_update 假成功但 SHA 错误时回滚 | e2e | 验收任务 (D) | 故障注入后配置/dat 原字节恢复 |
-| 干净 Go 环境完整构建 | e2e | 验收任务 (D) | 无 Python/Node 的 CI 日志与六资产 |
-| 草稿 Release 六资产精确回读 | release | 验收任务 (D) | GitHub API 资产清单与三次 sha 校验 |
+| 扩展远程 source 创建的 BilibiliHMT | integration | 任务内 TDD | synthetic registry、dat 正负 probe |
+| 拒绝拼错的本地目标 | unit/integration | 任务内 TDD | 错误路径与旧 publish 字节断言 |
+| 未编辑模板不改变产物 | unit | 任务内 TDD | 有/无模板输出等价 |
+| 苹果服务包含声明的 tag | unit | 任务内 TDD | UCI golden |
+| 缺失 tag 阻断脚本发布 | integration | 任务内 TDD | fake geoview 与 publish 保持断言 |
+| YouTube 优先于 Google | unit/integration | 任务内 TDD | groups 校验与 UCI order golden |
+| 中国大陆具备域名与 IP 规则 | integration | 任务内 TDD | 双侧引用 probe |
+| 重复安装保持用户配置与托管组幂等 | e2e | 验收任务 (D) | fake-UCI 两次执行前后对比 |
+| 首次安装清理旧转换器分流 | e2e | 验收任务 (D) | `c2p_` 迁移 fixture 与节点保留证据 |
+| 更新器成功退出但 dat 哈希错误 | e2e | 验收任务 (D) | 故障注入后配置/dat 原字节恢复 |
+| 完整成功后保留可恢复备份 | e2e | 验收任务 (D) | UCI、dat hash 与备份路径证据 |
+| Google 合并标准 tag | integration | 任务内 TDD | 新 tag 正探针与旧 tag 负探针 |
+| create 与 merge-base 前置条件严格执行 | unit | 任务内 TDD | 两类非法 registry table tests |
+| 对全部 outputs 逐侧探针 | integration | 任务内 TDD | manifest 集合与 real-tool 非空 probe |
+| Netflix 合入标准双侧 tag | integration | 任务内 TDD | 双侧新 tag 正探针与旧 tag 负探针 |
+| 未声明的 community 碰撞仍失败 | unit/integration | 任务内 TDD | registry 错误与旧 publish 保持断言 |
+| 上游源失败不发布 | integration | 任务内 TDD | HTTP/解析故障注入与目录不切换断言 |
+| Geosite 精确去重不扩大语义 | unit/integration | 任务内 TDD | 合并文本与 dat probe |
+| GeoIP 重叠 CIDR 规范化 | integration | 任务内 TDD | synthetic base dat + address probe |
+| Google 父域不被破坏 | integration | 任务内 TDD | 两 tag 内容 probe + UCI order golden |
+| 港澳台规则不污染普通 bilibili | integration | 任务内 TDD | 双侧正负 probe |
+| 草稿 Release 六资产回读 | release | 验收任务 (D) | GitHub API 资产清单与三次 sha 校验 |
+| 干净环境完成全链路 | e2e | 验收任务 (D) | 无 Python/Node 的 CI 日志与六资产 |
+| 最后一个探针失败不破坏旧发布物 | integration | 任务内 TDD | staging 故障注入与目录字节对比 |
 | PassWall2 真实设备更新 | operational | 验收任务 (D) | 设备 UCI、dat hash、xray/sing-box 查询证据；无设备时标记 deferred |
 
 ## 风险与边缘情况
@@ -386,7 +477,7 @@ CI 生成正式 installer 时必须提供真实 `OWNER/REPO`；本地无 `--repo
 - `BilibiliHMT` 混合大小写必须在 manifest、geoview、Xray 与 sing-box 路径上实际验收，不在中间 map 中统一转小写。
 - 用户分流组整体优先于托管组；若用户规则过宽，可能遮蔽托管服务规则，installer 应在完成摘要中明确提示这一优先级。
 - PassWall2 版本可能缺少预期更新器、UCI section 或 asset 路径；installer 在修改前检测并失败，不尝试兼容未知 fork。
-- installer 与 dat 同属一次 Release，脚本嵌入的 SHA 绑定该次构建；通过 `latest` 下载脚本后应立即执行，Release 切换期间的资产不一致由 SHA 校验阻断并回滚。
+- installer 初次下载 dat 使用同一次构建的不可变 Release tag，避免 `latest` 切换竞态；校验成功后才持久化 `latest` URL，后续定时更新仍由 PassWall2 的伴随 sha 校验保护。
 
 ## 开放问题
 
