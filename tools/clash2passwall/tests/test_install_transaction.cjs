@@ -5,7 +5,7 @@ const os = require("os");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const initial = `config global_rules 'global'\n\toption geosite_url 'old-site'\n\toption geoip_url 'old-ip'\n\nconfig nodes 'keep_node'\n\toption remarks 'Keep Me'\n\toption protocol 'vless'\n\nconfig shunt_rules 'old_rule'\n\toption remarks 'Old Rule'\n\toption domain_list 'full:old.example'\n`;
+const initial = `config global_rules 'global'\n\toption geosite_url 'old-site'\n\toption geoip_url 'old-ip'\n\nconfig nodes 'c2p_Proxy'\n\toption remarks 'Keep Me'\n\toption protocol 'vless'\n\nconfig shunt_rules 'old_rule'\n\toption remarks 'Old Rule'\n\toption domain_list 'full:old.example'\n`;
 
 function prepare() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "clash2passwall-transaction-"));
@@ -46,9 +46,10 @@ function prepare() {
   const fixture = prepare();
   execFileSync("sh", [fixture.script], { env: fixture.env, stdio: "pipe" });
   const installed = fs.readFileSync(fixture.config, "utf8");
-  assert.match(installed, /config nodes 'keep_node'[\s\S]*option remarks 'Keep Me'/);
+  assert.match(installed, /config nodes 'c2p_Proxy'[\s\S]*option remarks 'Keep Me'/);
   assert.doesNotMatch(installed, /config shunt_rules 'old_rule'/);
-  assert.match(installed, /config shunt_rules 'Proxy'/);
+  assert.doesNotMatch(installed, /config shunt_rules 'c2p_Proxy'/);
+  assert.match(installed, /config shunt_rules 'c2p_rule_[0-9a-f]{16}'[\s\S]*option remarks 'Proxy'/);
   assert.match(installed, /option geosite_url 'https:\/\/github\.com\/ExampleOwner\/clash-rules-srs\/releases\/latest\/download\/geosite\.dat'/);
   assert.match(installed, /option geoip_url 'https:\/\/github\.com\/ExampleOwner\/clash-rules-srs\/releases\/latest\/download\/geoip\.dat'/);
 }

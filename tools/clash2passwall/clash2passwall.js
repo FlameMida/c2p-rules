@@ -154,7 +154,7 @@ function builtinParse(text) {
 
 function assertSafeScalar(value, label) {
   if (typeof value !== "string") throw new Error(`${label} must be a string`);
-  if (/[\u0000-\u001f\u007f\u2028\u2029]/u.test(value)) {
+  if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(value)) {
     throw new Error(`${label} contains a control character or newline`);
   }
   return value;
@@ -346,28 +346,51 @@ function uciQuote(value) {
 }
 
 function makeSectionIds(order) {
-  const used = new Set();
-  return Object.fromEntries(order.map((policy) => {
-    let base = policy.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
-    if (!base || /^[0-9]/.test(base)) base = "rule_" + base;
-    if (!base || base === "rule_") {
-      const digest = require("crypto").createHash("sha256").update(policy).digest("hex").slice(0, 10);
-      base = "rule_" + digest;
+  const crypto = require("crypto");
+  const entries = order.map((policy) => {
+    const normalized = policy.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+    const base = normalized && !/^[0-9]/.test(normalized) ? normalized : `rule_${normalized}`;
+    return {
+      policy,
+      base: base === "rule_" ? "rule" : base,
+      digest: crypto.createHash("sha256").update(policy).digest("hex").slice(0, 10),
+      needsIdentityHash: !normalized || normalized.length > 40,
+    };
+  });
+  const counts = new Map();
+  for (const entry of entries) counts.set(entry.base, (counts.get(entry.base) || 0) + 1);
+  const ids = entries.map((entry) => {
+    const withHash = entry.needsIdentityHash || counts.get(entry.base) > 1;
+    const suffix = withHash ? `_${entry.digest}` : "";
+    const maxBaseLength = 64 - "c2p_".length - suffix.length;
+    return [entry.policy, `c2p_${entry.base.slice(0, maxBaseLength)}${suffix}`];
+  });
+  if (new Set(ids.map(([, id]) => id)).size !== ids.length) {
+    throw new Error("unable to derive unique stable UCI section IDs");
+  }
+  return Object.fromEntries(ids);
+}
+
+function makeCollisionFallbacks(order, sectionIds) {
+  const crypto = require("crypto");
+  const reserved = new Set(Object.values(sectionIds));
+  const fallbacks = Object.create(null);
+  for (const policy of order) {
+    const candidates = [];
+    for (let serial = 1; candidates.length < 8; serial++) {
+      const digest = crypto
+        .createHash("sha256")
+        .update(`${policy}\0uci-section-collision\0${serial}`)
+        .digest("hex")
+        .slice(0, 16);
+      const candidate = `c2p_rule_${digest}`;
+      if (reserved.has(candidate)) continue;
+      reserved.add(candidate);
+      candidates.push(candidate);
     }
-    if (base.length > 48) {
-      const digest = require("crypto").createHash("sha256").update(policy).digest("hex").slice(0, 10);
-      base = `${base.slice(0, 48)}_${digest}`;
-    }
-    let candidate = base;
-    if (used.has(candidate)) {
-      const digest = require("crypto").createHash("sha256").update(policy).digest("hex").slice(0, 8);
-      candidate = `${base}_${digest}`;
-    }
-    let serial = 2;
-    while (used.has(candidate)) candidate = `${base}_${serial++}`;
-    used.add(candidate);
-    return [policy, candidate];
-  }));
+    fallbacks[sectionIds[policy]] = candidates;
+  }
+  return fallbacks;
 }
 
 function generateConf(order, pr) {
@@ -389,6 +412,26 @@ function generateConf(order, pr) {
 
 function generateInstall(conf, order, mode, repoSlug) {
   const encodedConf = Buffer.from(conf, "utf8").toString("base64");
+  const sectionIds = makeSectionIds(order);
+  const collisionFallbacks = makeCollisionFallbacks(order, sectionIds);
+  const collisionCommands = Object.entries(collisionFallbacks).map(([original, candidates]) => `
+ORIGINAL_ID='${original}'
+SELECTED_ID="$ORIGINAL_ID"
+if uci -c "$STAGE_ROOT" -q show "passwall2.$SELECTED_ID" >/dev/null 2>&1; then
+  SELECTED_ID=''
+  for CANDIDATE_ID in ${candidates.map((candidate) => `'${candidate}'`).join(" ")}; do
+    if ! uci -c "$STAGE_ROOT" -q show "passwall2.$CANDIDATE_ID" >/dev/null 2>&1; then
+      SELECTED_ID="$CANDIDATE_ID"
+      break
+    fi
+  done
+  if [ -z "$SELECTED_ID" ]; then
+    echo "ERROR: cannot allocate a unique UCI section ID for $ORIGINAL_ID" >&2
+    exit 1
+  fi
+  sed "s/^config shunt_rules '$ORIGINAL_ID'\$/config shunt_rules '$SELECTED_ID'/" "$FRAGMENT" > "$FRAGMENT.next"
+  mv "$FRAGMENT.next" "$FRAGMENT"
+fi`).join("\n");
   const defaultRepo = mode === "dat" ? (repoSlug || "") : "";
   const datSetup = mode === "dat" ? `
 REPO_SLUG="\${REPO_SLUG:-${defaultRepo}}"
@@ -427,6 +470,7 @@ TS=$(date +%s 2>/dev/null || echo bak)
 BACKUP="$CONF.bak.$TS"
 STAGE_ROOT=$(mktemp -d "\${TMPDIR:-/tmp}/clash2passwall.XXXXXX")
 STAGED_CONF="$STAGE_ROOT/passwall2"
+FRAGMENT="$STAGE_ROOT/generated-shunt-rules"
 LIVE_STAGE="$CONF.new.$$"
 SUCCESS=0
 
@@ -448,7 +492,9 @@ cp "$CONF" "$STAGED_CONF"
 ${datCommands}
 while uci -c "$STAGE_ROOT" -q delete passwall2.@shunt_rules[0]; do :; done
 uci -c "$STAGE_ROOT" -q commit passwall2
-printf '%s' '${encodedConf}' | base64 -d >> "$STAGED_CONF"
+printf '%s' '${encodedConf}' | base64 -d > "$FRAGMENT"
+${collisionCommands}
+cat "$FRAGMENT" >> "$STAGED_CONF"
 uci -c "$STAGE_ROOT" -q show passwall2 >/dev/null
 
 cp "$STAGED_CONF" "$LIVE_STAGE"

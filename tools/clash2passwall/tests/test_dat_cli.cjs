@@ -33,7 +33,7 @@ assert.match(config, /geoip:xiaolin-netflix/);
 assert.match(config, /geosite:cn/);
 assert.match(config, /geoip:cn/);
 assert.match(config, /geoip:private/);
-assert.match(config, /config shunt_rules 'Proxy'/);
+assert.match(config, /config shunt_rules 'c2p_Proxy'/);
 assert.doesNotMatch(config, /^config shunt_rules\s*$/m);
 
 const manifest = JSON.parse(

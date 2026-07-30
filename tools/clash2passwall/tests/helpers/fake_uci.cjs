@@ -61,9 +61,19 @@ if (command === "commit") {
   process.exit(0);
 }
 if (command === "show") {
+  if (args[0] && args[0] !== "passwall2") {
+    const resolved = resolveTarget(args[0]);
+    if (resolved.index == null || resolved.index < 0) fail();
+    const meta = metadata(resolved.list[resolved.index]);
+    process.stdout.write(`passwall2.${meta.name}=${meta.type}\n`);
+    process.exit(0);
+  }
+  const names = new Set();
   for (const block of blocks()) {
     const meta = metadata(block);
     if (!meta.name) fail("anonymous section rejected by fake UCI contract");
+    if (names.has(meta.name)) fail("duplicate section name rejected by fake UCI contract");
+    names.add(meta.name);
     process.stdout.write(`passwall2.${meta.name}=${meta.type}\n`);
   }
   process.exit(0);

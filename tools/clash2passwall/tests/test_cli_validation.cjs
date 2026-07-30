@@ -23,13 +23,28 @@ function convert(yaml, extra = []) {
 
 const config = convert(`rules:\n  - DOMAIN,cn.example,中文分组\n  - DOMAIN,a.example,A-B\n  - DOMAIN,b.example,A B\n  - DOMAIN,c.example,${"Long".repeat(40)}\n  - IP-SUFFIX,8.8.8.0/24,ShouldSkip\nproxy-groups: []\nrule-providers: {}\n`);
 assert.match(config, /option remarks '中文分组'/);
-assert.match(config, /config shunt_rules 'rule_[0-9a-f]{10}'/);
-assert.match(config, /config shunt_rules 'A_B'/);
-assert.match(config, /config shunt_rules 'A_B_[0-9a-f]{8}'/);
+assert.match(config, /config shunt_rules 'c2p_rule_[0-9a-f]{10}'/);
+assert.match(config, /config shunt_rules 'c2p_A_B_[0-9a-f]{10}'/);
 assert.doesNotMatch(config, /ShouldSkip|8\.8\.8\.0\/24/);
 const ids = [...config.matchAll(/^config shunt_rules '([^']+)'/gm)].map((match) => match[1]);
 assert.strictEqual(new Set(ids).size, ids.length);
 assert.ok(ids.every((id) => id.length <= 64), "UCI section IDs must stay bounded");
+assert.ok(ids.every((id) => id.startsWith("c2p_")), "generated IDs need a dedicated namespace");
+
+function policyIds(text) {
+  const result = {};
+  for (const block of text.split(/\n\n+/)) {
+    const id = block.match(/^config shunt_rules '([^']+)'/);
+    const remarks = block.match(/option remarks '([^']+)'/);
+    if (id && remarks) result[remarks[1]] = id[1];
+  }
+  return result;
+}
+const reordered = convert(`rules:\n  - DOMAIN,b.example,A B\n  - DOMAIN,a.example,A-B\nproxy-groups: []\nrule-providers: {}\n`);
+const originalIds = policyIds(config);
+const reorderedIds = policyIds(reordered);
+assert.strictEqual(reorderedIds["A-B"], originalIds["A-B"]);
+assert.strictEqual(reorderedIds["A B"], originalIds["A B"]);
 
 const prototypeNames = convert(`rules:\n  - DOMAIN,proto.example,__proto__\n  - DOMAIN,constructor.example,constructor\n  - RULE-SET,__proto__,Proxy\nproxy-groups: []\nrule-providers: {}\n`);
 assert.match(prototypeNames, /option remarks '__proto__'/);

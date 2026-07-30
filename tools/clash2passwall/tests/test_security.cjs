@@ -31,4 +31,28 @@ for (const file of fs.readdirSync(output)) {
   assert.doesNotMatch(text, /id >\/tmp\/pwned/);
 }
 
+const c1Input = path.join(output, "malicious_c1.yaml");
+fs.writeFileSync(
+  c1Input,
+  "rules:\n  - DOMAIN,example.com,Group\u0085Name\nproxy-groups: []\nrule-providers: {}\n",
+  "utf8",
+);
+assert.throws(
+  () => execFileSync(
+    "node",
+    [
+      path.join(root, "clash2passwall.js"),
+      c1Input,
+      "--dat",
+      "--tag-manifest",
+      path.join(__dirname, "fixtures", "tags_full.json"),
+      "--out",
+      output,
+      "--no-install",
+    ],
+    { stdio: "pipe" },
+  ),
+  /control|newline|status/i,
+);
+
 console.log("test_security: ok");
