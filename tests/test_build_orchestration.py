@@ -1,11 +1,13 @@
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from build import BuildError, emit_sources
+from build import BuildError, emit_sources, fetch
 
 
 class TestBuildOrchestration(unittest.TestCase):
@@ -95,6 +97,15 @@ class TestBuildOrchestration(unittest.TestCase):
 
             with self.assertRaisesRegex(BuildError, "offline.*network down"):
                 emit_sources([source], fail_fetch, root / "data", root / "ip")
+
+    def test_http_404_is_fatal(self):
+        source = {"name": "missing", "behavior": "domain", "url": "https://example.test/404"}
+        error = urllib.error.HTTPError(source["url"], 404, "Not Found", {}, None)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            with mock.patch("build.urllib.request.urlopen", side_effect=error):
+                with self.assertRaisesRegex(BuildError, "missing.*404"):
+                    emit_sources([source], fetch, root / "data", root / "ip")
 
     def test_duplicate_source_name_is_fatal(self):
         sources = [

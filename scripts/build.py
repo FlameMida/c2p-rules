@@ -218,17 +218,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--skip-compile", action="store_true")
     parser.add_argument("--sources", type=Path, default=ROOT / "sources.yaml")
+    parser.add_argument("--work-root", type=Path)
+    parser.add_argument("--community", type=Path, default=COMMUNITY)
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
+    global BUILD, CUSTOM_DATA, IP_DIR, MERGED, PUBLISH
     args = parse_args(argv)
+    if args.work_root is not None:
+        BUILD = args.work_root / "build"
+        CUSTOM_DATA = BUILD / "data"
+        IP_DIR = BUILD / "ip"
+        MERGED = BUILD / "data-merged"
+        PUBLISH = args.work_root / "publish"
     reset_output_directories()
     try:
         expected = emit_sources(load_sources(args.sources), fetch, CUSTOM_DATA, IP_DIR)
-        if COMMUNITY.is_dir():
-            assert_no_name_collision(set(expected["geosite"]), COMMUNITY)
-            merge_data_dirs(COMMUNITY, CUSTOM_DATA, MERGED)
+        if args.community.is_dir():
+            assert_no_name_collision(set(expected["geosite"]), args.community)
+            merge_data_dirs(args.community, CUSTOM_DATA, MERGED)
         elif args.skip_compile:
             merge_data_dirs(Path("/nonexistent"), CUSTOM_DATA, MERGED)
         else:
