@@ -6,7 +6,7 @@ import "fmt"
 
 type rootCommitLock struct{}
 
-func acquireCommitLock(string) (*rootCommitLock, error) {
+func acquireOSCommitLock(string) (commitLock, error) {
 	return nil, fmt.Errorf("cross-process workspace commits are unsupported on this platform")
 }
 

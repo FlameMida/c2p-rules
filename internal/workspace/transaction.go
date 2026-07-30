@@ -27,6 +27,12 @@ func (OSFS) Stat(path string) (fs.FileInfo, error)         { return os.Stat(path
 
 type transactionState uint8
 
+type commitLock interface {
+	release() error
+}
+
+var acquireCommitLock = acquireOSCommitLock
+
 const (
 	stateActive transactionState = iota
 	stateFailed
@@ -104,7 +110,9 @@ func (t *Transaction) Commit() (err error) {
 	}
 	defer func() {
 		if unlockErr := commitLock.release(); unlockErr != nil {
-			err = errors.Join(err, fmt.Errorf("unlock workspace commit: %w", unlockErr))
+			if t.state != stateCommitted {
+				err = errors.Join(err, fmt.Errorf("unlock workspace commit: %w", unlockErr))
+			}
 		}
 	}()
 	operations := []switchOperation{

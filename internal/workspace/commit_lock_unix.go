@@ -13,7 +13,7 @@ type rootCommitLock struct {
 	file *os.File
 }
 
-func acquireCommitLock(root string) (*rootCommitLock, error) {
+func acquireOSCommitLock(root string) (commitLock, error) {
 	path := filepath.Join(root, ".commit.lock")
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
