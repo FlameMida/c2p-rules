@@ -1,12 +1,13 @@
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PYTHON = ROOT / ".venv" / "bin" / "python"
+PYTHON = Path(sys.executable)
 RELEASE_ASSETS = {
     "geosite.dat",
     "geoip.dat",

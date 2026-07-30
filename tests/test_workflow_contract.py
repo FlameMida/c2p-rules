@@ -49,6 +49,19 @@ class TestWorkflowContract(unittest.TestCase):
             self.assertIn(asset, publish_text)
         self.assertNotIn("softprops/action-gh-release", self.text)
 
+    def test_release_tag_is_bound_to_the_verified_build_commit(self):
+        publish_text = "\n".join(
+            step.get("run", "") for step in self.workflow["jobs"]["publish"]["steps"]
+        )
+        self.assertIn('--target "$GITHUB_SHA"', publish_text)
+        self.assertIn(".target_commitish", publish_text)
+        self.assertIn("git/ref/tags/$TAG", publish_text)
+        self.assertGreaterEqual(publish_text.count('test "$TAG_SHA" = "$GITHUB_SHA"'), 2)
+        self.assertLess(
+            publish_text.index(".target_commitish"),
+            publish_text.index("gh release edit"),
+        )
+
     def test_build_gates_artifact_on_all_tests_probes_and_checksums(self):
         build_text = "\n".join(
             step.get("run", "") for step in self.workflow["jobs"]["build"]["steps"]
