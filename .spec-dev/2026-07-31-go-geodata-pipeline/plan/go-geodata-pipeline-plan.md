@@ -109,7 +109,7 @@ npm --prefix tools/clash2passwall test
 - 消费：无。
 - 产出：`model.Side`、`model.Mode`、`model.Source`、`model.Group`、`model.Buckets`、`cli.Commands`、`cli.UsageError`、`cli.Run(context.Context, []string, io.Writer, io.Writer, Commands) int`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 创建 `internal/cli/run_test.go`：
 
@@ -141,13 +141,13 @@ func TestUnknownCommandIsUsageError(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/cli -run 'Test(Help|Unknown)' -v`
 
 预期：FAIL，报 `go: cannot find main module` 或缺少 `internal/cli`。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `go.mod`：
 
@@ -248,13 +248,13 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer, commands Com
 
 `cmd/geodata-build/main.go` 调用 `cli.Run` 并暂以空 `cli.Commands{}` 接线，任务 11 再注入 app commands。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go mod tidy && go test ./internal/cli ./cmd/geodata-build -v`
 
 预期：PASS；`go.sum` 生成，主程序可编译。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add go.mod go.sum internal/model internal/cli cmd/geodata-build
