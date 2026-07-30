@@ -6,6 +6,6 @@ __pycache__/
 .idea/
 .worktrees/
 .cache/
+.staging-*/
 build/
 publish/
-vendor/

@@ -1545,7 +1545,7 @@ git commit -m "test(T13): 验证真实 geodata 合并链路"
 - 消费：任务 11–13 已覆盖的 Go parity。
 - 产出：仓库不再含旧生产/测试运行时；`.cache/` 取代 `vendor/`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 创建 `internal/app/runtime_contract_test.go`：
 
@@ -1558,13 +1558,13 @@ func TestRepositoryHasNoPythonOrNodeBuildRuntime(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/app -run TestRepositoryHasNoPythonOrNodeBuildRuntime -v`
 
 预期：FAIL，逐项列出仍存在的旧生产/测试运行时文件。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 在 Go parity 与 integration 已全绿后执行精确删除：
 
@@ -1582,13 +1582,13 @@ git rm -r scripts/lib tests tools/clash2passwall
 
 不要删除 `.spec-dev/2026-07-30-geodata-selfhost/` 的历史 plan/acceptance，也不要清理用户未跟踪的 `dist/` 内容。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/app -run TestRepositoryHasNoPythonOrNodeBuildRuntime -v`
 
 预期：PASS；旧生产和测试目录均不存在。然后运行 `go test ./...`，预期全绿。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add .gitignore internal/app/runtime_contract_test.go
