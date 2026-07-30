@@ -1771,7 +1771,7 @@ git status --short
 
 预期：测试/vet/integration 全绿；仅允许计划执行过程中明确记录的验收产物改动。失败必须修复后才进入合并。
 
-- [ ] **步骤 2：合并回来源分支**
+- [x] **步骤 2：合并回来源分支**
 
 ```bash
 cd "$(dirname "$(git rev-parse --git-common-dir)")"
@@ -1780,14 +1780,14 @@ git merge plan/2026-07-31-go-geodata-pipeline
 
 合并冲突、或主工作区有未提交改动 → 停下向计划作者确认，不强行合并。
 
-- [ ] **步骤 3：清理**
+- [x] **步骤 3：清理**
 
 ```bash
 git worktree remove .worktrees/go-geodata-pipeline
 git branch -d plan/2026-07-31-go-geodata-pipeline
 ```
 
-- [ ] **步骤 4：sync_commit 锚定**
+- [x] **步骤 4：sync_commit 锚定**
 
 ```bash
 SYNC=$(git rev-parse HEAD)
