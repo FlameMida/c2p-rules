@@ -323,6 +323,7 @@ func (h *installerHarness) run(script []byte, wantSuccess bool) string {
 		fmt.Sprintf("FAKE_UCI_FAIL_COMMIT=%d", h.failCommit),
 		fmt.Sprintf("FAKE_UCI_REQUIRE_ISOLATED_SAVEDIR=%t", h.requireIsolatedSavedir),
 		"FAKE_UCI_COUNTER="+filepath.Join(h.root, "uci-counter"),
+		"FAKE_UCI_LIVE_SAVEDIR="+filepath.Join(h.root, "uci-live-saved"),
 		"FAKE_UCI_REVERT_MARKER="+filepath.Join(h.root, "uci-reverted"),
 		"FAKE_CP_FAIL_SOURCE_SUFFIX="+h.failRestoreSourceSuffix,
 		fmt.Sprintf("FAKE_CP_REQUIRE_REVERT_FOR_BACKUP=%t", h.requireRevertBeforeRestore),

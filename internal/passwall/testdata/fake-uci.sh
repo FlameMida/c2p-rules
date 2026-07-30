@@ -3,10 +3,12 @@ set -eu
 
 config_dir=''
 save_dir=''
+no_commit=0
 while [ "$#" -gt 0 ]; do
 	case "$1" in
 		-c) config_dir=$2; shift 2 ;;
-		-P) save_dir=$2; shift 2 ;;
+		-P) save_dir=$2; no_commit=1; shift 2 ;;
+		-t) save_dir=$2; shift 2 ;;
 		-q) shift ;;
 		*) break ;;
 	esac
@@ -24,6 +26,27 @@ if [ -n "$config_dir" ]; then
 else
 	conf=$PASSWALL2_CONF
 fi
+if [ -z "$save_dir" ]; then
+	save_dir=${FAKE_UCI_LIVE_SAVEDIR:?}
+fi
+mkdir -p "$save_dir"
+delta="$save_dir/passwall2.delta"
+
+apply_delta() {
+	[ ! -f "$delta" ] || while IFS= read -r assignment; do
+		left=${assignment%%=*}
+		value=${assignment#*=}
+		name=${left##*.}
+		temporary="$conf.fake.$$"
+		awk -v name="$name" -v value="$value" '
+			$1 == "option" && $2 == name { print "\toption " name " \047" value "\047"; found=1; next }
+			{ print }
+			END { if (!found) exit 42 }
+		' "$conf" > "$temporary" || { status=$?; rm -f "$temporary"; exit "$status"; }
+		mv "$temporary" "$conf"
+	done < "$delta"
+	rm -f "$delta"
+}
 
 case "$command" in
 	changes)
@@ -37,16 +60,7 @@ case "$command" in
 		;;
 	set)
 		assignment=$1
-		left=${assignment%%=*}
-		value=${assignment#*=}
-		name=${left##*.}
-		temporary="$conf.fake.$$"
-		awk -v name="$name" -v value="$value" '
-			$1 == "option" && $2 == name { print "\toption " name " \047" value "\047"; found=1; next }
-			{ print }
-			END { if (!found) exit 42 }
-		' "$conf" > "$temporary" || { status=$?; rm -f "$temporary"; exit "$status"; }
-		mv "$temporary" "$conf"
+		printf '%s\n' "$assignment" >> "$delta"
 		;;
 	show)
 		[ -f "$conf" ]
@@ -58,8 +72,10 @@ case "$command" in
 		count=$((count + 1))
 		printf '%s' "$count" > "$counter"
 		[ "$count" -ne "${FAKE_UCI_FAIL_COMMIT:-0}" ] || exit 9
+		[ "$no_commit" -eq 1 ] || apply_delta
 		;;
 	revert)
+		rm -f "$delta"
 		[ -z "${FAKE_UCI_REVERT_MARKER:-}" ] || : > "$FAKE_UCI_REVERT_MARKER"
 		;;
 	*)

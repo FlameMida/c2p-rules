@@ -94,9 +94,9 @@ trap 'exit 143' TERM
 
 IMMUTABLE="https://github.com/$REPO/releases/download/$RELEASE_TAG"
 LATEST="https://github.com/$REPO/releases/latest/download"
-uci -c "$ROOT" -P "$STAGE_SAVEDIR" -q set "passwall2.@global_rules[0].geosite_url=$IMMUTABLE/geosite.dat"
-uci -c "$ROOT" -P "$STAGE_SAVEDIR" -q set "passwall2.@global_rules[0].geoip_url=$IMMUTABLE/geoip.dat"
-uci -c "$ROOT" -P "$STAGE_SAVEDIR" -q commit passwall2
+uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q set "passwall2.@global_rules[0].geosite_url=$IMMUTABLE/geosite.dat"
+uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q set "passwall2.@global_rules[0].geoip_url=$IMMUTABLE/geoip.dat"
+uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q commit passwall2
 
 printf '%s' "$FRAGMENT_B64" | base64 -d > "$FRAGMENT"
 awk '
@@ -122,7 +122,7 @@ awk '
 ' "$STAGE" > "$STAGE.filtered"
 mv "$STAGE.filtered" "$STAGE"
 cat "$FRAGMENT" >> "$STAGE"
-uci -c "$ROOT" -P "$STAGE_SAVEDIR" -q show passwall2 >/dev/null
+uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q show passwall2 >/dev/null
 
 cp "$STAGE" "$CONF_NEW"
 chmod 600 "$CONF_NEW"
