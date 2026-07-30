@@ -64,13 +64,13 @@ internal/**/testdata/                    synthetic fixtures 与 golden
 
 ### 任务 0：建立隔离工作区
 
-- [ ] **步骤 1：检测已有隔离**
+- [x] **步骤 1：检测已有隔离**
 
 运行：`git rev-parse --git-dir` 与 `git rev-parse --git-common-dir`
 两者不同、且 `git rev-parse --show-superproject-working-tree` 无输出（排除 submodule）
 → 已在隔离工作区，跳过本任务。
 
-- [ ] **步骤 2：建立 worktree**
+- [x] **步骤 2：建立 worktree**
 
 Codex 直接走手工路径：先运行 `git check-ignore -q .worktrees`，再运行：
 
@@ -81,7 +81,7 @@ cd .worktrees/go-geodata-pipeline
 
 若 `.worktrees/` 未被忽略，先把 `.worktrees/` 加入 `.gitignore`，提交 `chore(T0): 忽略计划工作区`，再建立 worktree。
 
-- [ ] **步骤 3：安装依赖并验证基线**
+- [x] **步骤 3：安装依赖并验证基线**
 
 当前实现尚未有 Go module，先运行旧基线：
 
