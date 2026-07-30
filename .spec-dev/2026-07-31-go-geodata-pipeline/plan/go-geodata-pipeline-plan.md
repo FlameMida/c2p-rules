@@ -382,7 +382,7 @@ git commit -m "feat(T2): 定义严格 source 与分流配置"
 - 消费：任务 1 的 `model.Behavior`、`model.Format`、`model.Buckets`、`model.Contribution`。
 - 产出：`rules.Parse(io.Reader, model.Format, model.Behavior) (model.Buckets, error)`、`rules.LoadCustom(string, TargetChecker) ([]model.Contribution, error)`；`TargetChecker` 为 `Require(model.Side, string) error`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 `internal/rules/parse_test.go` 直接翻译规则映射与 Netflix 双侧场景：
 
@@ -431,13 +431,13 @@ func TestCustomRejectsUnknownTargetBeforeEmission(t *testing.T) {
 
 另测 geosite 文件含 IP、geoip 文件含 DOMAIN、非法 CIDR、`no-resolve` 之外第三字段、空模板为语义空集。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`go test ./internal/rules -v`
 
 预期：FAIL，报缺少 `rules.Parse` / `LoadCustom`。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `Parse` 对 YAML 只接受 mapping root 与 `payload: []string|null`，对 text 按非空非注释行读取；分类映射固定为：
 
@@ -452,13 +452,13 @@ var domainKinds = map[string]string{
 
 CIDR 用 `netip.ParsePrefix` 后 `.Masked()`；`IP-SUFFIX`、PROCESS 家族及其他未知类型进入 `Skipped`，但 custom loader 对未知类型直接报错。`LoadCustom` 只扫描 `geosite/*.yaml` 与 `geoip/*.yaml`，按完整路径排序，文件 stem 保持大小写，调用 `TargetChecker.Require` 后才解析并生成 contribution。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`go test ./internal/rules -v`
 
 预期：PASS；Netflix 六条输入分到 4 条域名与 2 条 CIDR，unknown custom target 报错含 side/tag。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/rules
