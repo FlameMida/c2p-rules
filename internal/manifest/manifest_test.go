@@ -12,7 +12,7 @@ import (
 	"clash-rules-srs/internal/model"
 )
 
-func TestManifestUsesOutputTagsAndForbidsLegacyTags(t *testing.T) {
+func TestManifestUsesOutputTagsAndOnlyForbidsExplicitLegacyTags(t *testing.T) {
 	google := model.Output{Tag: "google", Mode: model.MergeBase}
 	netflixSite := model.Output{Tag: "netflix", Mode: model.MergeBase}
 	netflixIP := model.Output{Tag: "netflix", Mode: model.MergeBase}
@@ -33,6 +33,20 @@ func TestManifestUsesOutputTagsAndForbidsLegacyTags(t *testing.T) {
 	record := doc.Sources["xiaolin-netflix"]
 	if record.GeoSite == nil || record.GeoIP == nil || record.GeoSite.Tag != "netflix" || record.GeoIP.Mode != model.MergeBase {
 		t.Fatalf("record=%#v", record)
+	}
+}
+
+func TestManifestDoesNotDeriveForbiddenTagFromArbitrarySourceID(t *testing.T) {
+	hmt := model.Output{Tag: "BilibiliHMT", Mode: model.Create}
+	doc := manifest.Build([]model.Source{{
+		ID:      "bilibili",
+		Outputs: model.Outputs{GeoSite: &hmt},
+	}}, nil)
+	if slices.Contains(doc.Forbidden.GeoSite, "bilibili") {
+		t.Fatalf("legal base tag derived from source id: %#v", doc.Forbidden.GeoSite)
+	}
+	if !slices.Contains(doc.Required.GeoSite, "BilibiliHMT") {
+		t.Fatalf("required=%#v", doc.Required.GeoSite)
 	}
 }
 

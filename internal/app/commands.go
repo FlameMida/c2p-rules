@@ -56,7 +56,7 @@ func parseBootstrapOptions(args []string) (BootstrapOptions, error) {
 func parseBuildOptions(args []string) (BuildOptions, error) {
 	set := newFlagSet("build")
 	var options BuildOptions
-	set.StringVar(&options.Root, "root", ".", "repository root")
+	set.StringVar(&options.Root, "work-root", ".", "repository working root")
 	set.StringVar(&options.Sources, "sources", "sources.yaml", "source configuration")
 	set.StringVar(&options.Custom, "custom", "custom", "custom rule root")
 	set.StringVar(&options.Groups, "groups", "config/passwall2-groups.yaml", "PassWall2 group configuration")

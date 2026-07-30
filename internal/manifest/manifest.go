@@ -32,11 +32,39 @@ type Document struct {
 	Sources       map[string]SourceRecord `json:"sources"`
 }
 
+var legacyForbidden = Tags{
+	GeoSite: []string{
+		"applications",
+		"loyalsoldier-reject",
+		"loyalsoldier-icloud",
+		"loyalsoldier-apple",
+		"loyalsoldier-google",
+		"loyalsoldier-proxy",
+		"loyalsoldier-direct",
+		"loyalsoldier-private",
+		"loyalsoldier-gfw",
+		"loyalsoldier-tld-not-cn",
+		"xiaolin-youtube",
+		"xiaolin-netflix",
+		"xiaolin-spotify",
+		"xiaolin-bilibili",
+		"xiaolin-tiktok",
+		"sukka-ai",
+	},
+	GeoIP: []string{
+		"loyalsoldier-telegramcidr",
+		"loyalsoldier-cncidr",
+		"loyalsoldier-lancidr",
+		"xiaolin-netflix",
+		"xiaolin-bilibili",
+	},
+}
+
 func Build(sources []model.Source, groups []model.Group) Document {
 	requiredSite := map[string]struct{}{"cn": {}}
 	requiredIP := map[string]struct{}{"cn": {}, "private": {}}
-	forbiddenSite := map[string]struct{}{"applications": {}}
-	forbiddenIP := make(map[string]struct{})
+	forbiddenSite := stringSet(legacyForbidden.GeoSite)
+	forbiddenIP := stringSet(legacyForbidden.GeoIP)
 	records := make(map[string]SourceRecord, len(sources))
 	for _, source := range sources {
 		var record SourceRecord
@@ -44,17 +72,11 @@ func Build(sources []model.Source, groups []model.Group) Document {
 			output := source.Outputs.GeoSite
 			requiredSite[output.Tag] = struct{}{}
 			record.GeoSite = &Target{Tag: output.Tag, Mode: output.Mode}
-			if source.ID != output.Tag {
-				forbiddenSite[source.ID] = struct{}{}
-			}
 		}
 		if source.Outputs.GeoIP != nil {
 			output := source.Outputs.GeoIP
 			requiredIP[output.Tag] = struct{}{}
 			record.GeoIP = &Target{Tag: output.Tag, Mode: output.Mode}
-			if source.ID != output.Tag {
-				forbiddenIP[source.ID] = struct{}{}
-			}
 		}
 		records[source.ID] = record
 	}
@@ -78,6 +100,14 @@ func Build(sources []model.Source, groups []model.Group) Document {
 		},
 		Sources: records,
 	}
+}
+
+func stringSet(values []string) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		result[value] = struct{}{}
+	}
+	return result
 }
 
 func Write(path string, document Document) error {

@@ -36,7 +36,7 @@ func TestBootstrapDefaultsToDotCache(t *testing.T) {
 
 func TestBuildPathFlagsResolveUnderRoot(t *testing.T) {
 	root := t.TempDir()
-	options, err := parseBuildOptions([]string{"--root", root, "--repo", "flame/repo", "--release-tag", "v1"})
+	options, err := parseBuildOptions([]string{"--work-root", root, "--repo", "flame/repo", "--release-tag", "v1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,5 +44,12 @@ func TestBuildPathFlagsResolveUnderRoot(t *testing.T) {
 		if len(path) <= len(root) || path[:len(root)] != root {
 			t.Fatalf("path %q not under %q", path, root)
 		}
+	}
+}
+
+func TestBuildRejectsUndocumentedRootFlag(t *testing.T) {
+	_, err := parseBuildOptions([]string{"--root", t.TempDir(), "--repo", "flame/repo", "--release-tag", "v1"})
+	if err == nil {
+		t.Fatal("legacy --root flag unexpectedly accepted")
 	}
 }

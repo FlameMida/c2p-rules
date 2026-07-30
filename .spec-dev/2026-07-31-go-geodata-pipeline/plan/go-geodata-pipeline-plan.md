@@ -1204,10 +1204,10 @@ type BuildOptions struct {
 | 子命令 | flags 与默认值 | required |
 |---|---|---|
 | `bootstrap` | `--cache-root=.cache` | 无 |
-| `build` | `--root=.`, `--sources=sources.yaml`, `--custom=custom`, `--groups=config/passwall2-groups.yaml`, `--community=.cache/upstream/domain-list-community/data`, `--cache-root=.cache`, `--skip-compile=false` | `--repo`、`--release-tag` |
+| `build` | `--work-root=.`, `--sources=sources.yaml`, `--custom=custom`, `--groups=config/passwall2-groups.yaml`, `--community=.cache/upstream/domain-list-community/data`, `--cache-root=.cache`, `--skip-compile=false` | `--repo`、`--release-tag` |
 | `verify` | `--forbid=false` | `--dat`、`--manifest`、`--side=geosite|geoip` |
 
-所有相对路径在 flag parse 后相对 `--root` 解析并 `filepath.Clean`；`--community` 与 `--cache-root` 也遵守这一规则。`app.Commands()` 的三个 closure 分别调用上述 parser，再调用 `Bootstrap`、`Build`、`Verify`；只允许 `bootstrap|build|verify` 三个子命令，不读取环境变量覆盖这些 flags。
+所有相对路径在 flag parse 后相对 `--work-root` 解析并 `filepath.Clean`；`--community` 与 `--cache-root` 也遵守这一规则。`app.Commands()` 的三个 closure 分别调用上述 parser，再调用 `Bootstrap`、`Build`、`Verify`；只允许 `bootstrap|build|verify` 三个子命令，不读取环境变量覆盖这些 flags。
 
 `deps.go` 定义精确的阶段边界；测试 fixture 注入函数，`ProductionDependencies` 的每个字段只调用任务 2–10 已定义的对应 package API：
 

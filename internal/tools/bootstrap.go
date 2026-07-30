@@ -115,6 +115,12 @@ func syncRolling(ctx context.Context, executor Executor, repository, destination
 	if err := executor.Run(ctx, "", "git", "-C", destination, "checkout", "--detach", "FETCH_HEAD"); err != nil {
 		return err
 	}
+	if err := executor.Run(ctx, "", "git", "-C", destination, "reset", "--hard", "FETCH_HEAD"); err != nil {
+		return err
+	}
+	if err := executor.Run(ctx, "", "git", "-C", destination, "clean", "-ffdx"); err != nil {
+		return err
+	}
 	return executor.Run(ctx, "", "git", "-C", destination, "rev-parse", "--verify", "HEAD")
 }
 
@@ -133,6 +139,12 @@ func checkoutPinned(ctx context.Context, executor Executor, repository, destinat
 		return err
 	}
 	if err := executor.Run(ctx, "", "git", "-C", destination, "checkout", "--detach", commit); err != nil {
+		return err
+	}
+	if err := executor.Run(ctx, "", "git", "-C", destination, "reset", "--hard", commit); err != nil {
+		return err
+	}
+	if err := executor.Run(ctx, "", "git", "-C", destination, "clean", "-ffdx"); err != nil {
 		return err
 	}
 	return nil

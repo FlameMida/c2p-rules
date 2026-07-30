@@ -53,6 +53,14 @@ func TestBootstrapUsesExactPinsAndBuildsAllTools(t *testing.T) {
 	if !strings.Contains(text, "domain-list-community.git") || !strings.Contains(text, "fetch --depth 1 origin HEAD") {
 		t.Fatalf("rolling community missing:\n%s", text)
 	}
+	for _, revision := range []string{"FETCH_HEAD", tools.Pins.DomainListCustom, tools.Pins.GeoIP, tools.Pins.GeoView} {
+		if !strings.Contains(text, "reset --hard "+revision) {
+			t.Fatalf("checkout %s is not reset to a clean revision:\n%s", revision, text)
+		}
+	}
+	if got := strings.Count(text, "clean -ffdx"); got != 4 {
+		t.Fatalf("clean calls=%d, want 4:\n%s", got, text)
+	}
 }
 
 func TestBootstrapStopsAtFirstExecutorFailure(t *testing.T) {
