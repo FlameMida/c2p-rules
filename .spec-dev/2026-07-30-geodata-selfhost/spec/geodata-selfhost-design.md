@@ -3,7 +3,7 @@
 spec_dev:
   version: 1
   feature: geodata-selfhost
-  status: active
+  status: superseded
   covers:
     - "scripts/**"
     - "sources.yaml"
@@ -16,6 +16,8 @@ spec_dev:
 ---
 
 # 自建 geodata 全链路（方案 A）设计
+
+> **Superseded（2026-07-31）**：由 [全 Go geodata 构建与 PassWall2 分流安装设计](../../2026-07-31-go-geodata-pipeline/spec/go-geodata-pipeline-design.md) 的差量契约取代；本文及其验收报告保留为历史证据。
 
 ## 背景与目标
 

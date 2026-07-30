@@ -3,7 +3,7 @@
 spec_dev:
   version: 1
   feature: go-geodata-pipeline
-  status: draft
+  status: active
   covers:
     - "cmd/**"
     - "internal/**"
