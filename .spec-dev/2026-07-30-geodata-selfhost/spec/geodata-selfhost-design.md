@@ -12,7 +12,7 @@ spec_dev:
     - "context.md"
     - "requirements.txt"
     - "tools/clash2passwall/**"
-  sync_commit: null
+  sync_commit: 132d775a88a80cf6d2bf5dd0eb775979fe428afc
 ---
 
 # 自建 geodata 全链路（方案 A）设计

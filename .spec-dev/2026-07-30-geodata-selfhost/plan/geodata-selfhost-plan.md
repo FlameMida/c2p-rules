@@ -1291,21 +1291,21 @@ npm --prefix tools/clash2passwall ci --ignore-scripts
 npm --prefix tools/clash2passwall test
 ```
 
-- [ ] **步骤 2：合并回来源分支**
+- [x] **步骤 2：合并回来源分支**
 
 ```bash
 cd /Users/flame/clash-rules-srs
 git merge plan/2026-07-30-geodata-selfhost
 ```
 
-- [ ] **步骤 3：清理 worktree**
+- [x] **步骤 3：清理 worktree**
 
 ```bash
 git worktree remove .worktrees/plan-geodata-selfhost
 git branch -d plan/2026-07-30-geodata-selfhost
 ```
 
-- [ ] **步骤 4：sync_commit 锚定**
+- [x] **步骤 4：sync_commit 锚定**
 
 ```bash
 SYNC=$(git rev-parse HEAD)
@@ -1349,7 +1349,7 @@ Scenario → 测试：均在 T1/T2/T3/T6/T7/T8 有对应 assert。无 TBD 占位
 - [x] CI 拆分只读 build/写权限 publish；固定 Action/工具提交；draft 四资产回读后再 latest。
 - [x] CLI 失败快停覆盖 missing/404、畸形 YAML、冲突，证明不调用编译器且无完整发布集。
 - [x] 完整在线构建、独立复审、验收报告与 Requirement Reconciliation 定稿。
-- [ ] T11 本地合并、worktree 清理与 sync_commit 锚定。
+- [x] T11 本地合并、worktree 清理与 sync_commit 锚定。
 
 公开仓库创建、remote 配置、push 与第一次线上 Release 未获授权，必须在最终对账中标记 DEFERRED，不得由实施代理自行执行。
 
