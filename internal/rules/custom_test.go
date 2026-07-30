@@ -83,6 +83,28 @@ func TestCustomEmptyTemplateIsSemanticNoOp(t *testing.T) {
 	}
 }
 
+func TestCustomRejectsUnknownDuplicateAliasMergeAndControlYAML(t *testing.T) {
+	tests := map[string]string{
+		"unknown field": "paylaod:\n  - DOMAIN-SUFFIX,example.test\n",
+		"duplicate key": "metadata: one\nmetadata: two\npayload: []\n",
+		"alias":         "metadata: &value one\nother: *value\npayload: []\n",
+		"merge key":     "defaults: &defaults\n  payload: []\n<<: *defaults\npayload: []\n",
+		"control":       "metadata: \"bad\\u0085value\"\npayload: []\n",
+		"second doc":    "payload: []\n---\npayload: []\n",
+	}
+	for name, document := range tests {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "geosite", "apple.yaml")
+			mustWrite(t, path, document)
+			_, err := rules.LoadCustom(dir, checker{model.GeoSite: {"apple": true}})
+			if err == nil || !strings.Contains(err.Error(), path) {
+				t.Fatalf("err=%v", err)
+			}
+		})
+	}
+}
+
 func mustWrite(t *testing.T, path, value string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

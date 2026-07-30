@@ -54,7 +54,7 @@ func LoadCustom(root string, checker TargetChecker) ([]model.Contribution, error
 			if err != nil {
 				return nil, fmt.Errorf("open custom rule %s: %w", path, err)
 			}
-			buckets, parseErr := Parse(file, model.YAML, model.Classical)
+			buckets, parseErr := parse(file, model.YAML, model.Classical, true)
 			closeErr := file.Close()
 			if parseErr != nil {
 				return nil, fmt.Errorf("parse custom rule %s: %w", path, parseErr)

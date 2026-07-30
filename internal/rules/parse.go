@@ -21,6 +21,10 @@ var classicalDomainKinds = map[string]string{
 }
 
 func Parse(r io.Reader, format model.Format, behavior model.Behavior) (model.Buckets, error) {
+	return parse(r, format, behavior, false)
+}
+
+func parse(r io.Reader, format model.Format, behavior model.Behavior, strictYAML bool) (model.Buckets, error) {
 	if format != model.YAML && format != model.Text {
 		return model.Buckets{}, fmt.Errorf("unsupported rule format %q", format)
 	}
@@ -33,7 +37,7 @@ func Parse(r io.Reader, format model.Format, behavior model.Behavior) (model.Buc
 		err   error
 	)
 	if format == model.YAML {
-		items, err = readYAMLPayload(r)
+		items, err = readYAMLPayload(r, strictYAML)
 	} else {
 		items, err = readTextRules(r)
 	}
@@ -65,7 +69,7 @@ func Parse(r io.Reader, format model.Format, behavior model.Behavior) (model.Buc
 	return buckets, nil
 }
 
-func readYAMLPayload(r io.Reader) ([]string, error) {
+func readYAMLPayload(r io.Reader, strict bool) ([]string, error) {
 	decoder := yaml.NewDecoder(r)
 	var document yaml.Node
 	if err := decoder.Decode(&document); err != nil {
@@ -75,6 +79,11 @@ func readYAMLPayload(r io.Reader) ([]string, error) {
 		return nil, fmt.Errorf("rule YAML root must be a mapping")
 	}
 	root := document.Content[0]
+	if strict {
+		if err := validateCustomYAML(root); err != nil {
+			return nil, err
+		}
+	}
 	var payload *yaml.Node
 	for index := 0; index < len(root.Content); index += 2 {
 		key := root.Content[index]
@@ -112,6 +121,55 @@ func readYAMLPayload(r io.Reader) ([]string, error) {
 		items = append(items, item.Value)
 	}
 	return items, nil
+}
+
+func validateCustomYAML(root *yaml.Node) error {
+	seen := make(map[string]struct{}, len(root.Content)/2)
+	for index := 0; index < len(root.Content); index += 2 {
+		key := root.Content[index]
+		if key.Kind != yaml.ScalarNode || key.Tag != "!!str" {
+			return fmt.Errorf("custom rule YAML mapping keys must be strings")
+		}
+		if hasControl(key.Value) {
+			return fmt.Errorf("custom rule YAML key contains a control character")
+		}
+		if key.Value == "<<" {
+			return fmt.Errorf("custom rule YAML merge keys are not allowed")
+		}
+		if _, exists := seen[key.Value]; exists {
+			return fmt.Errorf("custom rule YAML contains duplicate key %q", key.Value)
+		}
+		seen[key.Value] = struct{}{}
+		if key.Value != "payload" {
+			return fmt.Errorf("custom rule YAML contains unknown field %q", key.Value)
+		}
+		if err := validateCustomYAMLValue(root.Content[index+1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateCustomYAMLValue(node *yaml.Node) error {
+	if node.Anchor != "" || node.Kind == yaml.AliasNode {
+		return fmt.Errorf("custom rule YAML aliases are not allowed")
+	}
+	switch node.Kind {
+	case yaml.MappingNode, yaml.SequenceNode:
+		for _, child := range node.Content {
+			if err := validateCustomYAMLValue(child); err != nil {
+				return err
+			}
+		}
+	case yaml.ScalarNode:
+		if node.Tag != "!!str" && node.Tag != "!!null" {
+			return fmt.Errorf("custom rule YAML scalar must be a string")
+		}
+		if hasControl(node.Value) {
+			return fmt.Errorf("custom rule YAML string contains a control character")
+		}
+	}
+	return nil
 }
 
 func readTextRules(r io.Reader) ([]string, error) {

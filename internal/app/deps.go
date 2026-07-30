@@ -240,12 +240,43 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 	}
 }
 
-func finalProber(runner *tools.Runner, state *buildState) *verify.Prober {
-	return verify.NewProber(
-		runner,
-		filepath.Join(state.Tx.Layout().Publish, "geosite.dat"),
-		filepath.Join(state.Tx.Layout().Publish, "geoip.dat"),
-	)
+func finalProber(runner *tools.Runner, state *buildState) verify.TagLookup {
+	if state.FinalLookup == nil {
+		state.FinalLookup = &cachedTagLookup{
+			delegate: verify.NewProber(
+				runner,
+				filepath.Join(state.Tx.Layout().Publish, "geosite.dat"),
+				filepath.Join(state.Tx.Layout().Publish, "geoip.dat"),
+			),
+			results: make(map[tagLookupKey]tagLookupResult),
+		}
+	}
+	return state.FinalLookup
+}
+
+type tagLookupKey struct {
+	side model.Side
+	tag  string
+}
+
+type tagLookupResult struct {
+	present bool
+	err     error
+}
+
+type cachedTagLookup struct {
+	delegate verify.TagLookup
+	results  map[tagLookupKey]tagLookupResult
+}
+
+func (c *cachedTagLookup) Has(ctx context.Context, side model.Side, tag string) (bool, error) {
+	key := tagLookupKey{side: side, tag: tag}
+	if result, exists := c.results[key]; exists {
+		return result.present, result.err
+	}
+	present, err := c.delegate.Has(ctx, side, tag)
+	c.results[key] = tagLookupResult{present: present, err: err}
+	return present, err
 }
 
 func baseGeoIPURI(path string) (string, error) {

@@ -130,6 +130,162 @@ func TestSyntheticFullBuildMergesAndSeparatesApprovedTags(t *testing.T) {
 	}
 }
 
+func TestProductionDependenciesFailuresPreservePreviousGeneration(t *testing.T) {
+	repositoryRoot, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	binRoot := filepath.Join(repositoryRoot, ".cache", "bin")
+	requireIntegrationTools(t, binRoot)
+	runner := &tools.Runner{BinRoot: binRoot}
+	baseData, err := os.ReadFile(buildSyntheticBaseGeoIP(t, runner))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloads := map[string]string{
+		"/google":   "payload:\n  - '+.google-source.example'\n",
+		"/youtube":  "payload:\n  - DOMAIN,youtubei.googleapis.com\n",
+		"/netflix":  "payload:\n  - DOMAIN-SUFFIX,netflix-source.example\n  - IP-CIDR,198.51.100.0/24\n",
+		"/bilibili": "payload:\n  - DOMAIN-SUFFIX,hmt-source.example\n  - IP-CIDR,203.0.113.0/24\n",
+	}
+	failPath := ""
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == failPath {
+			http.NotFound(writer, request)
+			return
+		}
+		if request.URL.Path == "/base.dat" {
+			_, _ = writer.Write(baseData)
+			return
+		}
+		payload, found := payloads[request.URL.Path]
+		if !found {
+			http.NotFound(writer, request)
+			return
+		}
+		_, _ = writer.Write([]byte(payload))
+	}))
+	defer server.Close()
+	client := fetch.NewWithHTTPClient(fetch.Options{}, server.Client())
+	tests := []struct {
+		name   string
+		mutate func(*testing.T, string)
+		fail   string
+		want   []string
+	}{
+		{
+			name: "source HTTP failure",
+			fail: "/google",
+			want: []string{"loyalsoldier-google", "404"},
+		},
+		{
+			name: "strict custom schema",
+			mutate: func(t *testing.T, root string) {
+				path := filepath.Join(root, "custom", "geosite", "BilibiliHMT.yaml")
+				if err := os.WriteFile(path, []byte("paylaod:\n  - DOMAIN-SUFFIX,example.test\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: []string{"BilibiliHMT.yaml", "unknown field"},
+		},
+		{
+			name: "create collision",
+			mutate: func(t *testing.T, root string) {
+				path := filepath.Join(root, "sources.yaml")
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				data = []byte(strings.Replace(string(data), "{tag: google, mode: merge-base}", "{tag: google, mode: create}", 1))
+				if err := os.WriteFile(path, data, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: []string{"loyalsoldier-google", "geosite:google", "create"},
+		},
+		{
+			name: "missing group tag",
+			mutate: func(t *testing.T, root string) {
+				path := filepath.Join(root, "groups.yaml")
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				data = append(data, []byte("  - id: broken\n    remarks: 坏组\n    geosite: []\n    geoip: [not-exist]\n")...)
+				if err := os.WriteFile(path, data, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: []string{"坏组", "geoip:not-exist"},
+		},
+		{
+			name: "final forbidden probe",
+			mutate: func(t *testing.T, root string) {
+				path := filepath.Join(root, "community", "loyalsoldier-google")
+				if err := os.WriteFile(path, []byte("domain:legacy.example\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: []string{"forbidden tag exists", "geosite:loyalsoldier-google"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			failPath = tc.fail
+			root := newIntegrationRoot(t, server.URL)
+			if tc.mutate != nil {
+				tc.mutate(t, root)
+			}
+			seedIntegrationGeneration(t, root, "old")
+			err := app.Build(context.Background(), integrationBuildOptions(repositoryRoot, root), app.ProductionDependencies(client, runner))
+			if err == nil {
+				t.Fatal("build unexpectedly succeeded")
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error %q does not contain %q", err, want)
+				}
+			}
+			assertIntegrationGeneration(t, root, "old")
+		})
+	}
+}
+
+func integrationBuildOptions(repositoryRoot, root string) app.BuildOptions {
+	return app.BuildOptions{
+		Root:       root,
+		Sources:    filepath.Join(root, "sources.yaml"),
+		Custom:     filepath.Join(root, "custom"),
+		Groups:     filepath.Join(root, "groups.yaml"),
+		Community:  filepath.Join(root, "community"),
+		CacheRoot:  filepath.Join(repositoryRoot, ".cache"),
+		Repo:       "example/clash-rules-srs",
+		ReleaseTag: "integration-failure-test",
+	}
+}
+
+func seedIntegrationGeneration(t *testing.T, root, value string) {
+	t.Helper()
+	for _, directory := range []string{"build", "publish"} {
+		if err := os.MkdirAll(filepath.Join(root, directory), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, directory, "marker"), []byte(value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertIntegrationGeneration(t *testing.T, root, value string) {
+	t.Helper()
+	for _, directory := range []string{"build", "publish"} {
+		data, err := os.ReadFile(filepath.Join(root, directory, "marker"))
+		if err != nil || string(data) != value {
+			t.Fatalf("%s marker=%q err=%v", directory, data, err)
+		}
+	}
+}
+
 func requireIntegrationTools(t *testing.T, binRoot string) {
 	t.Helper()
 	for _, name := range []string{"domain-list-custom", "geoip", "geoview"} {

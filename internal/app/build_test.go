@@ -114,6 +114,35 @@ func TestBuildSkipCompileDoesNotSwitchOutputs(t *testing.T) {
 	}
 }
 
+func TestCachedTagLookupProbesEachExactTagOnce(t *testing.T) {
+	delegate := &countingTagLookup{}
+	lookup := &cachedTagLookup{delegate: delegate, results: make(map[tagLookupKey]tagLookupResult)}
+	for range 2 {
+		present, err := lookup.Has(context.Background(), model.GeoSite, "BilibiliHMT")
+		if err != nil || !present {
+			t.Fatalf("present=%v err=%v", present, err)
+		}
+	}
+	if delegate.calls != 1 {
+		t.Fatalf("calls=%d, want 1", delegate.calls)
+	}
+	if _, err := lookup.Has(context.Background(), model.GeoSite, "bilibilihmt"); err != nil {
+		t.Fatal(err)
+	}
+	if delegate.calls != 2 {
+		t.Fatalf("case-distinct tag reused cache: calls=%d", delegate.calls)
+	}
+}
+
+type countingTagLookup struct {
+	calls int
+}
+
+func (l *countingTagLookup) Has(context.Context, model.Side, string) (bool, error) {
+	l.calls++
+	return true, nil
+}
+
 type buildFixture struct {
 	t         *testing.T
 	root      string

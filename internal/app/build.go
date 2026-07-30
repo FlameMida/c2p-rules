@@ -9,6 +9,7 @@ import (
 	"clash-rules-srs/internal/manifest"
 	"clash-rules-srs/internal/model"
 	"clash-rules-srs/internal/targets"
+	"clash-rules-srs/internal/verify"
 	"clash-rules-srs/internal/workspace"
 )
 
@@ -36,6 +37,7 @@ type buildState struct {
 	Manifest      manifest.Document
 	GeoSiteSHA    string
 	GeoIPSHA      string
+	FinalLookup   verify.TagLookup
 }
 
 type buildStage func(context.Context, *buildState) error
@@ -111,8 +113,8 @@ func Build(ctx context.Context, options BuildOptions, dependencies Dependencies)
 	finish := []namedStage{
 		{"compile geosite", dependencies.CompileGeoSite},
 		{"compile geoip", dependencies.CompileGeoIP},
-		{"probe required and forbidden tags", dependencies.ProbeTags},
 		{"validate passwall groups", dependencies.ValidateGroups},
+		{"probe required and forbidden tags", dependencies.ProbeTags},
 		{"render installer and checksums", dependencies.RenderInstaller},
 		{"verify six assets", dependencies.VerifySixAssets},
 	}
