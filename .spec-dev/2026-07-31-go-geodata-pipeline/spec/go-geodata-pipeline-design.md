@@ -89,13 +89,13 @@ spec_dev:
 
 ### Requirement: 仓库提供带规则说明的空自定义模板
 
-仓库 SHALL 提供默认 `custom/geosite/apple.yaml` 与 `custom/geoip/cn.yaml`，以注释列出对应目录支持的 Clash 匹配规则，且默认内容为语义空集。
+仓库 SHALL 为 `config/passwall2-groups.yaml` 引用的每一个唯一 `geosite`/`geoip` tag 提供对应的 `custom/<side>/<tag>.yaml`，以注释列出该 side 支持的全部 Clash 匹配规则及可直接取消注释启用的示例，且默认内容为语义空集。
 
-#### Scenario: 未编辑模板不改变产物
+#### Scenario: 每个默认分组目标均有空模板
 
-- **GIVEN** 两个默认模板保持初始内容
-- **WHEN** 分别在有模板和无模板 fixture 上构建
-- **THEN** 对应最终 tag 的规则语义一致，模板不会注入示例域名或 CIDR
+- **GIVEN** 默认 `config/passwall2-groups.yaml`
+- **WHEN** 枚举所有分组引用的唯一 `geosite`/`geoip` tag
+- **THEN** 每个引用均存在对应的 `custom/<side>/<tag>.yaml`，文件说明该 side 支持的全部规则，任一示例均可直接取消注释启用，且默认不会注入示例域名或 CIDR
 
 ### Requirement: 声明式配置生成有序 PassWall2 分流组
 

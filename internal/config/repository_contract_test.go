@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"sort"
 	"testing"
 
 	"clash-rules-srs/internal/config"
@@ -81,14 +82,8 @@ func TestRepositoryDefaultGroupsMatchApprovedOrder(t *testing.T) {
 	}
 }
 
-func TestDefaultTemplatesAreEmptyAndDocumentSupportedRules(t *testing.T) {
-	for _, test := range []struct {
-		path    string
-		markers []string
-	}{
-		{"../../custom/geosite/apple.yaml", []string{"payload:", "DOMAIN-SUFFIX", "DOMAIN,", "DOMAIN-KEYWORD", "DOMAIN-REGEX"}},
-		{"../../custom/geoip/cn.yaml", []string{"payload:", "IP-CIDR,", "IP-CIDR6", "no-resolve"}},
-	} {
+func TestEveryDefaultGroupTargetHasEmptyDocumentedTemplate(t *testing.T) {
+	for _, test := range defaultTemplateCases(t) {
 		data, err := os.ReadFile(test.path)
 		if err != nil {
 			t.Fatal(err)
@@ -98,12 +93,8 @@ func TestDefaultTemplatesAreEmptyAndDocumentSupportedRules(t *testing.T) {
 				t.Fatalf("%s does not document %s", test.path, marker)
 			}
 		}
-	}
-}
 
-func TestDefaultTemplatesAreSemanticNoOps(t *testing.T) {
-	for _, path := range []string{"../../custom/geosite/apple.yaml", "../../custom/geoip/cn.yaml"} {
-		file, err := os.Open(path)
+		file, err := os.Open(test.path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -116,9 +107,60 @@ func TestDefaultTemplatesAreSemanticNoOps(t *testing.T) {
 			t.Fatal(closeErr)
 		}
 		if len(buckets.Domains) != 0 || len(buckets.CIDRs) != 0 || len(buckets.Skipped) != 0 {
-			t.Fatalf("%s injects rules: %#v", path, buckets)
+			t.Fatalf("%s injects rules: %#v", test.path, buckets)
+		}
+
+		commentedExample := []byte("#   - " + test.example)
+		if !bytes.Contains(data, commentedExample) {
+			t.Fatalf("%s does not contain directly usable example %q", test.path, commentedExample)
+		}
+		enabled := bytes.Replace(data, commentedExample, []byte("  - "+test.example), 1)
+		buckets, err = rules.Parse(bytes.NewReader(enabled), model.YAML, model.Classical)
+		if err != nil {
+			t.Fatalf("parse enabled example in %s: %v", test.path, err)
+		}
+		if len(buckets.Domains) != test.wantDomains || len(buckets.CIDRs) != test.wantCIDRs || len(buckets.Skipped) != 0 {
+			t.Fatalf("%s enabled example produced unexpected rules: %#v", test.path, buckets)
 		}
 	}
+}
+
+type defaultTemplateCase struct {
+	path        string
+	markers     []string
+	example     string
+	wantDomains int
+	wantCIDRs   int
+}
+
+func defaultTemplateCases(t *testing.T) []defaultTemplateCase {
+	t.Helper()
+	groups, err := config.LoadGroups("../../config/passwall2-groups.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seen := make(map[string]struct{})
+	var cases []defaultTemplateCase
+	add := func(side model.Side, tags []string, markers []string, example string, wantDomains, wantCIDRs int) {
+		for _, tag := range tags {
+			path := fmt.Sprintf("../../custom/%s/%s.yaml", side, tag)
+			if _, exists := seen[path]; exists {
+				continue
+			}
+			seen[path] = struct{}{}
+			cases = append(cases, defaultTemplateCase{
+				path: path, markers: markers, example: example,
+				wantDomains: wantDomains, wantCIDRs: wantCIDRs,
+			})
+		}
+	}
+	for _, group := range groups {
+		add(model.GeoSite, group.GeoSite, []string{"payload:", "DOMAIN-SUFFIX", "DOMAIN,", "DOMAIN-KEYWORD", "DOMAIN-REGEX"}, "DOMAIN-SUFFIX,example.com", 1, 0)
+		add(model.GeoIP, group.GeoIP, []string{"payload:", "IP-CIDR,", "IP-CIDR6", "no-resolve"}, "IP-CIDR,192.0.2.0/24", 0, 1)
+	}
+	sort.Slice(cases, func(i, j int) bool { return cases[i].path < cases[j].path })
+	return cases
 }
 
 func joinTargets(values []string) string {
