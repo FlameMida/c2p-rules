@@ -39,6 +39,7 @@ spec_dev:
 - **派生资产**：三个与主资产一一对应的 `.sha256sum` 文件。
 - **发布绑定字段**：安装器中唯一合法的 `RELEASE_TAG='...'` 赋值；它只绑定本次不可变下载地址。
 - **规范化主资产**：两个 dat 的原始字节，加上只将发布绑定字段值替换为固定哨兵后的安装器字节。
+- **载荷指纹**：对三个规范化主资产按固定名称、长度和内容进行无歧义分帧后计算的 SHA-256。
 - **发布基线**：当前 GitHub latest Release 中通过严格六资产与 checksum 验证的载荷。
 - **有效产物变化**：候选发布载荷与发布基线的规范化主资产不相等。
 - **不可信基线**：latest 存在，但资产集合、checksum 或安装器结构不满足本项目契约。
@@ -60,7 +61,7 @@ spec_dev:
 - 比较器属于现有 Go CLI，不增加 Shell 脚本或第三方依赖，以便用表驱动测试验证严格语义。
 - 不可信基线默认严格失败；只有人工 `force_publish=true` 才允许跳过基线并发布已验证候选。
 - `force_publish` 只覆盖内容比较，不跳过候选构建、探针、checksum、六资产回读或默认分支限制。
-- 发布前复核比较时的 latest 身份；普通运行发现基线被外部替换时失败并等待重跑。
+- latest 查询从同一次 API 响应绑定 Release ID 与 tag，并按该 tag 下载；发布前再以 ID、tag 和载荷指纹三重复核，普通运行发现基线被外部替换时失败并等待重跑。
 
 ## ADDED Requirements
 
@@ -140,13 +141,35 @@ spec_dev:
 - **WHEN** CI 查询发布基线
 - **THEN** workflow 非零失败，不得把错误误判为首次发布或内容变化
 
-### Requirement: 普通发布复核 latest 身份
+#### Scenario: latest 查询成功但资产下载失败
 
-非强制发布 SHALL 在创建候选 draft/tag 前确认当前 latest 仍与变化判定时的 Release ID 相同；首次发布则确认 latest 仍不存在，身份不一致时本轮失败。
+- **GIVEN** latest API 返回 200 及 Release ID/tag，但按该 tag 下载任一资产失败
+- **WHEN** 非强制 CI 获取发布基线
+- **THEN** build job 非零失败，不得降级为首次发布、内容变化或部分基线比较
+
+### Requirement: 发布判定 CLI 要求恰好一种模式
+
+`geodata-build release-decision` SHALL 要求 `--baseline DIR`、`--first-release` 与 `--force` 恰好选择一种，并在所有模式下先验证 `--candidate DIR` 的严格六资产；参数形状错误以 usage exit 2 返回，目录、资产或完整性错误以 runtime exit 1 返回。
+
+#### Scenario: 发布判定模式缺失或冲突
+
+- **GIVEN** 调用者没有选择模式，或同时提供两个以上模式
+- **WHEN** 解析 `release-decision` 参数
+- **THEN** 命令以 exit 2 返回明确 usage error，且不输出可被 workflow 接受的决策
+
+#### Scenario: 首次或强制模式下候选损坏
+
+- **GIVEN** 选择 `--first-release` 或 `--force`，但候选缺少资产、包含额外资产或 checksum 无效
+- **WHEN** 执行发布判定
+- **THEN** 命令以 exit 1 返回候选完整性错误，不得因模式不需要基线而提前输出 publish=true
+
+### Requirement: 普通发布复核完整基线身份
+
+非强制发布 SHALL 从同一次 latest API 响应记录 Release ID 与 tag、按该 tag 下载并计算发布基线的载荷指纹；在创建候选 draft/tag 前重新查询并下载，要求 ID、tag 和载荷指纹均与变化判定时相同；首次发布则确认 latest 仍不存在，任一不一致时本轮失败。
 
 #### Scenario: 比较后 latest 被外部替换
 
-- **GIVEN** 候选判定需要发布，但变化判定后人工或其他流程改变了 latest
+- **GIVEN** 候选判定需要发布，但变化判定后人工或其他流程替换了 latest，或在同一 Release ID/tag 下替换了资产
 - **WHEN** publish job 准备创建候选 Release
 - **THEN** workflow 在远端写入前非零失败，等待下一次基于新基线重新构建比较
 
@@ -195,12 +218,12 @@ GitHub Actions build job (contents:read)
   ├─ build and verify candidate
   ├─ resolve/download latest or classify explicit 404
   ├─ invoke release-decision
-  ├─ expose should_publish/reason/baseline_release_id
+  ├─ expose should_publish/reason/baseline ID/tag/fingerprint
   └─ upload Artifact only when should_publish=true
 
 GitHub Actions publish job (contents:write)
   ├─ require default branch + should_publish=true
-  ├─ recheck baseline identity unless forced
+  ├─ re-download and recheck baseline ID/tag/fingerprint unless forced
   └─ preserve existing draft/readback/publish transaction
 ```
 
@@ -216,10 +239,10 @@ rolling upstream + repository config
       yes → Decision{publish:true, reason:forced}
       no  → GitHub latest status
               404 → Decision{publish:true, reason:first-release}
-              200 → download baseline → strict validation → canonical compare
+              200 → bind ID+tag → download by tag → strict validation → canonical compare
   → job outputs
       unchanged → success/no Artifact/no publish
-      changed   → Artifact → baseline identity recheck → existing Release transaction
+      changed   → Artifact → re-download + triple identity recheck → existing Release transaction
 ```
 
 上游文件只发生注释、排序或重复项变化，但最终规范化主资产相同时，不产生 Release。固定工具 pin 变化也只在最终主资产变化时触发发布。
@@ -232,13 +255,15 @@ package releasecmp
 type Input struct {
     CandidateDir string
     BaselineDir  string
-    FirstRelease bool
-    Force        bool
+    Mode         Mode
 }
 
+type Mode uint8 // Compare, FirstRelease, Force
+
 type Decision struct {
-    ShouldPublish bool
-    Reason        string // changed, unchanged, first-release, forced
+    ShouldPublish      bool
+    Reason             string // changed, unchanged, first-release, forced
+    BaselineFingerprint string // compare mode: 64 hex; otherwise empty
 }
 
 func Decide(input Input) (Decision, error)
@@ -253,27 +278,33 @@ geodata-build release-decision --candidate DIR --first-release
 geodata-build release-decision --candidate DIR --force
 ```
 
-三种模式必须互斥。成功时 stdout 只输出可写入 `$GITHUB_OUTPUT` 的稳定键值：
+三个模式选择器必须恰好提供一个；缺失、重复选择或缺少 candidate 属于 usage error（exit 2），选定模式后的资产/完整性错误属于 runtime error（exit 1）。成功时 stdout 只输出可写入 `$GITHUB_OUTPUT` 的稳定键值：
 
 ```text
 should_publish=true|false
 reason=changed|unchanged|first-release|forced
+baseline_fingerprint=<64-hex|none>
 ```
+
+载荷指纹以固定顺序处理三个规范化主资产，并把资产名长度、资产名、内容长度和内容纳入 SHA-256 输入，不能用无分隔的裸字节拼接。baseline 模式输出其指纹，首次/强制模式输出 `none`。
 
 ### GitHub Actions 条件
 
 - `workflow_dispatch.inputs.force_publish` 为 boolean，默认 false；schedule 缺失该输入时按 false。
-- build job 将 decision step 的 `should_publish`、`reason`、`baseline_release_id` 暴露为 job outputs。
+- latest API 200 响应中的 Release ID 与 tag 必须来自同一次响应，基线必须按该 tag 而非浮动的 `latest` URL 下载。
+- build job 将 decision step 的 `should_publish`、`reason`、`baseline_release_id`、`baseline_tag` 与 `baseline_fingerprint` 暴露为 job outputs。
 - Artifact upload 显式判断 `steps.release_decision.outputs.should_publish == 'true'`。
 - publish job 同时要求 build 成功、`needs.build.outputs.should_publish == 'true'` 与默认分支。
-- 普通 changed/first-release 发布复核基线 ID 或“仍无 latest”；forced 发布不依赖旧基线，但不放松候选与新 Release 验证。
+- 普通 changed 发布重新下载基线并复核 ID、tag 与载荷指纹；first-release 复核“仍无 latest”；forced 发布不依赖旧基线，但不放松候选与新 Release 验证。
 - 全 workflow 继续使用 `geodata-release` concurrency group 且不取消正在发布的运行。
 
 ### 错误处理
 
 - 候选资产无效在任何模式下都是硬失败。
+- CLI 模式缺失、冲突或 candidate flag 缺失返回 exit 2；可读目录、严格资产、checksum 与安装器错误返回 exit 1。
 - baseline 参数模式下，基线资产集合、checksum 或安装器异常都是硬失败。
 - 只有 latest API 明确 404 才使用 `--first-release`；其他非 200 状态与网络失败直接失败。
+- latest API 返回 200 后，按响应 tag 的下载失败直接失败，不允许使用不完整目录比较。
 - `--force` 允许人工修复不可信 latest，但不能用于非默认分支发布，也不能跳过候选或发布回读验证。
 - 比较器使用流式摘要比较 dat，避免为十余 MiB 文件额外保留完整内存副本。
 - 发布阶段失败继续沿用现有 trap，删除未完成的候选 draft 和 tag。
@@ -292,7 +323,10 @@ reason=changed|unchanged|first-release|forced
 | 非默认分支强制运行 | workflow contract | 任务内 TDD | publish 条件仍要求默认分支 |
 | latest 六资产损坏 | unit/integration | 任务内 TDD | 缺失、额外、坏 checksum、坏 installer 均失败 |
 | latest 查询不是 200 或 404 | workflow contract | 任务内 TDD | 非法状态与命令错误不能进入 first-release |
-| 比较后 latest 被外部替换 | workflow contract | 任务内 TDD | publish 前身份不一致阻断远端写入 |
+| latest 查询成功但资产下载失败 | workflow contract | 任务内 TDD | 200 后下载失败不能进入 first-release/changed |
+| 发布判定模式缺失或冲突 | unit/CLI | 任务内 TDD | 缺失及组合冲突 table test 均 exit 2 |
+| 首次或强制模式下候选损坏 | unit/CLI | 任务内 TDD | first/force 坏候选均 exit 1 且无决策输出 |
+| 比较后 latest 被外部替换 | workflow contract | 任务内 TDD | ID/tag/载荷指纹任一变化均阻断远端写入 |
 | 变化后草稿 Release 六资产回读 | release | 验收任务 (D) | GitHub API 资产、target/tag SHA 与下载 checksum；无远端授权时 DEFERRED |
 | 干净环境完成全链路 | e2e | 验收任务 (D) | 无 Python/Node 的 clean archive 构建日志与严格六资产 |
 | 干净 runner 完成无变化判定 | e2e | 验收任务 (D) | GitHub-hosted Ubuntu 日志；无远端 runner 时 DEFERRED |
@@ -301,7 +335,7 @@ workflow contract test 应按 YAML job/step 归属验证 input、output、`if` �
 
 ## 风险与边缘情况
 
-- GitHub latest 可被人工或其他 workflow 改变；普通发布用 Release ID 二次核对降低比较到写入之间的竞态。
+- GitHub latest 及同一 Release 的资产可被人工或其他 workflow 改变；普通发布绑定 API 响应的 ID/tag，并用重新下载后的载荷指纹二次核对，降低比较到写入之间的竞态。
 - `RELEASE_TAG` 模板格式是规范化协议的一部分；格式变更必须同步比较器测试，异常时严格失败。
 - GitHub API 限流、鉴权或短暂网络问题会使当日运行失败而不是多发 Release；下一次 schedule 可重试。
 - Release Artifact 下载必须保留全部六项；比较不依赖可执行权限，只依赖主资产字节和 checksum。
