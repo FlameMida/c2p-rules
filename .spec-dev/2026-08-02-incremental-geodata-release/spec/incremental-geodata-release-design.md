@@ -164,7 +164,13 @@ spec_dev:
 
 ### Requirement: 第一方构建链保持全 Go（增加发布判定命令）
 
-仓库 SHALL 通过根目录 Go module 提供 `geodata-build bootstrap|build|verify|release-decision`，让 CI 的发布等价判定不依赖 Python、Node、npm 或新增的仓库 Shell 脚本。
+仓库 SHALL 通过根目录 Go module 提供 `geodata-build bootstrap|build|verify|release-decision`，让 CI 与文档不要求 Python、Node、npm 或新增的仓库 Shell 脚本，并只从 `.cache/bin/` 或显式测试替身调用受超时控制的固定上游工具。
+
+#### Scenario: 干净环境完成全链路
+
+- **GIVEN** 环境只提供固定 Go 版本、git、GitHub CLI 与标准系统工具，未安装 Python、Node、npm 或全局 geoip/geoview
+- **WHEN** 按文档运行 bootstrap、Go 测试、完整构建与六资产验证
+- **THEN** 六个候选资产全部生成并通过 required/forbidden tag、引用、checksum 与资产集合验证
 
 #### Scenario: 干净 runner 完成无变化判定
 
@@ -288,6 +294,7 @@ reason=changed|unchanged|first-release|forced
 | latest 查询不是 200 或 404 | workflow contract | 任务内 TDD | 非法状态与命令错误不能进入 first-release |
 | 比较后 latest 被外部替换 | workflow contract | 任务内 TDD | publish 前身份不一致阻断远端写入 |
 | 变化后草稿 Release 六资产回读 | release | 验收任务 (D) | GitHub API 资产、target/tag SHA 与下载 checksum；无远端授权时 DEFERRED |
+| 干净环境完成全链路 | e2e | 验收任务 (D) | 无 Python/Node 的 clean archive 构建日志与严格六资产 |
 | 干净 runner 完成无变化判定 | e2e | 验收任务 (D) | GitHub-hosted Ubuntu 日志；无远端 runner 时 DEFERRED |
 
 workflow contract test 应按 YAML job/step 归属验证 input、output、`if` 与步骤顺序，不能只在全文件搜索孤立字符串。真实 GitHub 的 404、权限、Artifact 条件和 Release 写入仍需 GitHub-hosted 运行验收，本地测试不得冒充。
