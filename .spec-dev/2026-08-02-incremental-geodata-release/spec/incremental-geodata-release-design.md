@@ -3,7 +3,7 @@
 spec_dev:
   version: 1
   feature: incremental-geodata-release
-  status: draft
+  status: active
   covers:
     - "cmd/geodata-build/**"
     - "internal/app/**"
