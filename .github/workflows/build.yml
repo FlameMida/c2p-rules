@@ -81,6 +81,7 @@ jobs:
           if [ "$FORCE_PUBLISH" = "true" ]; then
             go run ./cmd/geodata-build release-decision \
               --candidate publish \
+              --candidate-tag "$RELEASE_TAG" \
               --force > "$decision_file"
           else
             latest_response=$(mktemp)
@@ -115,11 +116,14 @@ jobs:
                   --dir "$baseline_dir"
                 go run ./cmd/geodata-build release-decision \
                   --candidate publish \
-                  --baseline "$baseline_dir" > "$decision_file"
+                  --candidate-tag "$RELEASE_TAG" \
+                  --baseline "$baseline_dir" \
+                  --baseline-tag "$baseline_tag" > "$decision_file"
                 ;;
               404)
                 go run ./cmd/geodata-build release-decision \
                   --candidate publish \
+                  --candidate-tag "$RELEASE_TAG" \
                   --first-release > "$decision_file"
                 ;;
               *)
@@ -196,6 +200,7 @@ jobs:
           BASELINE_FINGERPRINT: ${{ needs.build.outputs.baseline_fingerprint }}
         run: |
           set -euo pipefail
+          candidate_tag="geodata-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
           query_latest() {
             latest_response=$(mktemp)
@@ -233,6 +238,7 @@ jobs:
               forced_decision=$(mktemp)
               go run ./cmd/geodata-build release-decision \
                 --candidate publish \
+                --candidate-tag "$candidate_tag" \
                 --force > "$forced_decision"
               grep -qx 'should_publish=true' "$forced_decision"
               grep -qx 'reason=forced' "$forced_decision"
@@ -243,6 +249,13 @@ jobs:
                 echo "latest appeared after first-release decision" >&2
                 exit 1
               fi
+              first_decision=$(mktemp)
+              go run ./cmd/geodata-build release-decision \
+                --candidate publish \
+                --candidate-tag "$candidate_tag" \
+                --first-release > "$first_decision"
+              grep -qx 'should_publish=true' "$first_decision"
+              grep -qx 'reason=first-release' "$first_decision"
               ;;
             changed)
               query_latest
@@ -267,7 +280,9 @@ jobs:
               recheck_decision=$(mktemp)
               go run ./cmd/geodata-build release-decision \
                 --candidate publish \
-                --baseline "$baseline_dir" > "$recheck_decision"
+                --candidate-tag "$candidate_tag" \
+                --baseline "$baseline_dir" \
+                --baseline-tag "$current_tag" > "$recheck_decision"
               grep -qx 'should_publish=true' "$recheck_decision"
               grep -qx 'reason=changed' "$recheck_decision"
               baseline_fingerprint=$(sed -n 's/^baseline_fingerprint=//p' "$recheck_decision")
@@ -327,6 +342,10 @@ jobs:
             sha256sum -c geosite.dat.sha256sum
             sha256sum -c install_passwall2_rules.sh.sha256sum
           )
+          go run ./cmd/geodata-build release-decision \
+            --candidate "$readback" \
+            --candidate-tag "$TAG" \
+            --force
           gh release edit "$TAG" --draft=false --latest
           tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')
           test "$tag_sha" = "$GITHUB_SHA"

@@ -40,7 +40,7 @@ spec_dev:
 - **发布绑定字段**：安装器中唯一合法的 `RELEASE_TAG='...'` 赋值；它只绑定本次不可变下载地址。
 - **规范化主资产**：两个 dat 的原始字节，加上只将发布绑定字段值替换为固定哨兵后的安装器字节。
 - **载荷指纹**：对三个规范化主资产按固定名称、长度和内容进行无歧义分帧后计算的 SHA-256。
-- **发布基线**：当前 GitHub latest Release 中通过严格六资产与 checksum 验证的载荷。
+- **发布基线**：当前 GitHub latest Release 中通过严格六资产、checksum 与安装器 tag 上下文绑定验证的载荷。
 - **有效产物变化**：候选发布载荷与发布基线的规范化主资产不相等。
 - **不可信基线**：latest 存在，但资产集合、checksum 或安装器结构不满足本项目契约。
 
@@ -95,7 +95,7 @@ spec_dev:
 
 ### Requirement: 安装器只忽略发布绑定字段
 
-比较器 SHALL 要求候选与基线安装器各自恰有一行符合生成器 tag 语法的 `RELEASE_TAG='...'`，并只将该值替换为固定哨兵后比较其余完整字节。
+比较器 SHALL 要求候选与基线安装器各自恰有一行符合生成器 tag 语法的 `RELEASE_TAG='...'`，要求其值分别精确等于调用者提供的候选 tag 与基线 API tag，并只在验证绑定后将该值替换为固定哨兵再比较其余完整字节。
 
 #### Scenario: 安装器仅 Release tag 不同
 
@@ -105,7 +105,7 @@ spec_dev:
 
 #### Scenario: 安装器发布绑定字段异常
 
-- **GIVEN** 候选或基线安装器缺失发布绑定字段、包含多个字段或字段语法非法
+- **GIVEN** 候选或基线安装器缺失发布绑定字段、包含多个字段、字段语法非法，或字段值与对应发布上下文 tag 不一致
 - **WHEN** 比较器规范化安装器
 - **THEN** 命令非零退出，不得宽松删除任意相似文本或继续发布
 
@@ -149,7 +149,7 @@ spec_dev:
 
 ### Requirement: 发布判定 CLI 要求恰好一种模式
 
-`geodata-build release-decision` SHALL 要求 `--baseline DIR`、`--first-release` 与 `--force` 恰好选择一种，并在所有模式下先验证 `--candidate DIR` 的严格六资产；参数形状错误以 usage exit 2 返回，目录、资产或完整性错误以 runtime exit 1 返回。
+`geodata-build release-decision` SHALL 要求所有模式提供 `--candidate DIR --candidate-tag TAG`，要求 `--baseline DIR --baseline-tag TAG`、`--first-release` 与 `--force` 恰好选择一种，并在所有模式下先验证候选严格六资产及 tag 绑定；参数形状错误以 usage exit 2 返回，目录、资产、tag 绑定或完整性错误以 runtime exit 1 返回。
 
 #### Scenario: 发布判定模式缺失或冲突
 
@@ -254,7 +254,9 @@ package releasecmp
 
 type Input struct {
     CandidateDir string
+    CandidateTag string
     BaselineDir  string
+    BaselineTag  string
     Mode         Mode
 }
 
@@ -273,12 +275,12 @@ func NormalizeInstaller(data []byte) ([]byte, error)
 CLI：
 
 ```text
-geodata-build release-decision --candidate DIR --baseline DIR
-geodata-build release-decision --candidate DIR --first-release
-geodata-build release-decision --candidate DIR --force
+geodata-build release-decision --candidate DIR --candidate-tag TAG --baseline DIR --baseline-tag TAG
+geodata-build release-decision --candidate DIR --candidate-tag TAG --first-release
+geodata-build release-decision --candidate DIR --candidate-tag TAG --force
 ```
 
-三个模式选择器必须恰好提供一个；缺失、重复选择或缺少 candidate 属于 usage error（exit 2），选定模式后的资产/完整性错误属于 runtime error（exit 1）。成功时 stdout 只输出可写入 `$GITHUB_OUTPUT` 的稳定键值：
+三个模式选择器必须恰好提供一个；缺失、重复选择、缺少 candidate/candidate-tag，或 baseline 与 baseline-tag 未成对提供属于 usage error（exit 2），选定模式后的资产、tag 绑定或完整性错误属于 runtime error（exit 1）。成功时 stdout 只输出可写入 `$GITHUB_OUTPUT` 的稳定键值：
 
 ```text
 should_publish=true|false
@@ -291,7 +293,7 @@ baseline_fingerprint=<64-hex|none>
 ### GitHub Actions 条件
 
 - `workflow_dispatch.inputs.force_publish` 为 boolean，默认 false；schedule 缺失该输入时按 false。
-- latest API 200 响应中的 Release ID 与 tag 必须来自同一次响应，基线必须按该 tag 而非浮动的 `latest` URL 下载。
+- latest API 200 响应中的 Release ID 与 tag 必须来自同一次响应，基线必须按该 tag 而非浮动的 `latest` URL 下载，并把该 tag 传给同一 Go 比较器验证安装器绑定。
 - build job 将 decision step 的 `should_publish`、`reason`、`baseline_release_id`、`baseline_tag` 与 `baseline_fingerprint` 暴露为 job outputs。
 - Artifact upload 显式判断 `steps.release_decision.outputs.should_publish == 'true'`。
 - publish job 同时要求 build 成功、`needs.build.outputs.should_publish == 'true'` 与默认分支。
@@ -302,7 +304,7 @@ baseline_fingerprint=<64-hex|none>
 
 - 候选资产无效在任何模式下都是硬失败。
 - CLI 模式缺失、冲突或 candidate flag 缺失返回 exit 2；可读目录、严格资产、checksum 与安装器错误返回 exit 1。
-- baseline 参数模式下，基线资产集合、checksum 或安装器异常都是硬失败。
+- baseline 参数模式下，基线资产集合、checksum、安装器结构或安装器 tag 与 API tag 不一致都是硬失败。
 - 只有 latest API 明确 404 才使用 `--first-release`；其他非 200 状态与网络失败直接失败。
 - latest API 返回 200 后，按响应 tag 的下载失败直接失败，不允许使用不完整目录比较。
 - `--force` 允许人工修复不可信 latest，但不能用于非默认分支发布，也不能跳过候选或发布回读验证。
@@ -318,7 +320,7 @@ baseline_fingerprint=<64-hex|none>
 | 安装器逻辑发生变化 | unit | 任务内 TDD | fragment、SHA、命令或其他字节变化返回 changed |
 | 尚无 latest Release | workflow contract | 任务内 TDD | 仅明确 404 映射 first-release |
 | 安装器仅 Release tag 不同 | unit | 任务内 TDD | 规范化结果相同 |
-| 安装器发布绑定字段异常 | unit | 任务内 TDD | 缺失、重复、非法 tag table test 非零失败 |
+| 安装器发布绑定字段异常 | unit | 任务内 TDD | 缺失、重复、非法 tag、候选/基线上下文 tag 不一致 table test 非零失败 |
 | 内容相同但人工强制发布 | unit/workflow contract | 任务内 TDD | force 验证候选并输出 forced/true |
 | 非默认分支强制运行 | workflow contract | 任务内 TDD | publish 条件仍要求默认分支 |
 | latest 六资产损坏 | unit/integration | 任务内 TDD | 缺失、额外、坏 checksum、坏 installer 均失败 |

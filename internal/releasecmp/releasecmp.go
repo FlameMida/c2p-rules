@@ -26,7 +26,9 @@ const (
 
 type Input struct {
 	CandidateDir string
+	CandidateTag string
 	BaselineDir  string
+	BaselineTag  string
 	Mode         Mode
 }
 
@@ -44,28 +46,33 @@ var (
 const normalizedTagAssignment = "RELEASE_TAG='__CLASH_RULES_SRS_RELEASE_TAG__'"
 
 func NormalizeInstaller(data []byte) ([]byte, error) {
+	normalized, _, err := normalizeInstaller(data)
+	return normalized, err
+}
+
+func normalizeInstaller(data []byte) ([]byte, string, error) {
 	fields := releaseTagField.FindAllIndex(data, -1)
 	if len(fields) != 1 {
-		return nil, fmt.Errorf("installer must contain exactly one RELEASE_TAG field: found %d", len(fields))
+		return nil, "", fmt.Errorf("installer must contain exactly one RELEASE_TAG field: found %d", len(fields))
 	}
 	start, end := fields[0][0], fields[0][1]
 	assignment := releaseTagAssignment.FindSubmatchIndex(data[start:end])
 	if assignment == nil {
-		return nil, fmt.Errorf("installer RELEASE_TAG field does not use generated syntax")
+		return nil, "", fmt.Errorf("installer RELEASE_TAG field does not use generated syntax")
 	}
 	value := string(data[start+assignment[2] : start+assignment[3]])
 	if err := passwall.ValidateReleaseTag(value); err != nil {
-		return nil, fmt.Errorf("invalid RELEASE_TAG assignment: %w", err)
+		return nil, "", fmt.Errorf("invalid RELEASE_TAG assignment: %w", err)
 	}
 	result := make([]byte, 0, len(data)-(end-start)+len(normalizedTagAssignment))
 	result = append(result, data[:start]...)
 	result = append(result, normalizedTagAssignment...)
 	result = append(result, data[end:]...)
-	return result, nil
+	return result, value, nil
 }
 
 func Decide(input Input) (Decision, error) {
-	candidateFingerprint, err := fingerprint(input.CandidateDir)
+	candidateFingerprint, err := fingerprint(input.CandidateDir, input.CandidateTag)
 	if err != nil {
 		return Decision{}, fmt.Errorf("candidate payload: %w", err)
 	}
@@ -75,7 +82,7 @@ func Decide(input Input) (Decision, error) {
 	case Force:
 		return Decision{ShouldPublish: true, Reason: "forced"}, nil
 	case Compare:
-		baselineFingerprint, err := fingerprint(input.BaselineDir)
+		baselineFingerprint, err := fingerprint(input.BaselineDir, input.BaselineTag)
 		if err != nil {
 			return Decision{}, fmt.Errorf("baseline payload: %w", err)
 		}
@@ -94,7 +101,7 @@ func Decide(input Input) (Decision, error) {
 	}
 }
 
-func fingerprint(directory string) (string, error) {
+func fingerprint(directory, expectedTag string) (string, error) {
 	if err := verify.Assets(directory, verify.ReleaseAssets()); err != nil {
 		return "", err
 	}
@@ -108,9 +115,15 @@ func fingerprint(directory string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read installer: %w", err)
 	}
-	normalized, err := NormalizeInstaller(installer)
+	normalized, actualTag, err := normalizeInstaller(installer)
 	if err != nil {
 		return "", err
+	}
+	if err := passwall.ValidateReleaseTag(expectedTag); err != nil {
+		return "", fmt.Errorf("invalid expected release tag: %w", err)
+	}
+	if actualTag != expectedTag {
+		return "", fmt.Errorf("release tag mismatch: installer=%q expected=%q", actualTag, expectedTag)
 	}
 	if err := hashFrame(digest, "install_passwall2_rules.sh", int64(len(normalized)), bytes.NewReader(normalized)); err != nil {
 		return "", err

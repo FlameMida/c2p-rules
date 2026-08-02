@@ -23,7 +23,7 @@ func TestHelpIsSuccessful(t *testing.T) {
 }
 
 func TestReleaseDecisionCommandIsDispatched(t *testing.T) {
-	want := []string{"--candidate", "publish", "--force"}
+	want := []string{"--candidate", "publish", "--candidate-tag", "candidate", "--force"}
 	called := false
 	command := func(_ context.Context, args []string, _, _ io.Writer) error {
 		called = true

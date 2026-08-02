@@ -78,12 +78,12 @@ go run ./cmd/geodata-build verify --dat publish/geoip.dat --manifest build/expec
 本地已有候选六资产时，可使用同一 Go CLI 复现发布判定：
 
 ```bash
-go run ./cmd/geodata-build release-decision --candidate publish --baseline /path/to/latest-assets
-go run ./cmd/geodata-build release-decision --candidate publish --first-release
-go run ./cmd/geodata-build release-decision --candidate publish --force
+go run ./cmd/geodata-build release-decision --candidate publish --candidate-tag candidate-tag --baseline /path/to/latest-assets --baseline-tag latest-tag
+go run ./cmd/geodata-build release-decision --candidate publish --candidate-tag candidate-tag --first-release
+go run ./cmd/geodata-build release-decision --candidate publish --candidate-tag candidate-tag --force
 ```
 
-三个模式必须恰选一种，并且都会先严格验证候选六资产。成功输出固定为 `should_publish`、`reason`、`baseline_fingerprint` 三行；参数形状错误返回 2，资产或完整性错误返回 1。
+三个模式必须恰选一种，并且都会先严格验证候选六资产及安装器 `RELEASE_TAG` 与 `--candidate-tag` 的绑定；baseline 模式还要求安装器 tag 等于 `--baseline-tag`。成功输出固定为 `should_publish`、`reason`、`baseline_fingerprint` 三行；参数形状错误返回 2，资产、tag 绑定或完整性错误返回 1。
 
 ## 安装到 PassWall2
 

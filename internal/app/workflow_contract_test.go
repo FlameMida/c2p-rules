@@ -55,22 +55,32 @@ func Test相同内容重复运行Workflow(t *testing.T) {
 		t.Fatalf("artifact if=%q", upload.If)
 	}
 	publish := document.Jobs["publish"]
-	for _, required := range []string{
-		"needs.build.result == 'success'",
-		"needs.build.outputs.should_publish == 'true'",
-		"github.event.repository.default_branch",
-	} {
-		if !strings.Contains(publish.If, required) {
-			t.Fatalf("publish if=%q missing %q", publish.If, required)
-		}
+	want := "needs.build.result == 'success' && needs.build.outputs.should_publish == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+	if strings.TrimSpace(publish.If) != want {
+		t.Fatalf("publish if=%q want=%q", publish.If, want)
 	}
 }
 
 func Test尚无LatestReleaseWorkflow(t *testing.T) {
 	decision := stepByID(t, loadWorkflow(t).Jobs["build"], "release_decision")
-	assertRunContains(t, decision, "404)", "--first-release", "baseline_release_id=none", "baseline_tag=none")
-	if strings.Index(decision.Run, "404)") > strings.Index(decision.Run, "--first-release") {
-		t.Fatalf("first-release is not confined to the 404 branch:\n%s", decision.Run)
+	if !containsShellBlock(decision.Run, `case "$latest_status" in`) {
+		t.Fatalf("release decision does not branch on latest_status:\n%s", decision.Run)
+	}
+	branch := shellCaseBranch(t, decision.Run, "404)")
+	assertTextContains(t, branch, "--first-release", `--candidate-tag "$RELEASE_TAG"`)
+	if strings.Count(decision.Run, "--first-release") != 1 {
+		t.Fatalf("first-release must appear only in the 404 branch:\n%s", decision.Run)
+	}
+	assertRunContains(t, decision, "baseline_release_id=none", "baseline_tag=none")
+
+	recheck := stepByName(t, loadWorkflow(t).Jobs["publish"], "Recheck release baseline before write")
+	firstReleaseBranch := shellCaseBranch(t, recheck.Run, "first-release)")
+	firstReleaseBlock := `if [ "$latest_status" != "404" ]; then
+  echo "latest appeared after first-release decision" >&2
+  exit 1
+fi`
+	if !containsShellBlock(firstReleaseBranch, firstReleaseBlock) {
+		t.Fatalf("publish does not require latest to remain 404:\n%s", recheck.Run)
 	}
 }
 
@@ -83,7 +93,7 @@ func Test内容相同但人工强制发布Workflow(t *testing.T) {
 	build := document.Jobs["build"]
 	decisionIndex := stepIndexByID(t, build, "release_decision")
 	decision := build.Steps[decisionIndex]
-	assertRunContains(t, decision, "--force", "FORCE_PUBLISH")
+	assertRunContains(t, decision, "--force", "FORCE_PUBLISH", `--candidate-tag "$RELEASE_TAG"`)
 	for _, name := range []string{"Build exact release payload", "Verify all checksums"} {
 		if stepIndexByName(t, build, name) >= decisionIndex {
 			t.Fatalf("%s does not precede force decision", name)
@@ -93,8 +103,9 @@ func Test内容相同但人工强制发布Workflow(t *testing.T) {
 
 func Test非默认分支强制运行(t *testing.T) {
 	condition := loadWorkflow(t).Jobs["publish"].If
-	if !strings.Contains(condition, "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)") {
-		t.Fatalf("publish condition lacks default branch gate: %q", condition)
+	want := "needs.build.result == 'success' && needs.build.outputs.should_publish == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+	if strings.TrimSpace(condition) != want {
+		t.Fatalf("publish condition=%q want=%q", condition, want)
 	}
 }
 
@@ -108,7 +119,12 @@ func TestLatest查询不是200或404(t *testing.T) {
 
 func TestLatest查询成功但资产下载失败(t *testing.T) {
 	decision := stepByID(t, loadWorkflow(t).Jobs["build"], "release_decision")
-	assertRunContains(t, decision, `gh release download "$baseline_tag"`, `--baseline "$baseline_dir"`)
+	assertRunContains(t, decision,
+		`gh release download "$baseline_tag"`,
+		`--baseline "$baseline_dir"`,
+		`--baseline-tag "$baseline_tag"`,
+		`--candidate-tag "$RELEASE_TAG"`,
+	)
 	download := strings.Index(decision.Run, `gh release download "$baseline_tag"`)
 	compare := strings.Index(decision.Run, `--baseline "$baseline_dir"`)
 	if download < 0 || compare <= download {
@@ -129,11 +145,25 @@ func Test比较后Latest被外部替换(t *testing.T) {
 		t.Fatalf("recheck index=%d stage index=%d", recheckIndex, stageIndex)
 	}
 	recheck := publish.Steps[recheckIndex]
+	changedBranch := shellCaseBranch(t, recheck.Run, "changed)")
+	for _, check := range []struct {
+		source string
+		block  string
+	}{
+		{`current_release_id=$(jq -er '.id' "$latest_response")`, "if [ \"$current_release_id\" != \"$BASELINE_RELEASE_ID\" ]; then\n  echo \"baseline release ID changed\" >&2\n  exit 1\nfi"},
+		{`current_tag=$(jq -er '.tag_name' "$latest_response")`, "if [ \"$current_tag\" != \"$BASELINE_TAG\" ]; then\n  echo \"baseline tag changed\" >&2\n  exit 1\nfi"},
+		{`baseline_fingerprint=$(sed -n 's/^baseline_fingerprint=//p' "$recheck_decision")`, "if [ \"$baseline_fingerprint\" != \"$BASELINE_FINGERPRINT\" ]; then\n  echo \"baseline fingerprint changed\" >&2\n  exit 1\nfi"},
+	} {
+		sourceIndex := shellBlockIndex(changedBranch, check.source)
+		blockIndex := shellBlockIndex(changedBranch, check.block)
+		if sourceIndex < 0 || blockIndex <= sourceIndex {
+			t.Fatalf("recheck source/block order invalid for %q:\n%s", check.source, changedBranch)
+		}
+	}
 	assertRunContains(t, recheck,
-		"current_release_id", "BASELINE_RELEASE_ID",
-		"current_tag", "BASELINE_TAG",
-		"baseline_fingerprint", "BASELINE_FINGERPRINT",
 		"go run ./cmd/geodata-build release-decision",
+		`--candidate-tag "$candidate_tag"`,
+		`--baseline-tag "$current_tag"`,
 		"should_publish=true", "reason=changed",
 	)
 }
@@ -141,11 +171,13 @@ func Test比较后Latest被外部替换(t *testing.T) {
 func Test变化后草稿Release六资产回读契约(t *testing.T) {
 	publish := loadWorkflow(t).Jobs["publish"]
 	stage := stepByName(t, publish, "Stage, read back, and publish exact Release")
+	strictReadback := "go run ./cmd/geodata-build release-decision \\\n  --candidate \"$readback\" \\\n  --candidate-tag \"$TAG\" \\\n  --force"
 	previous := -1
 	for _, fragment := range []string{
 		"gh release create", "--draft", "gh release upload",
 		`.assets[].name`, `target_commitish`, `git/ref/tags/$TAG`,
 		`gh release download "$TAG"`, "sha256sum -c geoip.dat.sha256sum",
+		strictReadback,
 		`gh release edit "$TAG" --draft=false --latest`,
 	} {
 		index := strings.Index(stage.Run, fragment)
@@ -154,12 +186,16 @@ func Test变化后草稿Release六资产回读契约(t *testing.T) {
 		}
 		previous = index
 	}
-	for _, name := range []string{
-		"geoip.dat", "geoip.dat.sha256sum", "geosite.dat", "geosite.dat.sha256sum",
-		"install_passwall2_rules.sh", "install_passwall2_rules.sh.sha256sum",
+	upload := "gh release upload \"$TAG\" \\\n  publish/geoip.dat \\\n  publish/geoip.dat.sha256sum \\\n  publish/geosite.dat \\\n  publish/geosite.dat.sha256sum \\\n  publish/install_passwall2_rules.sh \\\n  publish/install_passwall2_rules.sh.sha256sum"
+	if !strings.Contains(stage.Run, upload) {
+		t.Fatalf("release upload is not exact six assets:\n%s", stage.Run)
+	}
+	for _, block := range []string{
+		"target=$(gh api \"repos/$GITHUB_REPOSITORY/releases/tags/$TAG\" --jq '.target_commitish')\ntest \"$target\" = \"$GITHUB_SHA\"",
+		"tag_sha=$(gh api \"repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG\" --jq '.object.sha')\ntest \"$tag_sha\" = \"$GITHUB_SHA\"",
 	} {
-		if strings.Count(stage.Run, name) < 2 {
-			t.Fatalf("release transaction does not upload/read back %s", name)
+		if !strings.Contains(stage.Run, block) {
+			t.Fatalf("release transaction misses strict equality %q:\n%s", block, stage.Run)
 		}
 	}
 }
@@ -292,4 +328,26 @@ func assertTextContains(t *testing.T, text string, values ...string) {
 			t.Fatalf("missing %q in:\n%s", value, text)
 		}
 	}
+}
+
+func shellCaseBranch(t *testing.T, script, label string) string {
+	t.Helper()
+	start := strings.Index(script, label)
+	if start < 0 {
+		t.Fatalf("case branch %q not found:\n%s", label, script)
+	}
+	rest := script[start+len(label):]
+	end := strings.Index(rest, ";;")
+	if end < 0 {
+		t.Fatalf("case branch %q has no terminator:\n%s", label, script)
+	}
+	return rest[:end]
+}
+
+func containsShellBlock(script, block string) bool {
+	return shellBlockIndex(script, block) >= 0
+}
+
+func shellBlockIndex(script, block string) int {
+	return strings.Index(strings.Join(strings.Fields(script), " "), strings.Join(strings.Fields(block), " "))
 }

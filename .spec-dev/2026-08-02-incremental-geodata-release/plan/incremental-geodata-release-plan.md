@@ -126,11 +126,13 @@ func Test安装器仅ReleaseTag不同(t *testing.T)          // NormalizeInstall
 func Test安装器发布绑定字段异常(t *testing.T)           // 缺失、重复、空值、空格、前导连字符、超长均报错
 func Test内容相同但人工强制发布(t *testing.T)           // 有效候选断言 forced/true/空 baseline 指纹
 func TestLatest六资产损坏(t *testing.T)               // 基线缺失、额外、坏 checksum、坏 installer 均报错
-func Test首次或强制模式下候选损坏(t *testing.T)         // first/force × 缺失/额外/坏 checksum/坏 installer 均报错
+func Test所有模式下候选损坏(t *testing.T)             // compare/first/force × 缺失/额外/坏 checksum/坏 installer 均报错
 func Test尚无LatestRelease(t *testing.T)              // FirstRelease 有效候选断言 first-release/true
+func TestRenderedInstallerMatchesComparisonProtocol(t *testing.T) // 真实 RenderInstaller 仅 tag 不同仍判 unchanged
+func TestReleaseTagMustMatchPayloadContext(t *testing.T) // compare/first/force 候选错绑及 compare 基线错绑均报错
 ```
 
-使用固定的十六进制指纹正则 `^[0-9a-f]{64}$`，另加 `TestFingerprintFramesNamesAndLengths`：交换两个 dat 的内容仍产生不同指纹，证明不是无分隔裸拼接。错误断言使用稳定的错误类别片段（`candidate`、`baseline`、`asset set mismatch`、`checksum mismatch`、`RELEASE_TAG`），不绑定临时目录绝对路径。
+使用固定的十六进制指纹正则 `^[0-9a-f]{64}$`，另加 `TestFingerprintFramesNamesAndLengths`：候选使用 `a` + `bc`、基线使用 `ab` + `c`，令裸拼接内容相同但分帧指纹不同，证明不是无分隔裸拼接。错误断言使用稳定的错误类别片段（`candidate`、`baseline`、`asset set mismatch`、`checksum mismatch`、`RELEASE_TAG`），不绑定临时目录绝对路径。
 
 最后修改 `internal/app/build_test.go`，让现有构建 fixture 用 `verify.ReleaseAssets()` 验证；测试应先因 `releaseAssets` 删除目标尚未实施或新 API 不存在而无法编译。
 
@@ -207,7 +209,9 @@ const (
 
 type Input struct {
 	CandidateDir string
+	CandidateTag string
 	BaselineDir  string
+	BaselineTag  string
 	Mode         Mode
 }
 
@@ -225,28 +229,33 @@ var (
 const normalizedTagAssignment = "RELEASE_TAG='__CLASH_RULES_SRS_RELEASE_TAG__'"
 
 func NormalizeInstaller(data []byte) ([]byte, error) {
+	normalized, _, err := normalizeInstaller(data)
+	return normalized, err
+}
+
+func normalizeInstaller(data []byte) ([]byte, string, error) {
 	fields := releaseTagField.FindAllIndex(data, -1)
 	if len(fields) != 1 {
-		return nil, fmt.Errorf("installer must contain exactly one RELEASE_TAG field: found %d", len(fields))
+		return nil, "", fmt.Errorf("installer must contain exactly one RELEASE_TAG field: found %d", len(fields))
 	}
 	start, end := fields[0][0], fields[0][1]
 	assignment := releaseTagAssignment.FindSubmatchIndex(data[start:end])
 	if assignment == nil {
-		return nil, fmt.Errorf("installer RELEASE_TAG field does not use generated syntax")
+		return nil, "", fmt.Errorf("installer RELEASE_TAG field does not use generated syntax")
 	}
 	value := string(data[start+assignment[2] : start+assignment[3]])
 	if err := passwall.ValidateReleaseTag(value); err != nil {
-		return nil, fmt.Errorf("invalid RELEASE_TAG assignment: %w", err)
+		return nil, "", fmt.Errorf("invalid RELEASE_TAG assignment: %w", err)
 	}
 	result := make([]byte, 0, len(data)-(end-start)+len(normalizedTagAssignment))
 	result = append(result, data[:start]...)
 	result = append(result, normalizedTagAssignment...)
 	result = append(result, data[end:]...)
-	return result, nil
+	return result, value, nil
 }
 
 func Decide(input Input) (Decision, error) {
-	candidateFingerprint, err := fingerprint(input.CandidateDir)
+	candidateFingerprint, err := fingerprint(input.CandidateDir, input.CandidateTag)
 	if err != nil {
 		return Decision{}, fmt.Errorf("candidate payload: %w", err)
 	}
@@ -256,7 +265,7 @@ func Decide(input Input) (Decision, error) {
 	case Force:
 		return Decision{ShouldPublish: true, Reason: "forced"}, nil
 	case Compare:
-		baselineFingerprint, err := fingerprint(input.BaselineDir)
+		baselineFingerprint, err := fingerprint(input.BaselineDir, input.BaselineTag)
 		if err != nil {
 			return Decision{}, fmt.Errorf("baseline payload: %w", err)
 		}
@@ -275,7 +284,7 @@ func Decide(input Input) (Decision, error) {
 	}
 }
 
-func fingerprint(directory string) (string, error) {
+func fingerprint(directory, expectedTag string) (string, error) {
 	if err := verify.Assets(directory, verify.ReleaseAssets()); err != nil {
 		return "", err
 	}
@@ -289,9 +298,15 @@ func fingerprint(directory string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read installer: %w", err)
 	}
-	normalized, err := NormalizeInstaller(installer)
+	normalized, actualTag, err := normalizeInstaller(installer)
 	if err != nil {
 		return "", err
+	}
+	if err := passwall.ValidateReleaseTag(expectedTag); err != nil {
+		return "", fmt.Errorf("invalid expected release tag: %w", err)
+	}
+	if actualTag != expectedTag {
+		return "", fmt.Errorf("release tag mismatch: installer=%q expected=%q", actualTag, expectedTag)
 	}
 	if err := hashFrame(digest, "install_passwall2_rules.sh", int64(len(normalized)), bytes.NewReader(normalized)); err != nil {
 		return "", err
@@ -377,17 +392,17 @@ git commit -m "feat(T1): 增加规范化发布载荷比较器"
 
 - [x] **步骤 1：写失败测试**
 
-在 `internal/cli/run_test.go` 增加 `TestReleaseDecisionCommandIsDispatched`：传入只记录调用参数的 stub `ReleaseDecision`，执行 `release-decision --candidate publish --force`，断言 exit 0、参数原样传递；同时把 help 精确断言为包含 `bootstrap|build|verify|release-decision`。
+在 `internal/cli/run_test.go` 增加 `TestReleaseDecisionCommandIsDispatched`：传入只记录调用参数的 stub `ReleaseDecision`，执行 `release-decision --candidate publish --candidate-tag geodata-test --force`，断言 exit 0、参数原样传递；同时把 help 精确断言为包含 `bootstrap|build|verify|release-decision`。
 
 在 `internal/app/commands_test.go` 加入以下表驱动红测：
 
 ```go
 func Test发布判定模式缺失或冲突(t *testing.T) {
 	cases := [][]string{
-		{"--candidate", "publish"},
-		{"--candidate", "publish", "--baseline", "old", "--first-release"},
-		{"--candidate", "publish", "--baseline", "old", "--force"},
-		{"--candidate", "publish", "--first-release", "--force"},
+		{"--candidate", "publish", "--candidate-tag", "geodata-test"},
+		{"--candidate", "publish", "--candidate-tag", "geodata-test", "--baseline", "old", "--baseline-tag", "geodata-old", "--first-release"},
+		{"--candidate", "publish", "--candidate-tag", "geodata-test", "--baseline", "old", "--baseline-tag", "geodata-old", "--force"},
+		{"--candidate", "publish", "--candidate-tag", "geodata-test", "--first-release", "--force"},
 	}
 	// 每组经 cli.Run 调用 release-decision，断言 exit 2、stdout 为空、stderr 含 exactly one。
 }
@@ -401,8 +416,8 @@ func TestReleaseDecisionPrintsStableOutput(t *testing.T) {
 	// should_publish=false\nreason=unchanged\nbaseline_fingerprint=<64hex>\n
 }
 
-func Test首次或强制模式下候选损坏CLI(t *testing.T) {
-	// first/force 分别指向坏候选；断言 exit 1、stdout 为空、stderr 含 candidate payload。
+func Test所有模式下候选损坏CLI(t *testing.T) {
+	// compare/first/force 分别指向坏候选；断言 exit 1、stdout 为空、stderr 含 candidate payload。
 }
 ```
 
@@ -413,7 +428,7 @@ fixture 复用与任务 1 相同的真实六资产写法，但放在 `internal/a
 运行：
 
 ```bash
-go test ./internal/cli ./internal/app -run 'ReleaseDecision|发布判定|首次或强制'
+go test ./internal/cli ./internal/app -run 'ReleaseDecision|发布判定|所有模式'
 ```
 
 预期：FAIL，报 `Commands.ReleaseDecision undefined`、未知命令或新解析函数不存在；保留失败输出。
@@ -447,14 +462,18 @@ import (
 
 type ReleaseDecisionOptions struct {
 	CandidateDir string
+	CandidateTag string
 	BaselineDir  string
+	BaselineTag  string
 	Mode         releasecmp.Mode
 }
 
 func ReleaseDecision(options ReleaseDecisionOptions, out io.Writer) error {
 	decision, err := releasecmp.Decide(releasecmp.Input{
 		CandidateDir: options.CandidateDir,
+		CandidateTag: options.CandidateTag,
 		BaselineDir:  options.BaselineDir,
+		BaselineTag:  options.BaselineTag,
 		Mode:         options.Mode,
 	})
 	if err != nil {
@@ -490,7 +509,9 @@ func parseReleaseDecisionOptions(args []string) (ReleaseDecisionOptions, error) 
 	var options ReleaseDecisionOptions
 	var firstRelease, force bool
 	set.StringVar(&options.CandidateDir, "candidate", "", "candidate six-asset directory")
+	set.StringVar(&options.CandidateTag, "candidate-tag", "", "expected candidate installer release tag")
 	set.StringVar(&options.BaselineDir, "baseline", "", "baseline six-asset directory")
+	set.StringVar(&options.BaselineTag, "baseline-tag", "", "expected baseline installer release tag")
 	set.BoolVar(&firstRelease, "first-release", false, "publish when latest is explicitly absent")
 	set.BoolVar(&force, "force", false, "publish a verified candidate without a baseline")
 	if err := parseFlags(set, args); err != nil {
@@ -499,12 +520,21 @@ func parseReleaseDecisionOptions(args []string) (ReleaseDecisionOptions, error) 
 	if options.CandidateDir == "" {
 		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("--candidate is required"))
 	}
+	if options.CandidateTag == "" {
+		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("--candidate-tag is required"))
+	}
 	selected := 0
 	if options.BaselineDir != "" { selected++ }
 	if firstRelease { selected++ }
 	if force { selected++ }
 	if selected != 1 {
 		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("exactly one of --baseline, --first-release, or --force is required"))
+	}
+	if options.BaselineDir != "" && options.BaselineTag == "" {
+		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("--baseline-tag is required with --baseline"))
+	}
+	if options.BaselineDir == "" && options.BaselineTag != "" {
+		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("--baseline-tag requires --baseline"))
 	}
 	switch {
 	case options.BaselineDir != "":
@@ -553,7 +583,7 @@ git commit -m "feat(T2): 接入发布变化判定命令"
 - 修改：`context.md`
 
 **接口**：
-- 消费：`geodata-build release-decision --candidate DIR (--baseline DIR|--first-release|--force)` 的三行 stdout。
+- 消费：`geodata-build release-decision --candidate DIR --candidate-tag TAG (--baseline DIR --baseline-tag TAG|--first-release|--force)` 的三行 stdout。
 - 产出：build job outputs `should_publish`、`reason`、`baseline_release_id`、`baseline_tag`、`baseline_fingerprint`；publish job 以这五项绑定同一基线身份。
 
 - [x] **步骤 1：写失败测试**
@@ -654,10 +684,10 @@ build job 增加五个 outputs，值全部来自有固定 `id: release_decision`
 
 在完整构建与 checksum 验证之后加入 `id: release_decision`。该 step 必须按以下算法实现，所有成功路径最终把 CLI 三行追加到 `$GITHUB_OUTPUT`，并另外写入 baseline ID/tag：
 
-1. `force_publish=true`：直接执行 `go run ./cmd/geodata-build release-decision --candidate publish --force`，ID/tag 输出 `none`。
+1. `force_publish=true`：直接执行 `go run ./cmd/geodata-build release-decision --candidate publish --candidate-tag "$RELEASE_TAG" --force`，ID/tag 输出 `none`。
 2. 非 force：用带 `Authorization: Bearer $GH_TOKEN`、GitHub API version 和 JSON accept header 的 `curl --fail-with-body` 等价请求保存 latest 同一次响应体，同时用 `--write-out '%{http_code}'` 单独取得状态；curl 网络错误必须原样非零退出，不能进入状态分支。
-3. HTTP 404：执行 `--candidate publish --first-release`，ID/tag 输出 `none`。
-4. HTTP 200：从保存的同一 JSON 响应用 `jq -er '.id'` 与 `jq -er '.tag_name'` 取得 ID/tag；`gh release download "$baseline_tag" --dir "$baseline_dir"` 下载该 tag 的全部资产；执行 `--candidate publish --baseline "$baseline_dir"`。
+3. HTTP 404：执行 `--candidate publish --candidate-tag "$RELEASE_TAG" --first-release`，ID/tag 输出 `none`。
+4. HTTP 200：从保存的同一 JSON 响应用 `jq -er '.id'` 与 `jq -er '.tag_name'` 取得 ID/tag；`gh release download "$baseline_tag" --dir "$baseline_dir"` 下载该 tag 的全部资产；执行 `--candidate publish --candidate-tag "$RELEASE_TAG" --baseline "$baseline_dir" --baseline-tag "$baseline_tag"`。
 5. 其他 HTTP 状态：打印 `unexpected latest release status: <status>` 后 exit 1。
 
 不要使用浮动 `releases/latest/download` URL；不要给 `gh release download`、`jq`、checksum 或 CLI 调用加 `|| true`。为避免 `curl --fail-with-body` 把合法 404 当无法分类的进程失败，应采用“传输 exit code”和“HTTP status”分离的写法：先临时关闭 `set -e` 执行 curl，保存 exit code；仅允许 exit code 0 或 HTTP 404 对应的 22 继续进入 case，其他 curl exit code 立即失败。
@@ -676,9 +706,9 @@ publish job 条件改为同时要求成功的 build output 和默认分支：
 
 publish job 在 download-artifact 前增加与 build 相同固定 pin 的 checkout/setup-go；checkout 继续 `persist-credentials: false`。在现有 `Stage, read back, and publish exact Release` 之前新增“Recheck release baseline before write” step，设置 `GH_TOKEN`，并按 `needs.build.outputs.reason` 严格分支：
 
-- `forced`：运行 `release-decision --candidate publish --force` 仅复核候选，不下载旧基线。
+- `forced`：运行 `release-decision --candidate publish --candidate-tag <candidate-tag> --force` 仅复核候选，不下载旧基线。
 - `first-release`：重新查询 latest；只有明确 404 才通过，200 或传输/其他 HTTP 状态均失败。
-- `changed`：重新查询 latest 同一次响应体，要求当前 ID 和 tag 分别精确等于 `needs.build.outputs.baseline_release_id`、`baseline_tag`；按当前 tag 下载全部资产到新临时目录；运行 `release-decision --candidate publish --baseline <dir>`，从输出取 `baseline_fingerprint`，要求精确等于 build output，并要求复核结果仍为 `should_publish=true`、`reason=changed`。
+- `changed`：重新查询 latest 同一次响应体，要求当前 ID 和 tag 分别精确等于 `needs.build.outputs.baseline_release_id`、`baseline_tag`；按当前 tag 下载全部资产到新临时目录；运行 `release-decision --candidate publish --candidate-tag <candidate-tag> --baseline <dir> --baseline-tag <current-tag>`，从输出取 `baseline_fingerprint`，要求精确等于 build output，并要求复核结果仍为 `should_publish=true`、`reason=changed`。
 - 任何其他 reason：exit 1。
 
 该 step 必须位于 `gh release create` 所在 step 前；不要复写 Go 指纹算法。现有 draft trap、六项上传、API 资产集合/target/tag SHA 回读、下载 checksum、公开 latest、公开后 tag SHA 复核全部保留。
@@ -783,15 +813,15 @@ git commit -m "chore(spec): sync_commit 锚定 ${SYNC:0:7}"
 | 仅在有效产物变化时发布 / 任一 dat 发生变化 | `Test任一Dat发生变化` | T1 |
 | 仅在有效产物变化时发布 / 安装器逻辑发生变化 | `Test安装器逻辑发生变化` | T1 |
 | 仅在有效产物变化时发布 / 尚无 latest Release | `Test尚无LatestRelease`、`Test尚无LatestReleaseWorkflow` | T1、T3 |
-| 安装器只忽略发布绑定字段 / 安装器仅 Release tag 不同 | `Test安装器仅ReleaseTag不同` | T1 |
-| 安装器只忽略发布绑定字段 / 安装器发布绑定字段异常 | `Test安装器发布绑定字段异常` | T1 |
+| 安装器只忽略发布绑定字段 / 安装器仅 Release tag 不同 | `Test安装器仅ReleaseTag不同`、`TestRenderedInstallerMatchesComparisonProtocol` | T1 |
+| 安装器只忽略发布绑定字段 / 安装器发布绑定字段异常 | `Test安装器发布绑定字段异常`、`TestReleaseTagMustMatchPayloadContext` | T1 |
 | 手动运行可强制发布已验证候选 / 内容相同但人工强制发布 | `Test内容相同但人工强制发布`、`Test内容相同但人工强制发布Workflow` | T1、T3 |
 | 手动运行可强制发布已验证候选 / 非默认分支强制运行 | `Test非默认分支强制运行` | T3 |
 | 基线错误严格失败 / latest 六资产损坏 | `TestLatest六资产损坏` | T1 |
 | 基线错误严格失败 / latest 查询不是 200 或 404 | `TestLatest查询不是200或404` | T3 |
 | 基线错误严格失败 / latest 查询成功但资产下载失败 | `TestLatest查询成功但资产下载失败` | T3 |
 | 发布判定 CLI 要求恰好一种模式 / 模式缺失或冲突 | `Test发布判定模式缺失或冲突` | T2 |
-| 发布判定 CLI 要求恰好一种模式 / first/force 候选损坏 | `Test首次或强制模式下候选损坏`、`Test首次或强制模式下候选损坏CLI` | T1、T2 |
+| 发布判定 CLI 要求恰好一种模式 / first/force 候选损坏 | `Test所有模式下候选损坏`、`Test所有模式下候选损坏CLI` | T1、T2 |
 | 普通发布复核完整基线身份 / 比较后 latest 被外部替换 | `Test比较后Latest被外部替换` | T3 |
 | Release 资产保持严格六项 / 变化后草稿 Release 六资产回读 | `Test变化后草稿Release六资产回读契约` + T4 远端验收 | T3、T4 |
 | 第一方构建链保持全 Go / 干净环境完成全链路 | T4 clean archive e2e；既有 integration 测试纳入全量门禁 | T3、T4 |

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"clash-rules-srs/internal/passwall"
 	"clash-rules-srs/internal/releasecmp"
 	"clash-rules-srs/internal/verify"
 )
@@ -17,11 +18,7 @@ func Test相同内容重复运行(t *testing.T) {
 	candidate := payload(t, "candidate-tag", "same-site", "same-ip", "logic=v1")
 	baseline := payload(t, "baseline-tag", "same-site", "same-ip", "logic=v1")
 
-	decision, err := releasecmp.Decide(releasecmp.Input{
-		CandidateDir: candidate,
-		BaselineDir:  baseline,
-		Mode:         releasecmp.Compare,
-	})
+	decision, err := releasecmp.Decide(compareInput(candidate, "candidate-tag", baseline, "baseline-tag"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,11 +37,7 @@ func Test任一Dat发生变化(t *testing.T) {
 			baseline := payload(t, "baseline", "same-site", "same-ip", "logic=v1")
 			rewriteMain(t, candidate, name, "changed")
 
-			decision, err := releasecmp.Decide(releasecmp.Input{
-				CandidateDir: candidate,
-				BaselineDir:  baseline,
-				Mode:         releasecmp.Compare,
-			})
+			decision, err := releasecmp.Decide(compareInput(candidate, "candidate", baseline, "baseline"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -58,11 +51,7 @@ func Test任一Dat发生变化(t *testing.T) {
 func Test安装器逻辑发生变化(t *testing.T) {
 	candidate := payload(t, "candidate", "same-site", "same-ip", "logic=v2")
 	baseline := payload(t, "baseline", "same-site", "same-ip", "logic=v1")
-	decision, err := releasecmp.Decide(releasecmp.Input{
-		CandidateDir: candidate,
-		BaselineDir:  baseline,
-		Mode:         releasecmp.Compare,
-	})
+	decision, err := releasecmp.Decide(compareInput(candidate, "candidate", baseline, "baseline"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +95,7 @@ func Test安装器发布绑定字段异常(t *testing.T) {
 
 func Test内容相同但人工强制发布(t *testing.T) {
 	candidate := payload(t, "candidate", "site", "ip", "logic=v1")
-	decision, err := releasecmp.Decide(releasecmp.Input{CandidateDir: candidate, Mode: releasecmp.Force})
+	decision, err := releasecmp.Decide(modeInput(candidate, "candidate", releasecmp.Force))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,11 +126,7 @@ func TestLatest六资产损坏(t *testing.T) {
 			candidate := payload(t, "candidate", "site", "ip", "logic=v1")
 			baseline := payload(t, "baseline", "site", "ip", "logic=v1")
 			mutate(t, baseline)
-			_, err := releasecmp.Decide(releasecmp.Input{
-				CandidateDir: candidate,
-				BaselineDir:  baseline,
-				Mode:         releasecmp.Compare,
-			})
+			_, err := releasecmp.Decide(compareInput(candidate, "candidate", baseline, "baseline"))
 			if err == nil || !strings.Contains(err.Error(), "baseline payload") {
 				t.Fatalf("err=%v", err)
 			}
@@ -149,8 +134,8 @@ func TestLatest六资产损坏(t *testing.T) {
 	}
 }
 
-func Test首次或强制模式下候选损坏(t *testing.T) {
-	for _, mode := range []releasecmp.Mode{releasecmp.FirstRelease, releasecmp.Force} {
+func Test所有模式下候选损坏(t *testing.T) {
+	for _, mode := range []releasecmp.Mode{releasecmp.Compare, releasecmp.FirstRelease, releasecmp.Force} {
 		for _, mutation := range []string{"missing", "extra", "bad checksum", "bad installer"} {
 			t.Run(fmt.Sprintf("mode-%d/%s", mode, mutation), func(t *testing.T) {
 				candidate := payload(t, "candidate", "site", "ip", "logic=v1")
@@ -166,7 +151,12 @@ func Test首次或强制模式下候选损坏(t *testing.T) {
 				case "bad installer":
 					rewriteMain(t, candidate, "install_passwall2_rules.sh", "#!/bin/sh\nlogic=v1\n")
 				}
-				_, err := releasecmp.Decide(releasecmp.Input{CandidateDir: candidate, Mode: mode})
+				input := modeInput(candidate, "candidate", mode)
+				if mode == releasecmp.Compare {
+					input.BaselineDir = payload(t, "baseline", "site", "ip", "logic=v1")
+					input.BaselineTag = "baseline"
+				}
+				_, err := releasecmp.Decide(input)
 				if err == nil || !strings.Contains(err.Error(), "candidate payload") {
 					t.Fatalf("err=%v", err)
 				}
@@ -177,7 +167,7 @@ func Test首次或强制模式下候选损坏(t *testing.T) {
 
 func Test尚无LatestRelease(t *testing.T) {
 	candidate := payload(t, "candidate", "site", "ip", "logic=v1")
-	decision, err := releasecmp.Decide(releasecmp.Input{CandidateDir: candidate, Mode: releasecmp.FirstRelease})
+	decision, err := releasecmp.Decide(modeInput(candidate, "candidate", releasecmp.FirstRelease))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,18 +177,47 @@ func Test尚无LatestRelease(t *testing.T) {
 }
 
 func TestFingerprintFramesNamesAndLengths(t *testing.T) {
-	candidate := payload(t, "candidate", "bb", "aa", "logic=v1")
-	baseline := payload(t, "baseline", "aa", "bb", "logic=v1")
-	decision, err := releasecmp.Decide(releasecmp.Input{
-		CandidateDir: candidate,
-		BaselineDir:  baseline,
-		Mode:         releasecmp.Compare,
-	})
+	candidate := payload(t, "candidate", "a", "bc", "logic=v1")
+	baseline := payload(t, "baseline", "ab", "c", "logic=v1")
+	decision, err := releasecmp.Decide(compareInput(candidate, "candidate", baseline, "baseline"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !decision.ShouldPublish || decision.Reason != "changed" {
 		t.Fatalf("decision=%+v", decision)
+	}
+}
+
+func TestRenderedInstallerMatchesComparisonProtocol(t *testing.T) {
+	candidate := renderedPayload(t, "candidate-tag", "same-site", "same-ip")
+	baseline := renderedPayload(t, "baseline-tag", "same-site", "same-ip")
+	decision, err := releasecmp.Decide(compareInput(candidate, "candidate-tag", baseline, "baseline-tag"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.ShouldPublish || decision.Reason != "unchanged" {
+		t.Fatalf("decision=%+v", decision)
+	}
+}
+
+func TestReleaseTagMustMatchPayloadContext(t *testing.T) {
+	candidate := payload(t, "actual-candidate", "site", "ip", "logic=v1")
+	baseline := payload(t, "actual-baseline", "site", "ip", "logic=v1")
+	for name, test := range map[string]struct {
+		input   releasecmp.Input
+		payload string
+	}{
+		"compare candidate": {compareInput(candidate, "wrong-candidate", baseline, "actual-baseline"), "candidate"},
+		"first candidate":   {releasecmp.Input{CandidateDir: candidate, CandidateTag: "wrong-candidate", Mode: releasecmp.FirstRelease}, "candidate"},
+		"force candidate":   {releasecmp.Input{CandidateDir: candidate, CandidateTag: "wrong-candidate", Mode: releasecmp.Force}, "candidate"},
+		"compare baseline":  {compareInput(candidate, "actual-candidate", baseline, "wrong-baseline"), "baseline"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := releasecmp.Decide(test.input)
+			if err == nil || !strings.Contains(err.Error(), test.payload+" payload") || !strings.Contains(err.Error(), "release tag mismatch") {
+				t.Fatalf("err=%v", err)
+			}
+		})
 	}
 }
 
@@ -209,6 +228,39 @@ func payload(t *testing.T, tag, geosite, geoip, logic string) string {
 	rewriteMain(t, dir, "geoip.dat", geoip)
 	rewriteMain(t, dir, "install_passwall2_rules.sh", string(installer(tag, logic)))
 	return dir
+}
+
+func renderedPayload(t *testing.T, tag, geosite, geoip string) string {
+	t.Helper()
+	script, err := passwall.RenderInstaller(passwall.InstallOptions{
+		Repo:       "flame/clash-rules-srs",
+		ReleaseTag: tag,
+		GeoSiteSHA: strings.Repeat("a", 64),
+		GeoIPSHA:   strings.Repeat("b", 64),
+		Fragment:   []byte("config shunt_rules 'crs_test'\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	rewriteMain(t, dir, "geosite.dat", geosite)
+	rewriteMain(t, dir, "geoip.dat", geoip)
+	rewriteMain(t, dir, "install_passwall2_rules.sh", string(script))
+	return dir
+}
+
+func compareInput(candidate, candidateTag, baseline, baselineTag string) releasecmp.Input {
+	return releasecmp.Input{
+		CandidateDir: candidate,
+		CandidateTag: candidateTag,
+		BaselineDir:  baseline,
+		BaselineTag:  baselineTag,
+		Mode:         releasecmp.Compare,
+	}
+}
+
+func modeInput(candidate, candidateTag string, mode releasecmp.Mode) releasecmp.Input {
+	return releasecmp.Input{CandidateDir: candidate, CandidateTag: candidateTag, Mode: mode}
 }
 
 func installer(tag, logic string) []byte {

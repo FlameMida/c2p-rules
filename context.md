@@ -64,9 +64,9 @@ go test -tags=integration ./internal/app
 go run ./cmd/geodata-build build --repo OWNER/REPO --release-tag local-test
 go run ./cmd/geodata-build verify --dat publish/geosite.dat --manifest build/expected_tags.json --side geosite
 go run ./cmd/geodata-build verify --dat publish/geoip.dat --manifest build/expected_tags.json --side geoip --forbid
-go run ./cmd/geodata-build release-decision --candidate publish --baseline /path/to/latest-assets
-go run ./cmd/geodata-build release-decision --candidate publish --first-release
-go run ./cmd/geodata-build release-decision --candidate publish --force
+go run ./cmd/geodata-build release-decision --candidate publish --candidate-tag candidate-tag --baseline /path/to/latest-assets --baseline-tag latest-tag
+go run ./cmd/geodata-build release-decision --candidate publish --candidate-tag candidate-tag --first-release
+go run ./cmd/geodata-build release-decision --candidate publish --candidate-tag candidate-tag --force
 ```
 
 source 或 custom 变化后必须重跑普通测试与 integration。分流变化只编辑 `config/passwall2-groups.yaml`；构建会在生成安装器前逐项探针其引用。
@@ -75,7 +75,7 @@ source 或 custom 变化后必须重跑普通测试与 integration。分流变�
 
 CI 每日完整构建，不因可能无变化而裁剪上游下载、编译、探针或候选验证。build job 权限为 `contents: read` 且 checkout 不持久化凭据，顺序为 Go test、bootstrap、integration、带真实 repository/tag 的 build、三份 checksum 校验，再通过 `release-decision` 比较规范化三主资产。无有效产物变化时不上传 Artifact，publish job 跳过。
 
-只有 latest API 明确 404 才进入首次发布；API、鉴权、网络、下载或基线完整性错误全部严格失败。默认分支的手动 `force_publish=true` 可跳过旧基线比较，但不能跳过候选构建、六资产验证、Release 回读或默认分支限制。普通 changed 发布在任何远端写入前重新查询并复核同一基线的 ID、tag 和载荷指纹。
+只有 latest API 明确 404 才进入首次发布；API、鉴权、网络、下载、基线完整性或安装器 tag 与发布上下文不一致全部严格失败。默认分支的手动 `force_publish=true` 可跳过旧基线比较，但不能跳过候选构建、六资产验证、Release 回读或默认分支限制。普通 changed 发布在任何远端写入前重新查询并复核同一基线的 ID、tag 和载荷指纹。
 
 publish job 独立使用 `contents: write`，精确比较六个文件，创建同名 draft Release，上传后通过 API 回读资产名、target commit 和 tag SHA，再公开并标记 latest。
 

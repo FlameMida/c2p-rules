@@ -32,13 +32,13 @@ func TestCommandUsageErrorsReturnExitTwo(t *testing.T) {
 
 func Test发布判定模式缺失或冲突(t *testing.T) {
 	for name, args := range map[string][]string{
-		"missing":                     {"--candidate", "publish"},
-		"baseline and first":          {"--candidate", "publish", "--baseline", "old", "--first-release"},
-		"baseline and force":          {"--candidate", "publish", "--baseline", "old", "--force"},
-		"first and force":             {"--candidate", "publish", "--first-release", "--force"},
-		"all three":                   {"--candidate", "publish", "--baseline", "old", "--first-release", "--force"},
-		"unknown flag":                {"--candidate", "publish", "--force", "--unknown"},
-		"unexpected positional value": {"--candidate", "publish", "--force", "extra"},
+		"missing":                     {"--candidate", "publish", "--candidate-tag", "candidate"},
+		"baseline and first":          {"--candidate", "publish", "--candidate-tag", "candidate", "--baseline", "old", "--baseline-tag", "baseline", "--first-release"},
+		"baseline and force":          {"--candidate", "publish", "--candidate-tag", "candidate", "--baseline", "old", "--baseline-tag", "baseline", "--force"},
+		"first and force":             {"--candidate", "publish", "--candidate-tag", "candidate", "--first-release", "--force"},
+		"all three":                   {"--candidate", "publish", "--candidate-tag", "candidate", "--baseline", "old", "--baseline-tag", "baseline", "--first-release", "--force"},
+		"unknown flag":                {"--candidate", "publish", "--candidate-tag", "candidate", "--force", "--unknown"},
+		"unexpected positional value": {"--candidate", "publish", "--candidate-tag", "candidate", "--force", "extra"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			code, stdout, stderr := runReleaseDecision(args)
@@ -47,6 +47,22 @@ func Test发布判定模式缺失或冲突(t *testing.T) {
 			}
 			if name != "unknown flag" && name != "unexpected positional value" && !strings.Contains(stderr, "exactly one") {
 				t.Fatalf("stderr=%q", stderr)
+			}
+		})
+	}
+}
+
+func TestReleaseDecisionRequiresContextTags(t *testing.T) {
+	for name, args := range map[string][]string{
+		"compare candidate tag": {"--candidate", "publish", "--baseline", "old", "--baseline-tag", "baseline"},
+		"compare baseline tag":  {"--candidate", "publish", "--candidate-tag", "candidate", "--baseline", "old"},
+		"first candidate tag":   {"--candidate", "publish", "--first-release"},
+		"force candidate tag":   {"--candidate", "publish", "--force"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			code, stdout, stderr := runReleaseDecision(args)
+			if code != 2 || stdout != "" || !strings.Contains(stderr, "tag is required") {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 			}
 		})
 	}
@@ -70,7 +86,12 @@ func TestReleaseDecisionRequiresCandidate(t *testing.T) {
 func TestReleaseDecisionPrintsStableOutput(t *testing.T) {
 	candidate := releasePayload(t, "candidate", "same-site", "same-ip")
 	baseline := releasePayload(t, "baseline", "same-site", "same-ip")
-	code, stdout, stderr := runReleaseDecision([]string{"--candidate", candidate, "--baseline", baseline})
+	code, stdout, stderr := runReleaseDecision([]string{
+		"--candidate", candidate,
+		"--candidate-tag", "candidate",
+		"--baseline", baseline,
+		"--baseline-tag", "baseline",
+	})
 	if code != 0 || stderr != "" {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -80,11 +101,35 @@ func TestReleaseDecisionPrintsStableOutput(t *testing.T) {
 	}
 }
 
-func Test首次或强制模式下候选损坏CLI(t *testing.T) {
-	for _, mode := range []string{"--first-release", "--force"} {
-		t.Run(mode, func(t *testing.T) {
-			code, stdout, stderr := runReleaseDecision([]string{"--candidate", t.TempDir(), mode})
+func Test所有模式下候选损坏CLI(t *testing.T) {
+	baseline := releasePayload(t, "baseline", "site", "ip")
+	for name, mode := range map[string][]string{
+		"compare": {"--baseline", baseline, "--baseline-tag", "baseline"},
+		"first":   {"--first-release"},
+		"force":   {"--force"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			args := []string{"--candidate", t.TempDir(), "--candidate-tag", "candidate"}
+			args = append(args, mode...)
+			code, stdout, stderr := runReleaseDecision(args)
 			if code != 1 || stdout != "" || !strings.Contains(stderr, "candidate payload") {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+			}
+		})
+	}
+}
+
+func TestFirstAndForcePrintNoneBaselineFingerprint(t *testing.T) {
+	candidate := releasePayload(t, "candidate", "site", "ip")
+	for reason, mode := range map[string]string{"first-release": "--first-release", "forced": "--force"} {
+		t.Run(reason, func(t *testing.T) {
+			code, stdout, stderr := runReleaseDecision([]string{
+				"--candidate", candidate,
+				"--candidate-tag", "candidate",
+				mode,
+			})
+			want := "should_publish=true\nreason=" + reason + "\nbaseline_fingerprint=none\n"
+			if code != 0 || stdout != want || stderr != "" {
 				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 			}
 		})

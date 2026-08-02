@@ -55,7 +55,9 @@ func parseReleaseDecisionOptions(args []string) (ReleaseDecisionOptions, error) 
 	var options ReleaseDecisionOptions
 	var firstRelease, force bool
 	set.StringVar(&options.CandidateDir, "candidate", "", "candidate six-asset directory")
+	set.StringVar(&options.CandidateTag, "candidate-tag", "", "expected candidate installer release tag")
 	set.StringVar(&options.BaselineDir, "baseline", "", "baseline six-asset directory")
+	set.StringVar(&options.BaselineTag, "baseline-tag", "", "expected baseline installer release tag")
 	set.BoolVar(&firstRelease, "first-release", false, "publish when latest is explicitly absent")
 	set.BoolVar(&force, "force", false, "publish a verified candidate without a baseline")
 	if err := parseFlags(set, args); err != nil {
@@ -63,6 +65,9 @@ func parseReleaseDecisionOptions(args []string) (ReleaseDecisionOptions, error) 
 	}
 	if options.CandidateDir == "" {
 		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("--candidate is required"))
+	}
+	if options.CandidateTag == "" {
+		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("--candidate-tag is required"))
 	}
 	selected := 0
 	if options.BaselineDir != "" {
@@ -76,6 +81,12 @@ func parseReleaseDecisionOptions(args []string) (ReleaseDecisionOptions, error) 
 	}
 	if selected != 1 {
 		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("exactly one of --baseline, --first-release, or --force is required"))
+	}
+	if options.BaselineDir != "" && options.BaselineTag == "" {
+		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("--baseline-tag is required with --baseline"))
+	}
+	if options.BaselineDir == "" && options.BaselineTag != "" {
+		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("--baseline-tag requires --baseline"))
 	}
 	switch {
 	case options.BaselineDir != "":
