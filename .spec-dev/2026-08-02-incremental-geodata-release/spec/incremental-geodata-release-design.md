@@ -181,6 +181,8 @@ spec_dev:
 
 #### Scenario: 变化后草稿 Release 六资产回读
 
+> **DEFERRED（2026-08-03，仅真实 GitHub 写入证据）**：workflow、静态契约与发布前严格回读门禁已交付；当前 checkout 无 remote，且本次未获授权向指定仓库创建测试 Release，待提供可写测试仓库后补 workflow run URL、Release API JSON 与 checksum 日志。
+
 - **GIVEN** `should_publish=true` 且默认分支上传了一个有效候选 Artifact
 - **WHEN** publish job 创建并回读草稿 Release
 - **THEN** 资产名精确等于六项，目标 commit、tag SHA 和三份 checksum 全部通过后才公开并切换 latest
@@ -196,6 +198,8 @@ spec_dev:
 - **THEN** 六个候选资产全部生成并通过 required/forbidden tag、引用、checksum 与资产集合验证
 
 #### Scenario: 干净 runner 完成无变化判定
+
+> **DEFERRED（2026-08-03，仅 GitHub-hosted runner 证据）**：本地 clean archive 的 bootstrap、全量测试与真实工具 integration 已通过；当前无可触发并读取日志的远端 runner，待具备授权后补连续两次运行及 Artifact/tag/Release/latest 不变证据。
 
 - **GIVEN** GitHub-hosted Ubuntu 只提供项目现有 Go、git、GitHub CLI 与标准系统工具
 - **WHEN** 完成 bootstrap、构建、基线下载和 `release-decision`

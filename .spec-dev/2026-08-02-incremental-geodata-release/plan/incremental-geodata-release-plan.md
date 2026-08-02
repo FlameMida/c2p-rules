@@ -744,6 +744,8 @@ git commit -m "feat(T3): 仅在有效产物变化时发布"
 
 ### 任务 4：验收（acceptance-qa）
 
+> **完成记录（2026-08-03）**：验收报告见 `acceptance/acceptance-report.md`，本地命令证据见 `acceptance/local-evidence.md`。14 个 Scenario 通过，真实 Release 与 GitHub-hosted 连续运行按授权边界 DEFERRED，clean archive 完整 build 因外部 GitHub raw 超时保持 unverified。
+
 > 本任务由 executing-plans 收尾审查阶段触发 acceptance-qa 按下表执行，不参与逐任务连续执行；报告与证据落盘特性目录 `acceptance/` 子目录。没有仓库 Release 写权限或 GitHub-hosted runner 时必须如实记录 `DEFERRED` 与缺少的授权，不得用本地模拟标成通过。
 
 | Scenario / 检查项 | 维度 | 执行方式 | 目标 | 阈值/预期 | 验收证据 |

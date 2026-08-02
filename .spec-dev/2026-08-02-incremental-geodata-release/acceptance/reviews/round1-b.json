@@ -1,0 +1,32 @@
+{
+  "findings": [
+    {
+      "file": "internal/releasecmp/releasecmp_test.go",
+      "line": 205,
+      "severity": "中",
+      "confidence": 96,
+      "category": "质量",
+      "description": "比较器的全部成功路径 fixture 都通过本文件的 installer helper 手写一个三行脚本，没有任何测试把 passwall.RenderInstaller 或完整 Build 实际生成的 install_passwall2_rules.sh 交给 NormalizeInstaller/Decide。RELEASE_TAG 行格式是模板与比较器之间的生产协议；当前两侧测试各自全绿也不能证明这条协议兼容，模板的缩进或赋值格式一旦调整，普通构建测试和比较器单测仍可能全绿，而每日 CI 会在 release-decision 阶段全部失败。",
+      "fix_suggestion": "至少增加一条跨包契约测试：用 passwall.RenderInstaller 生成候选与基线安装器（只改变合法 tag），写出 checksum 后断言 Decide 返回 unchanged；更完整的做法是在 app 集成测试中对一次真实 Build 的 publish 目录执行 Force/FirstRelease 判定。保留现有手写 fixture 用于精确构造非法语法。"
+    },
+    {
+      "file": "internal/releasecmp/releasecmp_test.go",
+      "line": 189,
+      "severity": "低",
+      "confidence": 100,
+      "category": "质量",
+      "description": "TestFingerprintFramesNamesAndLengths 使用 bb+aa 与 aa+bb；即使实现完全删除名称和长度帧、只按固定顺序裸拼接内容，两边仍分别是 bbaa 与 aabb，因此测试照样返回 changed。该测试没有证明其名称声明的无歧义分帧契约，无法阻止把 hashFrame 退化为裸拼接的回归。",
+      "fix_suggestion": "改用裸拼接会碰撞的边界，例如候选 geosite=a、geoip=bc，基线 geosite=ab、geoip=c，保持规范化安装器相同并断言仍为 changed；如需同时守卫名称帧，可在包内测试 hashFrame 的固定向量或为完整指纹增加经审核的 golden digest。"
+    },
+    {
+      "file": "internal/app/workflow_contract_test.go",
+      "line": 69,
+      "severity": "低",
+      "confidence": 95,
+      "category": "质量",
+      "description": "尚无 latest 的测试只检查第一个字符串 404) 出现在 --first-release 之前；把 --first-release 移到 case 之后无条件执行，或在 200 分支也执行，仍会满足该顺序并通过。因此测试没有证明 spec 要求的“只有明确 404 才首次发布”，容易给 workflow shell 重构提供误绿。",
+      "fix_suggestion": "至少提取 case \"$latest_status\" 的 404 分支并断言 --first-release 只在该分支出现、全脚本计数恰为 1；更可靠的是把 step 脚本放入可测试的受控 shell harness，用 mock curl/gh/go 分别驱动 200、404、403 和传输失败并断言调用模式与退出码。"
+    }
+  ],
+  "coverage_note": "已只读审查 git diff 804e9df...HEAD 的全部 Go、workflow、文档、自定义规则与契约测试，并逐项对照 incremental-geodata-release active spec 和实施计划；聚焦维度 B 的代码质量、DRY、命名、复杂度、可维护性与测试覆盖。复跑 go test ./...、go vet ./...、go test -race ./internal/releasecmp ./internal/verify ./internal/cli 和 git diff --check 均通过；releasecmp 语句覆盖率为 80.3%。未执行真实 GitHub-hosted workflow、GitHub Release 写入或 OpenWrt 设备验收，未把这些边界计为已验证。"
+}

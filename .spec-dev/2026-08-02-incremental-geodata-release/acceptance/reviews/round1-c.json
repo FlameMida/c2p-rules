@@ -1,0 +1,4 @@
+{
+  "findings": [],
+  "coverage_note": "已审查 804e9df...HEAD 中的 Go 包边界与既有模式复用、CLI/API 和错误语义、严格六资产与安装器规范化契约，以及 GitHub Actions 的只读构建、仅默认分支写发布、条件 Artifact、latest 200/404 分类和发布前 ID/tag/指纹复核；未发现置信度不低于 80 的问题。另已通过 actionlint、go test ./...、go vet ./... 与 git diff --check。"
+}
