@@ -10,6 +10,7 @@ import (
 	"clash-rules-srs/internal/cli"
 	"clash-rules-srs/internal/fetch"
 	"clash-rules-srs/internal/model"
+	"clash-rules-srs/internal/releasecmp"
 	"clash-rules-srs/internal/tools"
 )
 
@@ -39,7 +40,56 @@ func Commands() cli.Commands {
 			runner := &tools.Runner{BinRoot: filepath.Join(".cache", "bin")}
 			return Verify(ctx, options, runner)
 		},
+		ReleaseDecision: func(_ context.Context, args []string, out, _ io.Writer) error {
+			options, err := parseReleaseDecisionOptions(args)
+			if err != nil {
+				return err
+			}
+			return ReleaseDecision(options, out)
+		},
 	}
+}
+
+func parseReleaseDecisionOptions(args []string) (ReleaseDecisionOptions, error) {
+	set := newFlagSet("release-decision")
+	var options ReleaseDecisionOptions
+	var firstRelease, force bool
+	set.StringVar(&options.CandidateDir, "candidate", "", "candidate six-asset directory")
+	set.StringVar(&options.BaselineDir, "baseline", "", "baseline six-asset directory")
+	set.BoolVar(&firstRelease, "first-release", false, "publish when latest is explicitly absent")
+	set.BoolVar(&force, "force", false, "publish a verified candidate without a baseline")
+	if err := parseFlags(set, args); err != nil {
+		return ReleaseDecisionOptions{}, err
+	}
+	if options.CandidateDir == "" {
+		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("--candidate is required"))
+	}
+	selected := 0
+	if options.BaselineDir != "" {
+		selected++
+	}
+	if firstRelease {
+		selected++
+	}
+	if force {
+		selected++
+	}
+	if selected != 1 {
+		return ReleaseDecisionOptions{}, usageError(fmt.Errorf("exactly one of --baseline, --first-release, or --force is required"))
+	}
+	switch {
+	case options.BaselineDir != "":
+		options.Mode = releasecmp.Compare
+	case firstRelease:
+		options.Mode = releasecmp.FirstRelease
+	case force:
+		options.Mode = releasecmp.Force
+	}
+	options.CandidateDir = filepath.Clean(options.CandidateDir)
+	if options.BaselineDir != "" {
+		options.BaselineDir = filepath.Clean(options.BaselineDir)
+	}
+	return options, nil
 }
 
 func parseBootstrapOptions(args []string) (BootstrapOptions, error) {

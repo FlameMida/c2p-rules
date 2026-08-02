@@ -10,9 +10,10 @@ import (
 type Command func(context.Context, []string, io.Writer, io.Writer) error
 
 type Commands struct {
-	Bootstrap Command
-	Build     Command
-	Verify    Command
+	Bootstrap       Command
+	Build           Command
+	Verify          Command
+	ReleaseDecision Command
 }
 
 type UsageError struct {
@@ -29,7 +30,7 @@ func (e *UsageError) Unwrap() error {
 
 func Run(ctx context.Context, args []string, out, errOut io.Writer, commands Commands) int {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
-		fmt.Fprintln(out, "usage: geodata-build <bootstrap|build|verify> [options]")
+		fmt.Fprintln(out, "usage: geodata-build <bootstrap|build|verify|release-decision> [options]")
 		return 0
 	}
 
@@ -41,6 +42,8 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer, commands Com
 		command = commands.Build
 	case "verify":
 		command = commands.Verify
+	case "release-decision":
+		command = commands.ReleaseDecision
 	default:
 		fmt.Fprintf(errOut, "ERROR: unknown command: %s\n", args[0])
 		return 2

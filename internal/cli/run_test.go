@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"testing"
 
 	"clash-rules-srs/internal/cli"
@@ -15,6 +16,28 @@ func TestHelpIsSuccessful(t *testing.T) {
 	code := cli.Run(context.Background(), []string{"--help"}, &out, &errOut, cli.Commands{})
 	if code != 0 || out.String() == "" || errOut.Len() != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte("bootstrap|build|verify|release-decision")) {
+		t.Fatalf("help=%q", out.String())
+	}
+}
+
+func TestReleaseDecisionCommandIsDispatched(t *testing.T) {
+	want := []string{"--candidate", "publish", "--force"}
+	called := false
+	command := func(_ context.Context, args []string, _, _ io.Writer) error {
+		called = true
+		if !slices.Equal(args, want) {
+			t.Fatalf("args=%v", args)
+		}
+		return nil
+	}
+	var out, errOut bytes.Buffer
+	code := cli.Run(context.Background(), append([]string{"release-decision"}, want...), &out, &errOut, cli.Commands{
+		ReleaseDecision: command,
+	})
+	if code != 0 || !called || out.Len() != 0 || errOut.Len() != 0 {
+		t.Fatalf("code=%d called=%t stdout=%q stderr=%q", code, called, out.String(), errOut.String())
 	}
 }
 
