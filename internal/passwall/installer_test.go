@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -237,6 +238,26 @@ func TestRenderInstallerValidatesInputsAndEmbedsOnlyBase64Fragment(t *testing.T)
 		if _, err := passwall.RenderInstaller(option); err == nil {
 			t.Fatalf("accepted invalid options: %#v", option)
 		}
+	}
+}
+
+func TestValidateReleaseTagMatchesRendererContract(t *testing.T) {
+	valid := []string{"release-1_A.b", "a", strings.Repeat("a", 128)}
+	invalid := []string{"", "bad tag", "-leading", strings.Repeat("a", 129)}
+	for _, tag := range append(valid, invalid...) {
+		t.Run(tag, func(t *testing.T) {
+			validateErr := passwall.ValidateReleaseTag(tag)
+			options := validInstallOptions()
+			options.ReleaseTag = tag
+			_, renderErr := passwall.RenderInstaller(options)
+			if (validateErr == nil) != (renderErr == nil) {
+				t.Fatalf("tag=%q validate=%v render=%v", tag, validateErr, renderErr)
+			}
+			wantValid := len(tag) > 0 && !slices.Contains(invalid, tag)
+			if wantValid != (validateErr == nil) {
+				t.Fatalf("tag=%q err=%v", tag, validateErr)
+			}
+		})
 	}
 }
 

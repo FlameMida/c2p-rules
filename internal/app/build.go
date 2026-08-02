@@ -66,15 +66,6 @@ type namedStage struct {
 	run  buildStage
 }
 
-var releaseAssets = []string{
-	"geoip.dat",
-	"geoip.dat.sha256sum",
-	"geosite.dat",
-	"geosite.dat.sha256sum",
-	"install_passwall2_rules.sh",
-	"install_passwall2_rules.sh.sha256sum",
-}
-
 func Build(ctx context.Context, options BuildOptions, dependencies Dependencies) (err error) {
 	if dependencies.Begin == nil {
 		return fmt.Errorf("begin staging: dependency is nil")

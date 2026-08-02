@@ -35,7 +35,7 @@ func TestBuildEmitsAndProbesEveryOutput(t *testing.T) {
 	if slices.Contains(fixture.required.GeoSite, "loyalsoldier-google") {
 		t.Fatalf("legacy tag in manifest: %#v", fixture.required)
 	}
-	if err := verify.Assets(filepath.Join(fixture.root, "publish"), releaseAssets); err != nil {
+	if err := verify.Assets(filepath.Join(fixture.root, "publish"), verify.ReleaseAssets()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -265,7 +265,7 @@ func (f *buildFixture) dependencies() Dependencies {
 			return nil
 		}),
 		VerifySixAssets: stage("verify six assets", func(state *buildState) error {
-			return verify.Assets(state.Tx.Layout().Publish, releaseAssets)
+			return verify.Assets(state.Tx.Layout().Publish, verify.ReleaseAssets())
 		}),
 	}
 }

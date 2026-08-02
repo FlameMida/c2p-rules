@@ -3,11 +3,31 @@ package verify_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"clash-rules-srs/internal/verify"
 )
+
+func TestReleaseAssetsReturnsIndependentExactSixNames(t *testing.T) {
+	want := []string{
+		"geoip.dat",
+		"geoip.dat.sha256sum",
+		"geosite.dat",
+		"geosite.dat.sha256sum",
+		"install_passwall2_rules.sh",
+		"install_passwall2_rules.sh.sha256sum",
+	}
+	first := verify.ReleaseAssets()
+	if !slices.Equal(first, want) {
+		t.Fatalf("assets=%v", first)
+	}
+	first[0] = "mutated"
+	if got := verify.ReleaseAssets(); !slices.Equal(got, want) {
+		t.Fatalf("shared mutable assets=%v", got)
+	}
+}
 
 var sixAssets = []string{
 	"geoip.dat",

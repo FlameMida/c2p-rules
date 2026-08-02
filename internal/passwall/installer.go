@@ -40,8 +40,8 @@ func RenderInstaller(options InstallOptions) ([]byte, error) {
 	if !repositoryPattern.MatchString(options.Repo) || strings.EqualFold(options.Repo, "owner/repo") {
 		return nil, fmt.Errorf("invalid or placeholder repository %q", options.Repo)
 	}
-	if !releaseTagPattern.MatchString(options.ReleaseTag) {
-		return nil, fmt.Errorf("invalid release tag %q", options.ReleaseTag)
+	if err := ValidateReleaseTag(options.ReleaseTag); err != nil {
+		return nil, err
 	}
 	if !sha256Pattern.MatchString(options.GeoSiteSHA) {
 		return nil, fmt.Errorf("invalid geosite SHA-256")
@@ -73,4 +73,11 @@ func RenderInstaller(options InstallOptions) ([]byte, error) {
 		return nil, fmt.Errorf("render installer template: %w", err)
 	}
 	return output.Bytes(), nil
+}
+
+func ValidateReleaseTag(tag string) error {
+	if !releaseTagPattern.MatchString(tag) {
+		return fmt.Errorf("invalid release tag %q", tag)
+	}
+	return nil
 }

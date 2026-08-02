@@ -235,7 +235,7 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			return err
 		},
 		VerifySixAssets: func(_ context.Context, state *buildState) error {
-			return verify.Assets(state.Tx.Layout().Publish, releaseAssets)
+			return verify.Assets(state.Tx.Layout().Publish, verify.ReleaseAssets())
 		},
 	}
 }

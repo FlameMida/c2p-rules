@@ -13,6 +13,21 @@ import (
 	"clash-rules-srs/internal/fileutil"
 )
 
+var releaseAssetNames = [...]string{
+	"geoip.dat",
+	"geoip.dat.sha256sum",
+	"geosite.dat",
+	"geosite.dat.sha256sum",
+	"install_passwall2_rules.sh",
+	"install_passwall2_rules.sh.sha256sum",
+}
+
+func ReleaseAssets() []string {
+	assets := make([]string, len(releaseAssetNames))
+	copy(assets, releaseAssetNames[:])
+	return assets
+}
+
 func WriteSHA256(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
