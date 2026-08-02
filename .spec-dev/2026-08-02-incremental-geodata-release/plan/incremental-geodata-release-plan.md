@@ -45,13 +45,13 @@
 
 ### 任务 0：建立隔离工作区
 
-- [ ] **步骤 1：检测已有隔离**
+- [x] **步骤 1：检测已有隔离**
 
 运行：`git rev-parse --git-dir` 与 `git rev-parse --git-common-dir`
 两者不同、且 `git rev-parse --show-superproject-working-tree` 无输出（排除 submodule）
 → 已在隔离工作区，跳过本任务。
 
-- [ ] **步骤 2：建立 worktree**
+- [x] **步骤 2：建立 worktree**
 
 有原生 worktree 工具或 using-git-worktrees skill 时优先使用（Codex 无原生 worktree 工具，直接走下面的手工路径）；否则手工降级：
 确认 `.worktrees/` 已被忽略（`git check-ignore -q .worktrees`，未忽略先加入 `.gitignore` 并只提交该忽略规则），然后运行：
@@ -63,7 +63,7 @@ cd .worktrees/plan-2026-08-02-incremental-geodata-release
 
 worktree 从已提交的当前 `HEAD` 建立，不携带主工作区之后可能出现的未提交改动。
 
-- [ ] **步骤 3：安装依赖并验证基线**
+- [x] **步骤 3：安装依赖并验证基线**
 
 运行：
 
@@ -92,7 +92,7 @@ go vet ./...
 - 消费：`verify.Assets(directory string, expected []string) error`、`verify.WriteSHA256(path string) (string, error)`。
 - 产出：`verify.ReleaseAssets() []string`、`passwall.ValidateReleaseTag(tag string) error`、`releasecmp.Mode`（`Compare`/`FirstRelease`/`Force`）、`releasecmp.Input`、`releasecmp.Decision`、`releasecmp.Decide(Input) (Decision, error)`、`releasecmp.NormalizeInstaller([]byte) ([]byte, error)`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 先在 `internal/verify/assets_test.go` 增加一个防止调用方篡改全局契约的测试：
 
@@ -134,7 +134,7 @@ func Test尚无LatestRelease(t *testing.T)              // FirstRelease 有效�
 
 最后修改 `internal/app/build_test.go`，让现有构建 fixture 用 `verify.ReleaseAssets()` 验证；测试应先因 `releaseAssets` 删除目标尚未实施或新 API 不存在而无法编译。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：
 
@@ -144,7 +144,7 @@ go test ./internal/verify ./internal/passwall ./internal/releasecmp ./internal/a
 
 预期：FAIL；首个失败为 `undefined: verify.ReleaseAssets`、`undefined: passwall.ValidateReleaseTag` 或 `internal/releasecmp` 尚无 Go 文件。保留失败输出作为 TDD 证据。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 在 `internal/verify/assets.go` 把私有数组集中为以下接口；每次返回副本：
 
@@ -340,7 +340,7 @@ func hashFrame(digest hash.Hash, name string, size int64, source io.Reader) erro
 
 删除 `internal/app/build.go` 的私有 `releaseAssets`，将 `internal/app/deps.go`、`internal/app/build_test.go` 所有调用替换为 `verify.ReleaseAssets()`。用 `gofmt` 格式化全部 Go 文件。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：
 
@@ -352,7 +352,7 @@ go vet ./internal/verify ./internal/passwall ./internal/releasecmp ./internal/ap
 
 预期：全部 PASS/exit 0；race 不得报告共享资产切片或并发读问题。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/verify/assets.go internal/verify/assets_test.go \
