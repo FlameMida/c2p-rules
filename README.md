@@ -75,6 +75,16 @@ go run ./cmd/geodata-build verify --dat publish/geoip.dat --manifest build/expec
 go run ./cmd/geodata-build verify --dat publish/geoip.dat --manifest build/expected_tags.json --side geoip --forbid
 ```
 
+本地已有候选六资产时，可使用同一 Go CLI 复现发布判定：
+
+```bash
+go run ./cmd/geodata-build release-decision --candidate publish --baseline /path/to/latest-assets
+go run ./cmd/geodata-build release-decision --candidate publish --first-release
+go run ./cmd/geodata-build release-decision --candidate publish --force
+```
+
+三个模式必须恰选一种，并且都会先严格验证候选六资产。成功输出固定为 `should_publish`、`reason`、`baseline_fingerprint` 三行；参数形状错误返回 2，资产或完整性错误返回 1。
+
 ## 安装到 PassWall2
 
 下载同一不可变 Release tag 中的脚本和校验文件，先校验再执行：
@@ -90,6 +100,10 @@ sh install_passwall2_rules.sh
 
 ## CI 与发布边界
 
-`.github/workflows/build.yml` 的只读 build job 运行 Go 单元测试、固定工具 bootstrap、真实工具集成测试、完整构建及三份 checksum 校验。独立 publish job 才获得 `contents: write`，创建与构建注入相同的不可变 tag，上传并通过 GitHub API 回读六资产和 target commit，之后才公开并切换 `latest`。
+`.github/workflows/build.yml` 每日完整构建：只读 build job 仍运行 Go 单元测试、固定工具 bootstrap、真实工具集成测试、完整构建及三份 checksum 校验。随后把候选的规范化三主资产与可信 latest 比较；没有有效产物变化（内容无变化）时成功结束，不上传 Artifact，也不创建 tag 或 Release。
+
+只有 GitHub latest API 明确 404 才按首次发布处理；查询、鉴权、下载失败或不可信六资产会严格失败。默认分支可手动设置 `force_publish=true` 修复不可信基线，但仍须完成候选构建、checksum、六资产验证和发布回读，非默认分支永不发布。普通 changed 发布在远端写入前重新下载基线并复核 Release ID、tag 和载荷指纹。
+
+独立 publish job 才获得 `contents: write`，创建与构建注入相同的不可变 tag，上传并通过 GitHub API 回读六资产和 target commit，之后才公开并切换 `latest`。
 
 本项目不发布 `.srs`，不修改 PassWall2 源码，也不承诺无断流热更新。仓库/Release 的首次线上创建需要仓库所有者另行授权；示例中的 `OWNER/REPO` 不是可直接使用的公开地址。

@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
+    inputs:
+      force_publish:
+        description: Publish a fully verified candidate without comparing latest
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -20,6 +26,12 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.release_decision.outputs.should_publish }}
+      reason: ${{ steps.release_decision.outputs.reason }}
+      baseline_release_id: ${{ steps.release_decision.outputs.baseline_release_id }}
+      baseline_tag: ${{ steps.release_decision.outputs.baseline_tag }}
+      baseline_fingerprint: ${{ steps.release_decision.outputs.baseline_fingerprint }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -55,7 +67,75 @@ jobs:
           sha256sum -c geosite.dat.sha256sum
           sha256sum -c install_passwall2_rules.sh.sha256sum
 
+      - name: Resolve release decision
+        id: release_decision
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.force_publish || false }}
+        run: |
+          set -euo pipefail
+          decision_file=$(mktemp)
+          baseline_release_id=none
+          baseline_tag=none
+
+          if [ "$FORCE_PUBLISH" = "true" ]; then
+            go run ./cmd/geodata-build release-decision \
+              --candidate publish \
+              --force > "$decision_file"
+          else
+            latest_response=$(mktemp)
+            set +e
+            latest_status=$(curl \
+              --silent \
+              --show-error \
+              --location \
+              --fail-with-body \
+              --output "$latest_response" \
+              --write-out '%{http_code}' \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest")
+            curl_status=$?
+            set -e
+            if [ "$curl_status" -ne 0 ]; then
+              if [ "$curl_status" -ne 22 ] || [ "$latest_status" != "404" ]; then
+                echo "latest release query failed: curl=$curl_status http=$latest_status" >&2
+                exit "$curl_status"
+              fi
+            fi
+
+            case "$latest_status" in
+              200)
+                baseline_release_id=$(jq -er '.id' "$latest_response")
+                baseline_tag=$(jq -er '.tag_name' "$latest_response")
+                baseline_dir=$(mktemp -d)
+                gh release download "$baseline_tag" \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --dir "$baseline_dir"
+                go run ./cmd/geodata-build release-decision \
+                  --candidate publish \
+                  --baseline "$baseline_dir" > "$decision_file"
+                ;;
+              404)
+                go run ./cmd/geodata-build release-decision \
+                  --candidate publish \
+                  --first-release > "$decision_file"
+                ;;
+              *)
+                echo "unexpected latest release status: $latest_status" >&2
+                exit 1
+                ;;
+            esac
+          fi
+
+          cat "$decision_file"
+          cat "$decision_file" >> "$GITHUB_OUTPUT"
+          echo "baseline_release_id=$baseline_release_id" >> "$GITHUB_OUTPUT"
+          echo "baseline_tag=$baseline_tag" >> "$GITHUB_OUTPUT"
+
       - name: Upload verified six-asset payload
+        if: steps.release_decision.outputs.should_publish == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: verified-geodata
@@ -71,11 +151,19 @@ jobs:
 
   publish:
     needs: build
-    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: needs.build.result == 'success' && needs.build.outputs.should_publish == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     permissions:
       contents: write
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
       - name: Download verified payload
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -98,6 +186,101 @@ jobs:
           sha256sum -c geoip.dat.sha256sum
           sha256sum -c geosite.dat.sha256sum
           sha256sum -c install_passwall2_rules.sh.sha256sum
+
+      - name: Recheck release baseline before write
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DECISION_REASON: ${{ needs.build.outputs.reason }}
+          BASELINE_RELEASE_ID: ${{ needs.build.outputs.baseline_release_id }}
+          BASELINE_TAG: ${{ needs.build.outputs.baseline_tag }}
+          BASELINE_FINGERPRINT: ${{ needs.build.outputs.baseline_fingerprint }}
+        run: |
+          set -euo pipefail
+
+          query_latest() {
+            latest_response=$(mktemp)
+            set +e
+            latest_status=$(curl \
+              --silent \
+              --show-error \
+              --location \
+              --fail-with-body \
+              --output "$latest_response" \
+              --write-out '%{http_code}' \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest")
+            curl_status=$?
+            set -e
+            if [ "$curl_status" -ne 0 ]; then
+              if [ "$curl_status" -ne 22 ] || [ "$latest_status" != "404" ]; then
+                echo "latest release recheck failed: curl=$curl_status http=$latest_status" >&2
+                exit "$curl_status"
+              fi
+            fi
+            case "$latest_status" in
+              200|404) ;;
+              *)
+                echo "unexpected latest release status during recheck: $latest_status" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          case "$DECISION_REASON" in
+            forced)
+              forced_decision=$(mktemp)
+              go run ./cmd/geodata-build release-decision \
+                --candidate publish \
+                --force > "$forced_decision"
+              grep -qx 'should_publish=true' "$forced_decision"
+              grep -qx 'reason=forced' "$forced_decision"
+              ;;
+            first-release)
+              query_latest
+              if [ "$latest_status" != "404" ]; then
+                echo "latest appeared after first-release decision" >&2
+                exit 1
+              fi
+              ;;
+            changed)
+              query_latest
+              if [ "$latest_status" != "200" ]; then
+                echo "latest disappeared after changed decision" >&2
+                exit 1
+              fi
+              current_release_id=$(jq -er '.id' "$latest_response")
+              current_tag=$(jq -er '.tag_name' "$latest_response")
+              if [ "$current_release_id" != "$BASELINE_RELEASE_ID" ]; then
+                echo "baseline release ID changed" >&2
+                exit 1
+              fi
+              if [ "$current_tag" != "$BASELINE_TAG" ]; then
+                echo "baseline tag changed" >&2
+                exit 1
+              fi
+              baseline_dir=$(mktemp -d)
+              gh release download "$current_tag" \
+                --repo "$GITHUB_REPOSITORY" \
+                --dir "$baseline_dir"
+              recheck_decision=$(mktemp)
+              go run ./cmd/geodata-build release-decision \
+                --candidate publish \
+                --baseline "$baseline_dir" > "$recheck_decision"
+              grep -qx 'should_publish=true' "$recheck_decision"
+              grep -qx 'reason=changed' "$recheck_decision"
+              baseline_fingerprint=$(sed -n 's/^baseline_fingerprint=//p' "$recheck_decision")
+              if [ "$baseline_fingerprint" != "$BASELINE_FINGERPRINT" ]; then
+                echo "baseline fingerprint changed" >&2
+                exit 1
+              fi
+              ;;
+            *)
+              echo "unsupported release decision reason: $DECISION_REASON" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Stage, read back, and publish exact Release
         env:

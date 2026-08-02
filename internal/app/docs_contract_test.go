@@ -24,6 +24,13 @@ func TestDocsDescribeGoOnlyWorkflowAndManagedInstall(t *testing.T) {
 			"install_passwall2_rules.sh.sha256sum",
 			"managed_by=clash-rules-srs",
 			"回滚",
+			"release-decision",
+			"每日完整构建",
+			"有效产物变化",
+			"无变化",
+			"force_publish",
+			"明确 404",
+			"ID、tag 和载荷指纹",
 		} {
 			if !bytes.Contains(data, []byte(required)) {
 				t.Errorf("%s missing %q", name, required)
