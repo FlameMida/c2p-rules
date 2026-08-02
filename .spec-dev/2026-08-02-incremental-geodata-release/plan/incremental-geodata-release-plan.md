@@ -375,7 +375,7 @@ git commit -m "feat(T1): 增加规范化发布载荷比较器"
 - 消费：`releasecmp.Input`、`releasecmp.Mode`、`releasecmp.Decide(Input) (Decision, error)`。
 - 产出：`app.ReleaseDecisionOptions`、`app.ReleaseDecision(ReleaseDecisionOptions, io.Writer) error`、`cli.Commands.ReleaseDecision`，以及稳定 stdout 三键 `should_publish`/`reason`/`baseline_fingerprint`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `internal/cli/run_test.go` 增加 `TestReleaseDecisionCommandIsDispatched`：传入只记录调用参数的 stub `ReleaseDecision`，执行 `release-decision --candidate publish --force`，断言 exit 0、参数原样传递；同时把 help 精确断言为包含 `bootstrap|build|verify|release-decision`。
 
@@ -408,7 +408,7 @@ func Test首次或强制模式下候选损坏CLI(t *testing.T) {
 
 fixture 复用与任务 1 相同的真实六资产写法，但放在 `internal/app` 测试包自己的 helper 中，避免导出测试专用生产 API。另测未知 flag、额外位置参数为 exit 2；可读性/资产错误为 exit 1。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：
 
@@ -418,7 +418,7 @@ go test ./internal/cli ./internal/app -run 'ReleaseDecision|发布判定|首次�
 
 预期：FAIL，报 `Commands.ReleaseDecision undefined`、未知命令或新解析函数不存在；保留失败输出。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 扩展 `internal/cli/run.go`：
 
@@ -524,7 +524,7 @@ func parseReleaseDecisionOptions(args []string) (ReleaseDecisionOptions, error) 
 
 将单行 `if selected++` 展开为 gofmt 接受的标准多行 Go 语句。确保 `Decide` 成功前不写 stdout，避免错误路径留下 workflow 可接受的部分决策。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：
 
@@ -535,7 +535,7 @@ go vet ./internal/cli ./internal/app
 
 再用临时测试 fixture 或任务 1 测试生成的目录运行三种 CLI，确认输出严格为三行且没有日志混入 stdout。预期全部 PASS/exit 0。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/app/release_decision.go internal/app/commands.go internal/app/commands_test.go \
