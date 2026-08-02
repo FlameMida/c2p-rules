@@ -20,7 +20,7 @@ spec_dev:
     - ".github/workflows/**"
     - "README.md"
     - "context.md"
-  sync_commit: b09da3316ba69ed0345d594952e0aac6d5f59827
+  sync_commit: b4c193723b2bb12c8aa6d43e7674d47c1bf81635
 ---
 
 # 全 Go geodata 构建与 PassWall2 分流安装设计

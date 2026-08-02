@@ -758,7 +758,7 @@ git commit -m "feat(T3): 仅在有效产物变化时发布"
 
 ### 任务 5：合并与清理
 
-- [ ] **步骤 1：全量验证**
+- [x] **步骤 1：全量验证**
 
 在 worktree 内运行：
 
@@ -773,7 +773,7 @@ git status --short
 
 预期：测试/vet/race/diff check 全绿；status 只允许 acceptance 报告或已知待提交的 spec 状态记录。代码/报告有未提交内容则先提交明确范围，失败则修复后才进入合并。
 
-- [ ] **步骤 2：合并回来源分支**
+- [x] **步骤 2：合并回来源分支**
 
 先在主工作区运行 `git status --short`。若存在任何未提交改动，必须停下让用户选择先提交、暂存到安全位置或延期合并，不得自动 stash、代为提交、丢弃或覆盖。
 
@@ -786,20 +786,22 @@ git merge plan/2026-08-02-incremental-geodata-release
 
 合并冲突或出现新的未提交改动则停下向计划作者确认，不强行合并。
 
-- [ ] **步骤 3：清理**
+- [x] **步骤 3：清理**
 
 ```bash
 git worktree remove .worktrees/plan-2026-08-02-incremental-geodata-release
 git branch -d plan/2026-08-02-incremental-geodata-release
 ```
 
-- [ ] **步骤 4：sync_commit 锚定**
+- [x] **步骤 4：sync_commit 锚定**
 
 ```bash
 SYNC=$(git rev-parse HEAD)
-# 将下列 spec frontmatter 的 sync_commit: null 更新为此完整 $SYNC：
+# 将下列两个 active spec frontmatter 的 sync_commit 更新为此完整 $SYNC：
+# .spec-dev/2026-07-31-go-geodata-pipeline/spec/go-geodata-pipeline-design.md
 # .spec-dev/2026-08-02-incremental-geodata-release/spec/incremental-geodata-release-design.md
-git add .spec-dev/2026-08-02-incremental-geodata-release/spec/incremental-geodata-release-design.md
+git add .spec-dev/2026-07-31-go-geodata-pipeline/spec/go-geodata-pipeline-design.md \
+  .spec-dev/2026-08-02-incremental-geodata-release/spec/incremental-geodata-release-design.md
 git commit -m "chore(spec): sync_commit 锚定 ${SYNC:0:7}"
 ```
 

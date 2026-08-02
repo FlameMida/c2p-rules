@@ -11,7 +11,7 @@ spec_dev:
     - ".github/workflows/build.yml"
     - "README.md"
     - "context.md"
-  sync_commit: null
+  sync_commit: b4c193723b2bb12c8aa6d43e7674d47c1bf81635
 ---
 
 # Geodata 有效变化增量发布设计
