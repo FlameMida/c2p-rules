@@ -1,8 +1,8 @@
-# 此文件为 geosite:ai 的自定义增量；默认不注入任何规则。
+# 此文件为 geosite:ai 的自定义增量；payload 可为空，也可加入实际规则。
 # 取消下面任一示例前的注释即可启用。支持的匹配规则只有：
 payload:
-  #   - DOMAIN-SUFFIX,example.com
-  #   - DOMAIN,api.example.com
-  #   - DOMAIN-KEYWORD,example
-  #   - DOMAIN-REGEX,^.+\.example\.com$
+#   - DOMAIN-SUFFIX,example.com
+#   - DOMAIN,api.example.com
+#   - DOMAIN-KEYWORD,example
+#   - DOMAIN-REGEX,^.+\.example\.com$
   - DOMAIN-SUFFIX,anyrouter.top

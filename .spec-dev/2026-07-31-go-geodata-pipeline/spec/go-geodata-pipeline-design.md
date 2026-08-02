@@ -87,15 +87,15 @@ spec_dev:
 - **WHEN** 构建器校验本地规则
 - **THEN** 构建非零退出并指出文件路径与未知目标，既有 publish 目录保持不变
 
-### Requirement: 仓库提供带规则说明的空自定义模板
+### Requirement: 仓库为默认分组提供带规则说明的自定义文件
 
-仓库 SHALL 为 `config/passwall2-groups.yaml` 引用的每一个唯一 `geosite`/`geoip` tag 提供对应的 `custom/<side>/<tag>.yaml`，以注释列出该 side 支持的全部 Clash 匹配规则及可直接取消注释启用的示例，且默认内容为语义空集。
+仓库 SHALL 为 `config/passwall2-groups.yaml` 引用的每一个唯一 `geosite`/`geoip` tag 提供对应的 `custom/<side>/<tag>.yaml`，以注释列出该 side 支持的全部 Clash 匹配规则及可直接取消注释启用的示例。文件 MAY 保持语义空集，也 MAY 包含用户显式启用的合法规则；任一已启用规则均须通过同一严格解析契约。
 
-#### Scenario: 每个默认分组目标均有空模板
+#### Scenario: 每个默认分组目标均有带说明的自定义文件
 
 - **GIVEN** 默认 `config/passwall2-groups.yaml`
 - **WHEN** 枚举所有分组引用的唯一 `geosite`/`geoip` tag
-- **THEN** 每个引用均存在对应的 `custom/<side>/<tag>.yaml`，文件说明该 side 支持的全部规则，任一示例均可直接取消注释启用，且默认不会注入示例域名或 CIDR
+- **THEN** 每个引用均存在对应的 `custom/<side>/<tag>.yaml`，文件说明该 side 支持的全部规则，任一示例均可直接取消注释启用，且文件中已有的启用规则全部合法
 
 ### Requirement: 声明式配置生成有序 PassWall2 分流组
 
@@ -446,7 +446,7 @@ CI 生成正式 installer 时必须提供真实 `OWNER/REPO` 和即将创建的�
 |---|---|---|---|
 | 扩展远程 source 创建的 BilibiliHMT | integration | 任务内 TDD | synthetic registry、dat 正负 probe |
 | 拒绝拼错的本地目标 | unit/integration | 任务内 TDD | 错误路径与旧 publish 字节断言 |
-| 未编辑模板不改变产物 | unit | 任务内 TDD | 有/无模板输出等价 |
+| 默认分组自定义文件说明与规则均合法 | unit | 任务内 TDD | 全部引用文件存在、示例可启用、已有规则严格解析 |
 | 苹果服务包含声明的 tag | unit | 任务内 TDD | UCI golden |
 | 缺失 tag 阻断脚本发布 | integration | 任务内 TDD | fake geoview 与 publish 保持断言 |
 | YouTube 优先于 Google | unit/integration | 任务内 TDD | groups 校验与 UCI order golden |

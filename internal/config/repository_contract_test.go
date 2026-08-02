@@ -82,7 +82,7 @@ func TestRepositoryDefaultGroupsMatchApprovedOrder(t *testing.T) {
 	}
 }
 
-func TestEveryDefaultGroupTargetHasEmptyDocumentedTemplate(t *testing.T) {
+func TestEveryDefaultGroupTargetHasDocumentedCustomFile(t *testing.T) {
 	for _, test := range defaultTemplateCases(t) {
 		data, err := os.ReadFile(test.path)
 		if err != nil {
@@ -106,9 +106,11 @@ func TestEveryDefaultGroupTargetHasEmptyDocumentedTemplate(t *testing.T) {
 		if closeErr != nil {
 			t.Fatal(closeErr)
 		}
-		if len(buckets.Domains) != 0 || len(buckets.CIDRs) != 0 || len(buckets.Skipped) != 0 {
-			t.Fatalf("%s injects rules: %#v", test.path, buckets)
+		if len(buckets.Skipped) != 0 {
+			t.Fatalf("%s contains skipped rules: %#v", test.path, buckets.Skipped)
 		}
+		beforeDomains := len(buckets.Domains)
+		beforeCIDRs := len(buckets.CIDRs)
 
 		commentedExample := []byte("#   - " + test.example)
 		if !bytes.Contains(data, commentedExample) {
@@ -119,7 +121,7 @@ func TestEveryDefaultGroupTargetHasEmptyDocumentedTemplate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse enabled example in %s: %v", test.path, err)
 		}
-		if len(buckets.Domains) != test.wantDomains || len(buckets.CIDRs) != test.wantCIDRs || len(buckets.Skipped) != 0 {
+		if len(buckets.Domains) != beforeDomains+test.wantDomains || len(buckets.CIDRs) != beforeCIDRs+test.wantCIDRs || len(buckets.Skipped) != 0 {
 			t.Fatalf("%s enabled example produced unexpected rules: %#v", test.path, buckets)
 		}
 	}
