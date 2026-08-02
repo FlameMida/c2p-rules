@@ -556,7 +556,7 @@ git commit -m "feat(T2): 接入发布变化判定命令"
 - 消费：`geodata-build release-decision --candidate DIR (--baseline DIR|--first-release|--force)` 的三行 stdout。
 - 产出：build job outputs `should_publish`、`reason`、`baseline_release_id`、`baseline_tag`、`baseline_fingerprint`；publish job 以这五项绑定同一基线身份。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 先重写 `internal/app/workflow_contract_test.go`，用 `go.yaml.in/yaml/v3` 解析 YAML，而不是只扫描整个文件。定义最小结构：
 
@@ -617,7 +617,7 @@ func Test干净Runner完成无变化判定契约(t *testing.T)      // checkout/
 
 在 `internal/app/docs_contract_test.go` 给 README/context 两份文档增加必需短语：`release-decision`、`每日完整构建`、`有效产物变化`、`无变化`、`force_publish`、`明确 404`、`ID、tag 和载荷指纹`；继续守卫没有 Python/Node/npm/clash2passwall 生产命令。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：
 
@@ -627,7 +627,7 @@ go test ./internal/app -run 'Workflow|Docs|Latest|Runner|草稿|强制|相同内
 
 预期：FAIL；当前 workflow 没有 input、job outputs、基线获取/复核与条件 Artifact，文档也未描述增量发布。若 YAML 解析本身失败，先只修测试结构体标签或 fixture loader，仍须保持行为断言为红。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 将 `.github/workflows/build.yml` 的手动触发改为：
 
@@ -685,7 +685,7 @@ publish job 在 download-artifact 前增加与 build 相同固定 pin 的 checko
 
 更新 `README.md` 的“CI 与发布边界”和 `context.md` 的 CLI/发布章节，准确写明：每日仍完整拉取、编译、探针和验证；规范化三主资产无变化时没有 Artifact/tag/Release；首次仅明确 404；不可信 latest 默认失败；默认分支手动 `force_publish=true` 是修复通道但不放松候选和回读；普通发布写入前复核 ID、tag、载荷指纹。补充本地 CLI 三种调用示例和稳定三行输出，不承诺本地模拟等价于真实 GitHub 验收。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：
 
@@ -704,7 +704,7 @@ rg -n 'python|setup-python|node |npm |releases/latest/download' .github/workflow
 
 预期：Go 测试/vet 全部 exit 0，`git diff --check` 无输出；最后的 `rg` 只允许文档中的“不需要/不得使用”说明，不得命中 workflow 生产步骤或浮动 latest 下载 URL。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add .github/workflows/build.yml internal/app/workflow_contract_test.go \
