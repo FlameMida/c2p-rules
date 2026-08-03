@@ -174,11 +174,14 @@ func Test变化后草稿Release六资产回读契约(t *testing.T) {
 	strictReadback := "go run ./cmd/geodata-build release-decision \\\n  --candidate \"$readback\" \\\n  --candidate-tag \"$TAG\" \\\n  --force"
 	previous := -1
 	for _, fragment := range []string{
-		"gh release create", "--draft", "gh release upload",
-		`.assets[].name`, `target_commitish`, `git/ref/tags/$TAG`,
+		"gh release create", "--draft",
+		`release_id=$(gh release view "$TAG" --json databaseId --jq '.databaseId')`,
+		"gh release upload", `releases/$release_id`,
+		`.assets[].name`, `.tag_name`, `.target_commitish`,
 		`gh release download "$TAG"`, "sha256sum -c geoip.dat.sha256sum",
 		strictReadback,
 		`gh release edit "$TAG" --draft=false --latest`,
+		`git/ref/tags/$TAG`,
 	} {
 		index := strings.Index(stage.Run, fragment)
 		if index < 0 || index < previous {
@@ -191,12 +194,20 @@ func Test变化后草稿Release六资产回读契约(t *testing.T) {
 		t.Fatalf("release upload is not exact six assets:\n%s", stage.Run)
 	}
 	for _, block := range []string{
-		"target=$(gh api \"repos/$GITHUB_REPOSITORY/releases/tags/$TAG\" --jq '.target_commitish')\ntest \"$target\" = \"$GITHUB_SHA\"",
+		`test "$(jq -r '.draft' "$draft_response")" = "true"`,
+		`test "$(jq -r '.tag_name' "$draft_response")" = "$TAG"`,
+		"target=$(jq -er '.target_commitish' \"$draft_response\")\ntest \"$target\" = \"$GITHUB_SHA\"",
 		"tag_sha=$(gh api \"repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG\" --jq '.object.sha')\ntest \"$tag_sha\" = \"$GITHUB_SHA\"",
 	} {
 		if !strings.Contains(stage.Run, block) {
 			t.Fatalf("release transaction misses strict equality %q:\n%s", block, stage.Run)
 		}
+	}
+	if strings.Contains(stage.Run, "releases/tags/$TAG") {
+		t.Fatalf("draft release is queried through the published-tag endpoint:\n%s", stage.Run)
+	}
+	if strings.Count(stage.Run, "git/ref/tags/$TAG") != 1 {
+		t.Fatalf("Git tag must be checked exactly once after publication:\n%s", stage.Run)
 	}
 }
 

@@ -312,6 +312,7 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "geodata ${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}" \
             --notes "Verified geodata build from ${GITHUB_SHA}"
+          release_id=$(gh release view "$TAG" --json databaseId --jq '.databaseId')
           gh release upload "$TAG" \
             publish/geoip.dat \
             publish/geoip.dat.sha256sum \
@@ -326,12 +327,14 @@ jobs:
             geosite.dat.sha256sum \
             install_passwall2_rules.sh \
             install_passwall2_rules.sh.sha256sum)
-          actual=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[].name' | sort)
+          draft_response=$(mktemp)
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$draft_response"
+          actual=$(jq -r '.assets[].name' "$draft_response" | sort)
           test "$actual" = "$expected"
-          target=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.target_commitish')
+          test "$(jq -r '.draft' "$draft_response")" = "true"
+          test "$(jq -r '.tag_name' "$draft_response")" = "$TAG"
+          target=$(jq -er '.target_commitish' "$draft_response")
           test "$target" = "$GITHUB_SHA"
-          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')
-          test "$tag_sha" = "$GITHUB_SHA"
           readback=$(mktemp -d)
           gh release download "$TAG" --dir "$readback"
           actual_readback=$(find "$readback" -maxdepth 1 -type f -exec basename {} \; | sort)
