@@ -1,4 +1,0 @@
-{
-  "findings": [],
-  "coverage_note": "已按功能正确性、边界条件、竞态窗口、资源关闭与错误处理审查 git diff 804e9df...HEAD，并对照 active spec 与实施计划核对候选严格六资产验证、安装器唯一 RELEASE_TAG 规范化、三模式 CLI 退出码、latest 200/404 严格分类、按 tag 下载、ID/tag/指纹发布前复核、条件 Artifact 与默认分支发布门禁。独立重跑 go test ./internal/releasecmp ./internal/verify ./internal/passwall ./internal/cli ./internal/app、相同范围 go test -race、go test ./...、go vet ./... 以及安装固定工具后的 go test -count=1 -tags=integration ./internal/app，均通过；未发现置信度 >=80 的问题。"
-}

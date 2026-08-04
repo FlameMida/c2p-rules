@@ -1,4 +1,0 @@
-{
-  "findings": [],
-  "coverage_note": "第二轮按功能正确性枯竭审查 804e9df...HEAD，重新核对 releasecmp 的严格六资产、checksum、唯一 RELEASE_TAG 规范化、三模式判定与指纹分帧，CLI 的模式互斥、退出码和稳定输出，以及 workflow 的 force/200/404/错误分类、按 tag 下载、条件 Artifact、默认分支门禁和发布前 ID/tag/指纹复核；并检查资源关闭、TOCTOU/竞态窗口与 shell 失败传播。已去重不再报告第一轮的三项既有发现。独立复跑 go test -count=1 ./...、go test -count=1 -race ./internal/releasecmp ./internal/verify ./internal/passwall ./internal/cli ./internal/app、go test -count=1 -tags=integration ./internal/app、go vet 相关包与 git diff --check，均通过；未发现其他置信度 >=80 的新问题。未执行真实 GitHub Release 写入或 OpenWrt 设备验收。"
-}
