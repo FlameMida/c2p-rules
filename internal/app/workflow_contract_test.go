@@ -211,6 +211,40 @@ func Test变化后草稿Release六资产回读契约(t *testing.T) {
 	}
 }
 
+func TestShanghaiTimestampReleaseNamingContract(t *testing.T) {
+	document := loadWorkflow(t)
+	build := document.Jobs["build"]
+	if got, want := build.Outputs["release_tag"], "${{ steps.release_context.outputs.release_tag }}"; got != want {
+		t.Fatalf("release_tag output=%q want=%q", got, want)
+	}
+	context := stepByID(t, build, "release_context")
+	assertRunContains(t, context,
+		`TAG=$(TZ=Asia/Shanghai date +'%Y%m%d%H%M%S')`,
+		`echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"`,
+		`echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"`,
+	)
+
+	publish := document.Jobs["publish"]
+	for _, name := range []string{"Recheck release baseline before write", "Stage, read back, and publish exact Release"} {
+		step := stepByName(t, publish, name)
+		if got, want := step.Env["RELEASE_TAG"], "${{ needs.build.outputs.release_tag }}"; got != want {
+			t.Fatalf("%s RELEASE_TAG=%q want=%q", name, got, want)
+		}
+	}
+	recheck := stepByName(t, publish, "Recheck release baseline before write")
+	assertRunContains(t, recheck, `candidate_tag="$RELEASE_TAG"`)
+	stage := stepByName(t, publish, "Stage, read back, and publish exact Release")
+	assertRunContains(t, stage, `TAG="$RELEASE_TAG"`, `--title "r${TAG}"`)
+
+	for _, job := range document.Jobs {
+		for _, step := range job.Steps {
+			if strings.Contains(step.Run, "GITHUB_RUN_ID") || strings.Contains(step.Run, "GITHUB_RUN_ATTEMPT") {
+				t.Fatalf("run identity is still used for Release naming in step %q:\n%s", step.Name, step.Run)
+			}
+		}
+	}
+}
+
 func Test干净Runner完成无变化判定契约(t *testing.T) {
 	build := loadWorkflow(t).Jobs["build"]
 	ordered := []string{

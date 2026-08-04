@@ -32,6 +32,7 @@ jobs:
       baseline_release_id: ${{ steps.release_decision.outputs.baseline_release_id }}
       baseline_tag: ${{ steps.release_decision.outputs.baseline_tag }}
       baseline_fingerprint: ${{ steps.release_decision.outputs.baseline_fingerprint }}
+      release_tag: ${{ steps.release_context.outputs.release_tag }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -51,10 +52,12 @@ jobs:
         run: go test -tags=integration ./internal/app
 
       - name: Build exact release payload
+        id: release_context
         run: |
           set -euo pipefail
-          TAG="geodata-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          TAG=$(TZ=Asia/Shanghai date +'%Y%m%d%H%M%S')
           echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
           go run ./cmd/geodata-build build \
             --repo "$GITHUB_REPOSITORY" \
             --release-tag "$TAG"
@@ -198,9 +201,10 @@ jobs:
           BASELINE_RELEASE_ID: ${{ needs.build.outputs.baseline_release_id }}
           BASELINE_TAG: ${{ needs.build.outputs.baseline_tag }}
           BASELINE_FINGERPRINT: ${{ needs.build.outputs.baseline_fingerprint }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
         run: |
           set -euo pipefail
-          candidate_tag="geodata-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          candidate_tag="$RELEASE_TAG"
 
           query_latest() {
             latest_response=$(mktemp)
@@ -300,9 +304,10 @@ jobs:
       - name: Stage, read back, and publish exact Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
         run: |
           set -euo pipefail
-          TAG="geodata-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          TAG="$RELEASE_TAG"
           cleanup() {
             gh release delete "$TAG" --yes --cleanup-tag >/dev/null 2>&1 || true
           }
@@ -310,7 +315,7 @@ jobs:
           gh release create "$TAG" \
             --draft \
             --target "$GITHUB_SHA" \
-            --title "geodata ${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}" \
+            --title "r${TAG}" \
             --notes "Verified geodata build from ${GITHUB_SHA}"
           release_id=$(gh release view "$TAG" --json databaseId --jq '.databaseId')
           gh release upload "$TAG" \

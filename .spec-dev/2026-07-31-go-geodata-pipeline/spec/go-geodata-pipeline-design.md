@@ -261,6 +261,16 @@ classical source SHALL 将域名 bucket 写入显式 `outputs.geosite.tag`、将
 - **WHEN** publish job 上传并回读草稿 Release
 - **THEN** 资产名集合精确等于六项，三次 `sha256sum -c` 均成功后才公开并切换 latest
 
+### Requirement: Release 使用单一上海时间戳命名
+
+CI SHALL 在构建候选载荷前按 `Asia/Shanghai` 生成一次 `YYYYMMDDHHMMSS` 格式的 14 位纯数字 tag，通过 build job output 将同一值传递给发布复核与 publish job，并将 Release 标题设为小写 `r` 加该 tag。
+
+#### Scenario: build 与 publish 复用同一时间戳
+
+- **GIVEN** 一次 workflow run 需要创建 Release
+- **WHEN** build job 生成候选安装器且 publish job 创建草稿 Release
+- **THEN** 安装器 `RELEASE_TAG`、Git tag 与 Release tag 均为同一个上海时间 `YYYYMMDDHHMMSS` 值，Release 标题精确为 `r<tag>`
+
 ### Requirement: 第一方构建链统一为 Go
 
 仓库 SHALL 通过根目录 Go module 提供 `geodata-build bootstrap|build|verify`，让 CI 与文档不再要求 Python、Node 或 npm，并只从 `.cache/bin/` 或显式测试替身调用受超时控制的固定上游工具。

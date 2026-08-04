@@ -187,6 +187,16 @@ spec_dev:
 - **WHEN** publish job 创建并回读草稿 Release
 - **THEN** 资产名精确等于六项，目标 commit、tag SHA 和三份 checksum 全部通过后才公开并切换 latest
 
+### Requirement: 实际发布使用单一上海时间戳命名
+
+每次实际创建的 Release SHALL 使用 build job 按 `Asia/Shanghai` 生成并通过 job output 传递的同一个 `YYYYMMDDHHMMSS` 14 位纯数字 tag，且 Release 标题精确为小写 `r` 加该 tag。
+
+#### Scenario: 增量发布跨 job 保持命名一致
+
+- **GIVEN** 变化判定或人工强制判定要求发布
+- **WHEN** build job 生成候选 tag，publish job 完成基线复核并创建 Release
+- **THEN** 候选安装器绑定、发布复核、Git tag 与 Release tag 使用同一个上海时间值，Release 标题为 `r<tag>`
+
 ### Requirement: 第一方构建链保持全 Go（增加发布判定命令）
 
 仓库 SHALL 通过根目录 Go module 提供 `geodata-build bootstrap|build|verify|release-decision`，让 CI 与文档不要求 Python、Node、npm 或新增的仓库 Shell 脚本，并只从 `.cache/bin/` 或显式测试替身调用受超时控制的固定上游工具。
