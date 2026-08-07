@@ -282,6 +282,16 @@ func TestInstallerPreflightRejectsDirtyUCIExistingUpdaterAndMissingCommands(t *t
 			if err := os.Remove(filepath.Join(h.bin, "timeout")); err != nil {
 				h.t.Fatal(err)
 			}
+			for _, name := range []string{"sha256sum", "base64"} {
+				path, err := exec.LookPath(name)
+				if err != nil {
+					h.t.Fatal(err)
+				}
+				if err := os.Symlink(path, filepath.Join(h.bin, name)); err != nil {
+					h.t.Fatal(err)
+				}
+			}
+			h.isolatePath = true
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -384,6 +394,7 @@ type installerHarness struct {
 	badSHASources              string
 	attemptsPath               string
 	ruleLock                   string
+	isolatePath                bool
 	uciChanges                 string
 	failCommit                 int
 	requireIsolatedSavedir     bool
@@ -447,8 +458,12 @@ func (h *installerHarness) run(script []byte, wantSuccess bool) string {
 		h.t.Fatal(err)
 	}
 	command := exec.Command("/bin/sh", path)
+	commandPath := h.bin + ":" + os.Getenv("PATH")
+	if h.isolatePath {
+		commandPath = h.bin
+	}
 	command.Env = append(os.Environ(),
-		"PATH="+h.bin+":"+os.Getenv("PATH"),
+		"PATH="+commandPath,
 		"PASSWALL2_CONF="+h.config,
 		"PASSWALL2_RULE_UPDATER="+h.updater,
 		"PASSWALL2_ASSET_DIR="+h.assets,
