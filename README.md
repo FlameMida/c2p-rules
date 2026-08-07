@@ -94,9 +94,11 @@ sha256sum -c install_passwall2_rules.sh.sha256sum
 sh install_passwall2_rules.sh
 ```
 
-脚本会先检查 UCI 无未提交改动。事务顺序固定为：备份 → staging UCI 写入不可变 URL 并验证托管组 → 安装并提交 live 配置 → 调用 updater 更新两个 dat → 校验两个 dat SHA-256 → 持久 URL 切到 `latest`。重复执行保持幂等；只清理旧 `c2p_` 与本项目 `managed_by=clash-rules-srs` 的 section。配置提交、更新器或哈希验证任一步失败都会回滚配置和两个 dat；自动恢复不完整时保留临时恢复目录并逐项打印配置与 dat 的人工恢复路径。
+脚本会先检查 UCI 无未提交改动且 PassWall2 没有正在运行的规则更新实例，并在终端实时打印阶段、当前下载源和等待时间。下载顺序固定为 `gh-proxy.com → ghfast.top → GitHub 官方`，默认每个源 60 秒总超时；每次 updater 返回后都用脚本内置的 Release SHA-256 校验两个 dat，超时、失败或哈希不匹配会恢复安装前的 dat，再切换下一个源。可用 `PASSWALL2_RULE_TIMEOUT` 覆盖逐源超时秒数。
 
-设备必须已有 PassWall2、`rule_update.lua`、`uci`、`lua`、`sha256sum` 与 `base64`。真实路由器上的首次安装、双内核实际分流和断网恢复仍属于设备侧验收，仓库 CI 不假装覆盖这一边界。
+事务顺序固定为：备份 → staging UCI 写入首个镜像的不可变 Release URL 并验证托管组 → 安装并提交 live 配置 → 调用 updater 更新两个 dat（按三源逐一尝试并即时校验）→ 校验两个 dat SHA-256 → 持久 URL 切到 `latest`（GitHub 官方）。镜像 URL 只用于本次安装加速，不会持久写入最终配置。重复执行保持幂等；只清理旧 `c2p_` 与本项目 `managed_by=clash-rules-srs` 的 section。配置提交、所有更新源或哈希验证任一步失败都会回滚配置和两个 dat；自动恢复不完整时保留临时恢复目录并逐项打印配置与 dat 的人工恢复路径。
+
+设备必须已有 PassWall2、`rule_update.lua`、`uci`、`lua`、`sha256sum`、`base64` 与 `timeout`（PassWall2 上游软件包依赖的 `coreutils-timeout`）。真实路由器上的首次安装、双内核实际分流和断网恢复仍属于设备侧验收，仓库 CI 不假装覆盖这一边界。
 
 ## CI 与发布边界
 

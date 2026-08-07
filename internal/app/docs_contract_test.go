@@ -31,6 +31,8 @@ func TestDocsDescribeGoOnlyWorkflowAndManagedInstall(t *testing.T) {
 			"force_publish",
 			"明确 404",
 			"ID、tag 和载荷指纹",
+			"gh-proxy.com → ghfast.top → GitHub 官方",
+			"每个源 60 秒",
 		} {
 			if !bytes.Contains(data, []byte(required)) {
 				t.Errorf("%s missing %q", name, required)

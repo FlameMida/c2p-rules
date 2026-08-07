@@ -106,6 +106,87 @@ func TestInstallerSuccessInstallsAllRepositoryGroupsAndValidData(t *testing.T) {
 	}
 }
 
+func TestInstallerFallsBackFromTimeoutAndHashMismatchThenPersistsOfficialLatest(t *testing.T) {
+	harness := newHarness(t)
+	harness.seedConfig("")
+	harness.ruleTimeout = "1"
+	harness.timeoutSources = "gh-proxy.com"
+	harness.badSHASources = "ghfast.top"
+
+	output := harness.run(harness.render(validInstallOptions()), true)
+	if got, want := harness.readAttempts(), "gh-proxy.com\nghfast.top\ngithub.com\n"; got != want {
+		t.Fatalf("attempt order=%q want=%q", got, want)
+	}
+	for _, want := range []string{
+		"[4/5] 尝试源 1/3：gh-proxy.com",
+		"gh-proxy.com 超时（1 秒），切换下一个源。",
+		"[4/5] 尝试源 2/3：ghfast.top",
+		"ghfast.top SHA-256 校验失败，切换下一个源。",
+		"[4/5] 尝试源 3/3：GitHub 官方",
+		"GitHub 官方 SHA-256 校验通过。",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("missing fallback progress %q in output:\n%s", want, output)
+		}
+	}
+	installed := harness.readConfig()
+	for _, want := range []string{
+		"option geosite_url 'https://github.com/flame/clash-rules-srs/releases/latest/download/geosite.dat'",
+		"option geoip_url 'https://github.com/flame/clash-rules-srs/releases/latest/download/geoip.dat'",
+	} {
+		if !strings.Contains(installed, want) {
+			t.Fatalf("missing official persistent URL %q in config:\n%s", want, installed)
+		}
+	}
+	if strings.Contains(installed, "gh-proxy.com") || strings.Contains(installed, "ghfast.top") {
+		t.Fatalf("mirror URL persisted after install:\n%s", installed)
+	}
+}
+
+func TestInstallerStopsAfterFirstMirrorPassesHashValidation(t *testing.T) {
+	harness := newHarness(t)
+	harness.seedConfig("")
+
+	harness.run(harness.render(validInstallOptions()), true)
+	if got, want := harness.readAttempts(), "gh-proxy.com\n"; got != want {
+		t.Fatalf("attempts=%q want=%q", got, want)
+	}
+}
+
+func TestInstallerReportsPhaseProgressWhileUpdatingRules(t *testing.T) {
+	harness := newHarness(t)
+	harness.seedConfig("")
+	harness.updaterDelaySeconds = 2
+
+	output := harness.run(harness.render(validInstallOptions()), true)
+	for _, want := range []string{
+		"[1/5] 检查 PassWall2 运行环境...",
+		"[2/5] 备份现有配置和 GeoIP/GeoSite 数据...",
+		"[3/5] 写入托管分流和本次 Release 更新地址...",
+		"[4/5] 正在更新 GeoIP/GeoSite（下载可能需要一些时间）...",
+		"[4/5] 仍在更新（已等待 1 秒）...",
+		"[4/5] GeoIP/GeoSite 更新完成。",
+		"[5/5] 校验规则数据并切换后续更新地址...",
+		"[5/5] 校验完成，后续更新将使用 latest 地址。",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("missing progress %q in output:\n%s", want, output)
+		}
+	}
+}
+
+func TestInstallerReportsRollbackProgressAfterUpdateFailure(t *testing.T) {
+	harness := newHarness(t)
+	harness.seedConfig("")
+	harness.siteContent = "wrong-site"
+	harness.ipContent = "wrong-ip"
+
+	output := harness.run(harness.render(validInstallOptions()), false)
+	if !strings.Contains(output, "[回滚] 安装未完成，正在恢复原有配置和 GeoIP/GeoSite 数据...") {
+		t.Fatalf("missing rollback progress in output:\n%s", output)
+	}
+}
+
 func TestInstallerRollsBackWhenUpdaterReturnsSuccessWithWrongHash(t *testing.T) {
 	harness := newHarness(t)
 	harness.seedConfig("")
@@ -186,11 +267,19 @@ func TestInstallerClearsLiveUCIDeltaBeforeRestoringConfig(t *testing.T) {
 	harness.assertSnapshot(beforeConfig, beforeSite, beforeIP)
 }
 
-func TestInstallerPreflightRejectsDirtyUCIAndMissingUpdater(t *testing.T) {
+func TestInstallerPreflightRejectsDirtyUCIExistingUpdaterAndMissingCommands(t *testing.T) {
 	for name, mutate := range map[string]func(*installerHarness){
 		"dirty": func(h *installerHarness) { h.uciChanges = "passwall2.changed=1" },
+		"existing updater lock": func(h *installerHarness) {
+			mustWrite(h.t, h.ruleLock, "locked")
+		},
 		"missing updater": func(h *installerHarness) {
 			if err := os.Remove(h.updater); err != nil {
+				h.t.Fatal(err)
+			}
+		},
+		"missing timeout": func(h *installerHarness) {
+			if err := os.Remove(filepath.Join(h.bin, "timeout")); err != nil {
 				h.t.Fatal(err)
 			}
 		},
@@ -206,6 +295,23 @@ func TestInstallerPreflightRejectsDirtyUCIAndMissingUpdater(t *testing.T) {
 	}
 }
 
+func TestInstallerPreflightRejectsInvalidRuleTimeout(t *testing.T) {
+	for _, value := range []string{"0", "bad", "-1"} {
+		t.Run(value, func(t *testing.T) {
+			harness := newHarness(t)
+			harness.seedConfig("")
+			harness.ruleTimeout = value
+			beforeConfig, beforeSite, beforeIP := harness.snapshot()
+
+			output := harness.run(harness.render(validInstallOptions()), false)
+			if !strings.Contains(output, "ERROR: PASSWALL2_RULE_TIMEOUT must be a positive integer") {
+				t.Fatalf("missing timeout validation error:\n%s", output)
+			}
+			harness.assertSnapshot(beforeConfig, beforeSite, beforeIP)
+		})
+	}
+}
+
 func TestRenderInstallerValidatesInputsAndEmbedsOnlyBase64Fragment(t *testing.T) {
 	options := validInstallOptions()
 	script, err := passwall.RenderInstaller(options)
@@ -215,7 +321,7 @@ func TestRenderInstallerValidatesInputsAndEmbedsOnlyBase64Fragment(t *testing.T)
 	if bytes.Contains(script, options.Fragment) || bytes.Contains(script, []byte("<<")) {
 		t.Fatalf("fragment/heredoc leaked into template:\n%s", script)
 	}
-	for _, command := range []string{"command -v uci", "command -v lua", "command -v sha256sum", "command -v base64"} {
+	for _, command := range []string{"command -v uci", "command -v lua", "command -v sha256sum", "command -v base64", "command -v timeout"} {
 		if !bytes.Contains(script, []byte(command)) {
 			t.Fatalf("missing preflight %q", command)
 		}
@@ -272,6 +378,12 @@ type installerHarness struct {
 	updater                    string
 	siteContent                string
 	ipContent                  string
+	updaterDelaySeconds        int
+	ruleTimeout                string
+	timeoutSources             string
+	badSHASources              string
+	attemptsPath               string
+	ruleLock                   string
 	uciChanges                 string
 	failCommit                 int
 	requireIsolatedSavedir     bool
@@ -293,12 +405,15 @@ func newHarness(t *testing.T) *installerHarness {
 	copyExecutable(t, "testdata/fake-uci.sh", filepath.Join(bin, "uci"))
 	copyExecutable(t, "testdata/fake-lua.sh", filepath.Join(bin, "lua"))
 	copyExecutable(t, "testdata/fake-cp.sh", filepath.Join(bin, "cp"))
+	copyExecutable(t, "testdata/fake-timeout.sh", filepath.Join(bin, "timeout"))
 	updater := filepath.Join(root, "fake-rule-update.lua")
 	copyExecutable(t, "testdata/fake-rule-update.lua", updater)
 	harness := &installerHarness{
 		t: t, root: root, bin: bin, config: filepath.Join(root, "passwall2"), assets: assets,
 		sitePath: filepath.Join(assets, "geosite.dat"), ipPath: filepath.Join(assets, "geoip.dat"), updater: updater,
-		siteContent: "new-site", ipContent: "new-ip",
+		siteContent: "new-site", ipContent: "new-ip", ruleTimeout: "60",
+		attemptsPath: filepath.Join(root, "updater-attempts"),
+		ruleLock:     filepath.Join(root, "passwall2_rule_update.lock"),
 	}
 	mustWrite(t, harness.sitePath, "old-site")
 	mustWrite(t, harness.ipPath, "old-ip")
@@ -339,7 +454,13 @@ func (h *installerHarness) run(script []byte, wantSuccess bool) string {
 		"PASSWALL2_ASSET_DIR="+h.assets,
 		"FAKE_SITE_CONTENT="+h.siteContent,
 		"FAKE_IP_CONTENT="+h.ipContent,
+		fmt.Sprintf("FAKE_UPDATER_DELAY=%d", h.updaterDelaySeconds),
+		"FAKE_UPDATER_TIMEOUT_SOURCES="+h.timeoutSources,
+		"FAKE_UPDATER_BAD_SHA_SOURCES="+h.badSHASources,
+		"FAKE_UPDATER_ATTEMPTS="+h.attemptsPath,
 		"FAKE_EXPECTED_TAG=v1.2.3",
+		"PASSWALL2_RULE_TIMEOUT="+h.ruleTimeout,
+		"PASSWALL2_RULE_LOCK="+h.ruleLock,
 		"FAKE_UCI_CHANGES="+h.uciChanges,
 		fmt.Sprintf("FAKE_UCI_FAIL_COMMIT=%d", h.failCommit),
 		fmt.Sprintf("FAKE_UCI_REQUIRE_ISOLATED_SAVEDIR=%t", h.requireIsolatedSavedir),
@@ -358,6 +479,18 @@ func (h *installerHarness) run(script []byte, wantSuccess bool) string {
 		h.t.Fatalf("installer unexpectedly succeeded:\n%s", output)
 	}
 	return string(output)
+}
+
+func (h *installerHarness) readAttempts() string {
+	h.t.Helper()
+	data, err := os.ReadFile(h.attemptsPath)
+	if os.IsNotExist(err) {
+		return ""
+	}
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return string(data)
 }
 
 func (h *installerHarness) snapshot() (string, string, string) {

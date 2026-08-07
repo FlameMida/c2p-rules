@@ -53,7 +53,9 @@ GeoSite 去重键是完整的 `kind + value + attrs`，不会做父子域覆盖�
 
 renderer 生成稳定 `crs_<id>` section，并设置 `managed_by=clash-rules-srs`。安装器只清理旧 `c2p_` 分流和该标记下的托管 section，保留用户规则、节点及其原顺序。
 
-事务顺序固定为：备份 → staging UCI 写入不可变 URL 并验证托管组 → 安装并提交 live 配置 → 调用 updater 更新两个 dat → 校验两个 dat SHA-256 → 持久 URL 切到 `latest`。任何 dat、updater 或 UCI 失败都会逆序回滚配置与 dat；恢复本身失败时保留临时目录并打印各备份路径，完整成功后仍保留权限为 0600 的配置备份供人工恢复。
+安装器预检 UCI 无未提交改动、规则更新锁不存在，以及 `uci`、`lua`、`sha256sum`、`base64`、`timeout` 和 updater 均可用。终端实时打印阶段、当前源和等待时间。下载按 `gh-proxy.com → ghfast.top → GitHub 官方` 固定回退，每个源 60 秒总超时（可由 `PASSWALL2_RULE_TIMEOUT` 覆盖）；每次 updater 返回后立即用安装器内置的 Release SHA-256 校验两个 dat。超时、失败或 SHA 不匹配时恢复安装前 dat，清理该次 updater 的精确临时文件及遗留锁，再尝试下一级。
+
+事务顺序固定为：备份 → staging UCI 写入首个镜像的不可变 URL 并验证托管组 → 安装并提交 live 配置 → 调用 updater 更新两个 dat（按三源逐一尝试并即时校验）→ 校验两个 dat SHA-256 → 持久 URL 切到 `latest`（GitHub 官方）。镜像仅加速本次安装，不进入最终配置。所有源失败或 UCI 失败都会逆序回滚配置与 dat；恢复本身失败时保留临时目录并打印各备份路径，完整成功后仍保留权限为 0600 的配置备份供人工恢复。
 
 ## 6. 本地维护命令
 

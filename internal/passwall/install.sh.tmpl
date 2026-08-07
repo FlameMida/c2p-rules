@@ -8,13 +8,54 @@ RELEASE_TAG='{{.ReleaseTag}}'
 SITE_SHA='{{.GeoSiteSHA}}'
 IP_SHA='{{.GeoIPSHA}}'
 FRAGMENT_B64='{{.FragmentBase64}}'
+HEARTBEAT_PID=''
+RULE_TIMEOUT="${PASSWALL2_RULE_TIMEOUT:-60}"
+RULE_LOCK="${PASSWALL2_RULE_LOCK:-/var/lock/passwall2_rule_update.lock}"
+UPDATER_ATTEMPTED=0
+RULES_VALID=0
 
+stop_update_heartbeat() {
+	if [ -n "$HEARTBEAT_PID" ]; then
+		kill "$HEARTBEAT_PID" >/dev/null 2>&1 || true
+		wait "$HEARTBEAT_PID" 2>/dev/null || true
+		HEARTBEAT_PID=''
+	fi
+}
+
+update_heartbeat() {
+	elapsed=0
+	while :; do
+		sleep 1
+		elapsed=$((elapsed + 1))
+		if [ "$elapsed" -eq 1 ] || [ $((elapsed % 5)) -eq 0 ]; then
+			printf '[4/5] 仍在更新（已等待 %s 秒）...\n' "$elapsed"
+		fi
+	done
+}
+
+cleanup_updater_artifacts() {
+	[ "$UPDATER_ATTEMPTED" -eq 1 ] || return 0
+	rm -f \
+		/tmp/geoip.dat \
+		/tmp/geoip.dat.sha256sum \
+		/tmp/geosite.dat \
+		/tmp/geosite.dat.sha256sum
+	rm -f "$RULE_LOCK"
+}
+
+printf '[1/5] 检查 PassWall2 运行环境...\n'
 command -v uci >/dev/null 2>&1 || { echo 'ERROR: uci not found' >&2; exit 2; }
 command -v lua >/dev/null 2>&1 || { echo 'ERROR: lua not found' >&2; exit 2; }
 command -v sha256sum >/dev/null 2>&1 || { echo 'ERROR: sha256sum not found' >&2; exit 2; }
 command -v base64 >/dev/null 2>&1 || { echo 'ERROR: base64 not found' >&2; exit 2; }
+command -v timeout >/dev/null 2>&1 || { echo 'ERROR: timeout not found' >&2; exit 2; }
+case "$RULE_TIMEOUT" in
+	''|*[!0-9]*) echo 'ERROR: PASSWALL2_RULE_TIMEOUT must be a positive integer' >&2; exit 2 ;;
+	*) [ "$RULE_TIMEOUT" -gt 0 ] 2>/dev/null || { echo 'ERROR: PASSWALL2_RULE_TIMEOUT must be a positive integer' >&2; exit 2; } ;;
+esac
 [ -f "$CONF" ] || { echo "ERROR: missing $CONF" >&2; exit 2; }
 [ -f "$UPDATER" ] || { echo "ERROR: missing $UPDATER" >&2; exit 2; }
+[ ! -e "$RULE_LOCK" ] || { echo "ERROR: PassWall2 rule updater is already running ($RULE_LOCK)" >&2; exit 2; }
 [ -z "$(uci changes passwall2 2>/dev/null || true)" ] || { echo 'ERROR: uncommitted passwall2 changes' >&2; exit 2; }
 
 ASSET_DIR=$(uci -q get 'passwall2.@global_rules[0].v2ray_location_asset') || {
@@ -25,7 +66,9 @@ ASSET_DIR=${ASSET_DIR%/}
 [ -n "$ASSET_DIR" ] && [ -d "$ASSET_DIR" ] || { echo "ERROR: invalid asset directory $ASSET_DIR" >&2; exit 2; }
 SITE="$ASSET_DIR/geosite.dat"
 IP="$ASSET_DIR/geoip.dat"
+printf '[1/5] 检查完成。\n'
 
+printf '[2/5] 备份现有配置和 GeoIP/GeoSite 数据...\n'
 ROOT=$(mktemp -d "${TMPDIR:-/tmp}/clash-rules-srs.XXXXXX")
 STAGE="$ROOT/passwall2"
 STAGE_SAVEDIR="$ROOT/uci-saved"
@@ -39,6 +82,7 @@ mkdir -p "$STAGE_SAVEDIR"
 [ ! -f "$SITE" ] || cp "$SITE" "$ROOT/geosite.dat.old"
 [ ! -f "$IP" ] || cp "$IP" "$ROOT/geoip.dat.old"
 SUCCESS=0
+printf '[2/5] 备份完成。\n'
 
 restore() {
 	restore_status=0
@@ -72,12 +116,84 @@ restore() {
 	return 0
 }
 
+restore_rule_data() {
+	if [ -f "$ROOT/geosite.dat.old" ]; then
+		cp "$ROOT/geosite.dat.old" "$SITE"
+	else
+		rm -f "$SITE"
+	fi
+	if [ -f "$ROOT/geoip.dat.old" ]; then
+		cp "$ROOT/geoip.dat.old" "$IP"
+	else
+		rm -f "$IP"
+	fi
+}
+
+verify_rule_data() {
+	{
+		printf '%s  %s\n' "$SITE_SHA" "$SITE"
+		printf '%s  %s\n' "$IP_SHA" "$IP"
+	} | sha256sum -c -
+}
+
+set_rule_source() {
+	source_base=$1
+	uci -q set "passwall2.@global_rules[0].geosite_url=$source_base/geosite.dat"
+	uci -q set "passwall2.@global_rules[0].geoip_url=$source_base/geoip.dat"
+	uci -q commit passwall2
+}
+
+attempt_rule_source() {
+	source_number=$1
+	source_label=$2
+	source_base=$3
+	configure_source=$4
+
+	printf '[4/5] 尝试源 %s/3：%s（总超时 %s 秒）...\n' "$source_number" "$source_label" "$RULE_TIMEOUT"
+	if [ "$configure_source" -eq 1 ]; then
+		set_rule_source "$source_base"
+	fi
+
+	UPDATER_ATTEMPTED=1
+	update_heartbeat &
+	HEARTBEAT_PID=$!
+	updater_status=0
+	if timeout -s TERM -k 5 "$RULE_TIMEOUT" lua "$UPDATER" log 'geoip,geosite'; then
+		updater_status=0
+	else
+		updater_status=$?
+	fi
+	stop_update_heartbeat
+	cleanup_updater_artifacts
+
+	if [ "$updater_status" -eq 0 ] && verify_rule_data; then
+		printf '[4/5] %s SHA-256 校验通过。\n' "$source_label"
+		RULES_VALID=1
+		return 0
+	fi
+
+	if [ "$updater_status" -eq 124 ]; then
+		printf '[4/5] %s 超时（%s 秒），切换下一个源。\n' "$source_label" "$RULE_TIMEOUT" >&2
+	elif [ "$updater_status" -ne 0 ]; then
+		printf '[4/5] %s 更新失败（退出码 %s），切换下一个源。\n' "$source_label" "$updater_status" >&2
+	else
+		printf '[4/5] %s SHA-256 校验失败，切换下一个源。\n' "$source_label" >&2
+	fi
+	restore_rule_data
+}
+
 cleanup() {
 	status=$?
 	trap - EXIT HUP INT TERM
+	stop_update_heartbeat
+	cleanup_updater_artifacts
 	restore_ok=1
 	if [ "$SUCCESS" -ne 1 ]; then
+		printf '[回滚] 安装未完成，正在恢复原有配置和 GeoIP/GeoSite 数据...\n' >&2
 		restore || { status=1; restore_ok=0; }
+		if [ "$restore_ok" -eq 1 ]; then
+			printf '[回滚] 恢复完成。\n' >&2
+		fi
 	fi
 	rm -f "$CONF_NEW"
 	if [ "$SUCCESS" -eq 1 ] || [ "$restore_ok" -eq 1 ]; then
@@ -92,10 +208,13 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-IMMUTABLE="https://github.com/$REPO/releases/download/$RELEASE_TAG"
+OFFICIAL_IMMUTABLE="https://github.com/$REPO/releases/download/$RELEASE_TAG"
+GH_PROXY_IMMUTABLE="https://gh-proxy.com/$OFFICIAL_IMMUTABLE"
+GHFAST_IMMUTABLE="https://ghfast.top/$OFFICIAL_IMMUTABLE"
 LATEST="https://github.com/$REPO/releases/latest/download"
-uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q set "passwall2.@global_rules[0].geosite_url=$IMMUTABLE/geosite.dat"
-uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q set "passwall2.@global_rules[0].geoip_url=$IMMUTABLE/geoip.dat"
+printf '[3/5] 写入托管分流和本次 Release 更新地址...\n'
+uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q set "passwall2.@global_rules[0].geosite_url=$GH_PROXY_IMMUTABLE/geosite.dat"
+uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q set "passwall2.@global_rules[0].geoip_url=$GH_PROXY_IMMUTABLE/geoip.dat"
 uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q commit passwall2
 
 printf '%s' "$FRAGMENT_B64" | base64 -d > "$FRAGMENT"
@@ -128,14 +247,26 @@ cp "$STAGE" "$CONF_NEW"
 chmod 600 "$CONF_NEW"
 mv "$CONF_NEW" "$CONF"
 uci -q commit passwall2
+printf '[3/5] 托管分流和临时更新地址已写入。\n'
 
-lua "$UPDATER" log 'geoip,geosite'
-printf '%s  %s\n' "$SITE_SHA" "$SITE" | sha256sum -c -
-printf '%s  %s\n' "$IP_SHA" "$IP" | sha256sum -c -
+printf '[4/5] 正在更新 GeoIP/GeoSite（下载可能需要一些时间）...\n'
+attempt_rule_source 1 'gh-proxy.com' "$GH_PROXY_IMMUTABLE" 0
+if [ "$RULES_VALID" -ne 1 ]; then
+	attempt_rule_source 2 'ghfast.top' "$GHFAST_IMMUTABLE" 1
+fi
+if [ "$RULES_VALID" -ne 1 ]; then
+	attempt_rule_source 3 'GitHub 官方' "$OFFICIAL_IMMUTABLE" 1
+fi
+[ "$RULES_VALID" -eq 1 ] || { echo '[4/5] ERROR: 所有 GeoIP/GeoSite 下载源均失败。' >&2; exit 1; }
+printf '[4/5] GeoIP/GeoSite 更新完成。\n'
+
+printf '[5/5] 校验规则数据并切换后续更新地址...\n'
+verify_rule_data
 
 uci -q set "passwall2.@global_rules[0].geosite_url=$LATEST/geosite.dat"
 uci -q set "passwall2.@global_rules[0].geoip_url=$LATEST/geoip.dat"
 uci -q commit passwall2
+printf '[5/5] 校验完成，后续更新将使用 latest 地址。\n'
 SUCCESS=1
 trap - EXIT HUP INT TERM
 rm -rf "$ROOT"
