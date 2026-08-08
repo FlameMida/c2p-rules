@@ -53,6 +53,20 @@ payload:
 
 其中苹果服务配置 `geosite:apple` 与 `geosite:icloud`；中国大陆同时配置 `geosite:cn` 与 `geoip:cn`；BilibiliHMT 同时配置独立的 GeoSite/GeoIP tag。生成的具名 UCI section 使用 `crs_` 命名空间并带 `managed_by=clash-rules-srs` 标记，用户已有分流组和节点不会被纳入托管清理范围。
 
+## 路由器侧提醒事项
+
+以下设置来自真实 PassWall2 设备上的最终持久化配置，只记录实际修改并保留生效的项目，不包含排障期间已回滚的临时设置：
+
+| PassWall2 界面位置 | 应用值 | 提醒 |
+| --- | --- | --- |
+| 基本设置 → 主要 → 客户端代理 | 开启 | 关闭时，未单独配置访问控制的局域网设备不会进入透明代理。 |
+| 基本设置 → 分流规则 → Domain Strategy | `IPIfNonMatch` | 先匹配 GeoSite 域名规则；仅在域名规则未命中时解析 IP 并再次匹配，避免 `IPOnDemand` 在域名分流前提前解析。 |
+| 基本设置 → DNS → 远程 DNS 协议 | `DoH` | 避免受污染的明文远程 DNS 结果进入分流链。 |
+| 基本设置 → DNS → 远程 DNS DoH | `https://dns.google/dns-query,8.8.8.8` | 逗号后的地址是 DoH 域名的 bootstrap IP，不能省略。 |
+| 节点订阅 → 编辑对应订阅（当前为“良心云”）→ allowInsecure | 开启 | 设置在订阅层，避免自动更新更换节点 ID 后丢失；当前默认 Hysteria2 节点必须同时保留 `tls_pinSHA256`。若后续订阅不再提供证书指纹，应关闭此项并修复服务端证书。 |
+
+订阅自动更新后应复查当前默认节点仍有 `tls_allowInsecure=1` 和非空的 `tls_pinSHA256`，并确认 Hysteria2、Xray 进程均已启动。仅看到 Xray 监听端口不代表代理链路完整可用。
+
 ## 本地构建与验证
 
 需要 Go 1.26.x、Git 和网络访问：
