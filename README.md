@@ -4,7 +4,7 @@
 
 ## 产物与语义
 
-每次 Release 精确包含六个文件：
+每次 Release 精确包含八资产：
 
 ```text
 geoip.dat
@@ -13,6 +13,8 @@ geosite.dat
 geosite.dat.sha256sum
 install_passwall2_rules.sh
 install_passwall2_rules.sh.sha256sum
+shadowrocket.conf
+shadowrocket.conf.sha256sum
 ```
 
 `sources.yaml` 为远程源的唯一真源。每个 output 显式指定最终 tag 和模式：
@@ -89,7 +91,7 @@ go run ./cmd/geodata-build verify --dat publish/geoip.dat --manifest build/expec
 go run ./cmd/geodata-build verify --dat publish/geoip.dat --manifest build/expected_tags.json --side geoip --forbid
 ```
 
-本地已有候选六资产时，可使用同一 Go CLI 复现发布判定：
+本地已有候选八资产时，可使用同一 Go CLI 复现发布判定：
 
 ```bash
 go run ./cmd/geodata-build release-decision --candidate publish --candidate-tag candidate-tag --baseline /path/to/latest-assets --baseline-tag latest-tag
@@ -97,7 +99,21 @@ go run ./cmd/geodata-build release-decision --candidate publish --candidate-tag 
 go run ./cmd/geodata-build release-decision --candidate publish --candidate-tag candidate-tag --force
 ```
 
-三个模式必须恰选一种，并且都会先严格验证候选六资产及安装器 `RELEASE_TAG` 与 `--candidate-tag` 的绑定；baseline 模式还要求安装器 tag 等于 `--baseline-tag`。成功输出固定为 `should_publish`、`reason`、`baseline_fingerprint` 三行；参数形状错误返回 2，资产、tag 绑定或完整性错误返回 1。
+三个模式必须恰选一种，并且都会先严格验证候选八资产及安装器 `RELEASE_TAG` 与 `--candidate-tag` 的绑定；baseline 模式还要求安装器 tag 等于 `--baseline-tag`。成功输出固定为 `should_publish`、`reason`、`baseline_fingerprint` 三行；参数形状错误返回 2，资产、tag 绑定或完整性错误返回 1。
+
+## 导入 Shadowrocket
+
+Shadowrocket 配置使用同一套最终 GeoSite/GeoIP 数据展开出的胖配置，不含节点；导入前需先在 App 中添加可供 PROXY 使用的订阅或节点。必须支持的入口是在 Shadowrocket 配置页粘贴：
+
+https://github.com/FlameMida/c2p-rules/releases/latest/download/shadowrocket.conf
+
+也可以把同一 HTTPS URL 交给可信的本地或在线二维码生成器，再用 Shadowrocket 扫码；仓库不发布二维码图片。作为增强入口，可打开 URL-encoded scheme：
+
+shadowrocket://config/add/https%3A%2F%2Fgithub.com%2FFlameMida%2Fc2p-rules%2Freleases%2Flatest%2Fdownload%2Fshadowrocket.conf
+
+配置内的 `update-url` 始终是上述 GitHub 官方 latest URL，不写 `gh-proxy.com`、`ghfast.top` 等镜像前缀。自动更新会覆盖配置正文；App 是否保留组内当前选择不属于本仓契约。
+
+发布集合从旧版切换为八资产后，旧 latest 无法通过严格 baseline 比较。首次上线必须在默认分支手动运行 build-geodata Workflow，并设置 `force_publish=true`；此后普通构建会把 `shadowrocket.conf` 原始字节纳入变化判定。
 
 ## 安装到 PassWall2
 
@@ -116,10 +132,10 @@ sh install_passwall2_rules.sh
 
 ## CI 与发布边界
 
-`.github/workflows/build.yml` 每日完整构建：只读 build job 仍运行 Go 单元测试、固定工具 bootstrap、真实工具集成测试、完整构建及三份 checksum 校验。随后把候选的规范化三主资产与可信 latest 比较；没有有效产物变化（内容无变化）时成功结束，不上传 Artifact，也不创建 tag 或 Release。
+`.github/workflows/build.yml` 每日完整构建：只读 build job 仍运行 Go 单元测试、固定工具 bootstrap、真实工具集成测试、完整构建及四份 checksum 校验。随后把候选的两个 dat、规范化安装器与 `shadowrocket.conf` 四个主资产和可信 latest 比较；没有有效产物变化（内容无变化）时成功结束，不上传 Artifact，也不创建 tag 或 Release。
 
-只有 GitHub latest API 明确 404 才按首次发布处理；查询、鉴权、下载失败或不可信六资产会严格失败。默认分支可手动设置 `force_publish=true` 修复不可信基线，但仍须完成候选构建、checksum、六资产验证和发布回读，非默认分支永不发布。普通 changed 发布在远端写入前重新下载基线并复核 Release ID、tag 和载荷指纹。
+只有 GitHub latest API 明确 404 才按首次发布处理；查询、鉴权、下载失败或不可信八资产会严格失败。默认分支可手动设置 `force_publish=true` 修复不可信基线，但仍须完成候选构建、checksum、八资产验证和发布回读，非默认分支永不发布。普通 changed 发布在远端写入前重新下载基线并复核 Release ID、tag 和载荷指纹。
 
-独立 publish job 才获得 `contents: write`，创建与构建注入相同的不可变 tag，上传并通过 GitHub API 回读六资产和 target commit，之后才公开并切换 `latest`。
+独立 publish job 才获得 `contents: write`，创建与构建注入相同的不可变 tag，上传并通过 GitHub API 回读八资产和 target commit，之后才公开并切换 `latest`。
 
 本项目不发布 `.srs`，不修改 PassWall2 源码，也不承诺无断流热更新。仓库/Release 的首次线上创建需要仓库所有者另行授权；示例中的 `OWNER/REPO` 不是可直接使用的公开地址。

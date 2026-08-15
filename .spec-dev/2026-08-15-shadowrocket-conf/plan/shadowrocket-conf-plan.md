@@ -1569,7 +1569,7 @@ git commit -m "ci(T5): 发布并回读 Shadowrocket 八资产"
 - 消费：任务 3 的 shadowrocket.conf latest URL 与任务 5 的 force_publish 工作流入口。
 - 产出：README.md 与 context.md 均列出八资产，并提供 HTTPS 粘贴、同 URL 二维码、URL-encoded scheme 三种入口以及首次上线操作。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 internal/app/docs_contract_test.go 现有双文档循环的 required 列表增加：
 
@@ -1627,7 +1627,7 @@ func Test文档含新资产与导入入口(t *testing.T) {
 
 为此在 test imports 加入 strings。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ~~~bash
 go test ./internal/app -run 'Test(DocsDescribeGoOnlyWorkflowAndManagedInstall|文档含新资产与导入入口)$' -v
@@ -1635,7 +1635,7 @@ go test ./internal/app -run 'Test(DocsDescribeGoOnlyWorkflowAndManagedInstall|�
 
 预期：FAIL，README.md 与 context.md 缺 Shadowrocket 资产、scheme、二维码和 force_publish=true，并仍含六资产 / 三主资产旧口径。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 把 README.md 的发布清单改成：
 
@@ -1693,7 +1693,7 @@ sources.yaml + custom/geosite + custom/geoip
 
 在 context.md 分流章节后加入与 README 相同的 actual latest URL、二维码说明、完整 URL-encoded scheme、官方 update-url 不带镜像前缀、自动更新覆盖边界与默认分支 force_publish=true 首次上线步骤。CI 章节统一改成“四个主资产”“八资产验证”“精确比较八个文件”“四份 checksum”；验收边界补充真机导入、自动更新和大 conf 耗时为 DEFERRED。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ~~~bash
 gofmt -w internal/app/docs_contract_test.go
@@ -1702,7 +1702,7 @@ go test ./internal/app -run 'Test(DocsDescribeGoOnlyWorkflowAndManagedInstall|�
 
 预期：两个测试 PASS；README.md 与 context.md 均含实际 latest URL、三种入口、镜像禁入 update-url、force_publish=true，且不再出现旧六资产 / 三主资产口径。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ~~~bash
 git add internal/app/docs_contract_test.go README.md context.md
