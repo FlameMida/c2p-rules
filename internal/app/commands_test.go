@@ -136,6 +136,28 @@ func TestFirstAndForcePrintNoneBaselineFingerprint(t *testing.T) {
 	}
 }
 
+func Test六文件基线不得当成ChangedCLI(t *testing.T) {
+	candidate := releasePayload(t, "candidate", "site", "ip")
+	baseline := releasePayload(t, "baseline", "site", "ip")
+	for _, name := range []string{"shadowrocket.conf", "shadowrocket.conf.sha256sum"} {
+		if err := os.Remove(filepath.Join(baseline, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	code, stdout, stderr := runReleaseDecision([]string{
+		"--candidate", candidate,
+		"--candidate-tag", "candidate",
+		"--baseline", baseline,
+		"--baseline-tag", "baseline",
+	})
+	if code != 1 || stdout != "" ||
+		!strings.Contains(stderr, "asset set mismatch") ||
+		!strings.Contains(stderr, "missing") ||
+		strings.Contains(stdout, "reason=changed") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
 func runReleaseDecision(args []string) (int, string, string) {
 	var out, errOut bytes.Buffer
 	code := cli.Run(context.Background(), append([]string{"release-decision"}, args...), &out, &errOut, Commands())
@@ -149,6 +171,7 @@ func releasePayload(t *testing.T, tag, geosite, geoip string) string {
 		"geosite.dat":                geosite,
 		"geoip.dat":                  geoip,
 		"install_passwall2_rules.sh": fmt.Sprintf("#!/bin/sh\nRELEASE_TAG='%s'\nlogic=v1\n", tag),
+		"shadowrocket.conf":          "conf=v1",
 	} {
 		path := filepath.Join(dir, name)
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

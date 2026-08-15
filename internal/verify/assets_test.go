@@ -10,56 +10,35 @@ import (
 	"clash-rules-srs/internal/verify"
 )
 
-func TestReleaseAssetsReturnsIndependentExactSixNames(t *testing.T) {
-	want := []string{
-		"geoip.dat",
-		"geoip.dat.sha256sum",
-		"geosite.dat",
-		"geosite.dat.sha256sum",
-		"install_passwall2_rules.sh",
-		"install_passwall2_rules.sh.sha256sum",
-	}
-	first := verify.ReleaseAssets()
-	if !slices.Equal(first, want) {
-		t.Fatalf("assets=%v", first)
-	}
-	first[0] = "mutated"
-	if got := verify.ReleaseAssets(); !slices.Equal(got, want) {
-		t.Fatalf("shared mutable assets=%v", got)
-	}
-}
-
-func TestReleaseAssets包含Shadowrocket八资产(t *testing.T) {
-	want := []string{
-		"geoip.dat",
-		"geoip.dat.sha256sum",
-		"geosite.dat",
-		"geosite.dat.sha256sum",
-		"install_passwall2_rules.sh",
-		"install_passwall2_rules.sh.sha256sum",
-		"shadowrocket.conf",
-		"shadowrocket.conf.sha256sum",
-	}
-	if got := verify.ReleaseAssets(); !slices.Equal(got, want) {
-		t.Fatalf("assets=%v want=%v", got, want)
-	}
-}
-
-var sixAssets = []string{
+var releaseAssets = []string{
 	"geoip.dat",
 	"geoip.dat.sha256sum",
 	"geosite.dat",
 	"geosite.dat.sha256sum",
 	"install_passwall2_rules.sh",
 	"install_passwall2_rules.sh.sha256sum",
+	"shadowrocket.conf",
+	"shadowrocket.conf.sha256sum",
 }
 
-func TestWriteSHA256AndValidateExactSixAssets(t *testing.T) {
+func TestReleaseAssetsReturnsIndependentExactEightNames(t *testing.T) {
+	first := verify.ReleaseAssets()
+	if !slices.Equal(first, releaseAssets) {
+		t.Fatalf("assets=%v", first)
+	}
+	first[0] = "mutated"
+	if got := verify.ReleaseAssets(); !slices.Equal(got, releaseAssets) {
+		t.Fatalf("shared mutable assets=%v", got)
+	}
+}
+
+func TestWriteSHA256AndValidateExactEightAssets(t *testing.T) {
 	dir := t.TempDir()
 	for name, content := range map[string]string{
 		"geosite.dat":                "site",
 		"geoip.dat":                  "ip",
 		"install_passwall2_rules.sh": "#!/bin/sh\n",
+		"shadowrocket.conf":          "[General]\n",
 	} {
 		path := filepath.Join(dir, name)
 		mustWrite(t, path, content)
@@ -72,8 +51,19 @@ func TestWriteSHA256AndValidateExactSixAssets(t *testing.T) {
 			t.Fatalf("checksum=%q", checksum)
 		}
 	}
-	if err := verify.Assets(dir, sixAssets); err != nil {
+	if err := verify.Assets(dir, releaseAssets); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func Test缺少Conf时资产校验失败(t *testing.T) {
+	dir := validAssets(t)
+	if err := os.Remove(filepath.Join(dir, "shadowrocket.conf")); err != nil {
+		t.Fatal(err)
+	}
+	err := verify.Assets(dir, verify.ReleaseAssets())
+	if err == nil || !strings.Contains(err.Error(), "missing") || !strings.Contains(err.Error(), "shadowrocket.conf") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
@@ -86,7 +76,7 @@ func TestAssetsRejectsUnexpectedMissingAndMismatchedFiles(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := validAssets(t)
 			mutate(dir)
-			if err := verify.Assets(dir, sixAssets); err == nil || !strings.Contains(err.Error(), name[:3]) && name != "mismatch" {
+			if err := verify.Assets(dir, releaseAssets); err == nil || !strings.Contains(err.Error(), name[:3]) && name != "mismatch" {
 				t.Fatalf("err=%v", err)
 			}
 		})
@@ -96,7 +86,7 @@ func TestAssetsRejectsUnexpectedMissingAndMismatchedFiles(t *testing.T) {
 func validAssets(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	for _, name := range []string{"geosite.dat", "geoip.dat", "install_passwall2_rules.sh"} {
+	for _, name := range []string{"geosite.dat", "geoip.dat", "install_passwall2_rules.sh", "shadowrocket.conf"} {
 		path := filepath.Join(dir, name)
 		mustWrite(t, path, name)
 		if _, err := verify.WriteSHA256(path); err != nil {

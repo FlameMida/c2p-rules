@@ -1216,7 +1216,7 @@ git commit -m "feat(T3): 将 Shadowrocket 配置接入事务构建"
 - 消费：任务 3 写出的 shadowrocket.conf 与 shadowrocket.conf.sha256sum。
 - 产出：verify.ReleaseAssets() 返回独立的精确八名切片；releasecmp fingerprint 第四帧为 shadowrocket.conf 原始字节，不读取其 checksum 内容。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 把 internal/verify/assets_test.go 的资产期望统一改名为 releaseAssets，把 TestWriteSHA256AndValidateExactSixAssets 重命名为 TestWriteSHA256AndValidateExactEightAssets，并加入两个新文件：
 
@@ -1349,7 +1349,7 @@ func Test六文件基线不得当成ChangedCLI(t *testing.T) {
 }
 ~~~
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ~~~bash
 go test ./internal/verify -run 'Test(ReleaseAssetsReturnsIndependentExactEightNames|缺少Conf时资产校验失败)$' -v
@@ -1359,7 +1359,7 @@ go test ./internal/app -run Test六文件基线不得当成ChangedCLI -v
 
 预期：verify 因仍返回六名而 FAIL；releasecmp / app helper 在资产验证或 conf 指纹断言处 FAIL。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 把 internal/verify/assets.go 的 releaseAssetNames 改为：
 
@@ -1387,7 +1387,7 @@ return hex.EncodeToString(digest.Sum(nil)), nil
 
 不得 hash shadowrocket.conf.sha256sum；verify.Assets 已先校验该文件和主文件匹配。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ~~~bash
 gofmt -w internal/verify/assets.go internal/verify/assets_test.go internal/releasecmp/releasecmp.go internal/releasecmp/releasecmp_test.go internal/app/commands_test.go
@@ -1396,7 +1396,7 @@ go test ./internal/verify ./internal/releasecmp ./internal/app
 
 预期：全部 PASS；conf 单独变化为 changed；只有安装器 tag 变化为 unchanged；旧六文件 baseline 返回资产集合错误而不是 changed。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ~~~bash
 git add internal/verify/assets.go internal/verify/assets_test.go internal/releasecmp/releasecmp.go internal/releasecmp/releasecmp_test.go internal/app/commands_test.go

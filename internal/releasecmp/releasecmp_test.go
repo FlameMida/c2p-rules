@@ -104,7 +104,7 @@ func Test内容相同但人工强制发布(t *testing.T) {
 	}
 }
 
-func TestLatest六资产损坏(t *testing.T) {
+func TestLatest八资产损坏(t *testing.T) {
 	mutations := map[string]func(*testing.T, string){
 		"missing": func(t *testing.T, dir string) {
 			if err := os.Remove(filepath.Join(dir, "geoip.dat")); err != nil {
@@ -131,6 +131,47 @@ func TestLatest六资产损坏(t *testing.T) {
 				t.Fatalf("err=%v", err)
 			}
 		})
+	}
+}
+
+func Test只改Conf判定Changed(t *testing.T) {
+	candidate := payload(t, "candidate", "same-site", "same-ip", "logic=v1")
+	baseline := payload(t, "baseline", "same-site", "same-ip", "logic=v1")
+	rewriteMain(t, candidate, "shadowrocket.conf", "conf=v2")
+	decision, err := releasecmp.Decide(compareInput(candidate, "candidate", baseline, "baseline"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !decision.ShouldPublish || decision.Reason != "changed" {
+		t.Fatalf("decision=%+v", decision)
+	}
+}
+
+func Test只换Tag不改Conf判定Unchanged(t *testing.T) {
+	candidate := payload(t, "candidate", "same-site", "same-ip", "logic=v1")
+	baseline := payload(t, "baseline", "same-site", "same-ip", "logic=v1")
+	decision, err := releasecmp.Decide(compareInput(candidate, "candidate", baseline, "baseline"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.ShouldPublish || decision.Reason != "unchanged" {
+		t.Fatalf("decision=%+v", decision)
+	}
+}
+
+func Test六文件基线不得当成Changed(t *testing.T) {
+	candidate := payload(t, "candidate", "site", "ip", "logic=v1")
+	baseline := payload(t, "baseline", "site", "ip", "logic=v1")
+	for _, name := range []string{"shadowrocket.conf", "shadowrocket.conf.sha256sum"} {
+		if err := os.Remove(filepath.Join(baseline, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := releasecmp.Decide(compareInput(candidate, "candidate", baseline, "baseline"))
+	if err == nil || !strings.Contains(err.Error(), "baseline payload") ||
+		!strings.Contains(err.Error(), "asset set mismatch") ||
+		!strings.Contains(err.Error(), "missing") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
@@ -227,6 +268,7 @@ func payload(t *testing.T, tag, geosite, geoip, logic string) string {
 	rewriteMain(t, dir, "geosite.dat", geosite)
 	rewriteMain(t, dir, "geoip.dat", geoip)
 	rewriteMain(t, dir, "install_passwall2_rules.sh", string(installer(tag, logic)))
+	rewriteMain(t, dir, "shadowrocket.conf", "conf=v1")
 	return dir
 }
 
@@ -246,6 +288,7 @@ func renderedPayload(t *testing.T, tag, geosite, geoip string) string {
 	rewriteMain(t, dir, "geosite.dat", geosite)
 	rewriteMain(t, dir, "geoip.dat", geoip)
 	rewriteMain(t, dir, "install_passwall2_rules.sh", string(script))
+	rewriteMain(t, dir, "shadowrocket.conf", "conf=v1")
 	return dir
 }
 

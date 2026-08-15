@@ -128,6 +128,9 @@ func fingerprint(directory, expectedTag string) (string, error) {
 	if err := hashFrame(digest, "install_passwall2_rules.sh", int64(len(normalized)), bytes.NewReader(normalized)); err != nil {
 		return "", err
 	}
+	if err := hashFileFrame(digest, directory, "shadowrocket.conf"); err != nil {
+		return "", err
+	}
 	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
