@@ -19,16 +19,13 @@ func Render(groups []GroupRules, repo string) ([]byte, error) {
 	if len(groups) == 0 {
 		return nil, fmt.Errorf("no Shadowrocket groups")
 	}
-
-	var output bytes.Buffer
-	fmt.Fprintf(&output, "[General]\nupdate-url = https://github.com/%s/releases/latest/download/shadowrocket.conf\n\n", repo)
-	output.WriteString("[Proxy Group]\n")
-	cnRemarks := ""
+	byID := make(map[string]GroupRules, len(groups))
 	seenRemarks := make(map[string]string, len(groups))
 	for _, rules := range groups {
-		if len(rules.Domains) == 0 && len(rules.CIDRs) == 0 {
-			return nil, fmt.Errorf("group %q (%s) has zero rules", rules.Group.Remarks, rules.Group.ID)
+		if _, duplicate := byID[rules.Group.ID]; duplicate {
+			return nil, fmt.Errorf("duplicate group id %q", rules.Group.ID)
 		}
+		byID[rules.Group.ID] = rules
 		if err := validateRemark(rules.Group.Remarks); err != nil {
 			return nil, fmt.Errorf("group %q: %w", rules.Group.ID, err)
 		}
@@ -39,7 +36,28 @@ func Render(groups []GroupRules, repo string) ([]byte, error) {
 			return nil, fmt.Errorf("groups %q and %q repeat policy group name %q", previousID, rules.Group.ID, rules.Group.Remarks)
 		}
 		seenRemarks[rules.Group.Remarks] = rules.Group.ID
-		candidates, selected := policy(rules.Group.ID)
+	}
+	proxyRemarks := ""
+	if _, hasTLD := byID["tld_not_cn"]; hasTLD {
+		proxy, ok := byID["proxy"]
+		if !ok {
+			return nil, fmt.Errorf("tld_not_cn requires proxy group")
+		}
+		proxyRemarks = proxy.Group.Remarks
+	}
+
+	var output bytes.Buffer
+	fmt.Fprintf(&output, "[General]\nupdate-url = https://github.com/%s/releases/latest/download/shadowrocket.conf\n\n", repo)
+	output.WriteString("[Proxy Group]\n")
+	cnRemarks := ""
+	for _, rules := range groups {
+		if len(rules.Domains) == 0 && len(rules.CIDRs) == 0 {
+			return nil, fmt.Errorf("group %q (%s) has zero rules", rules.Group.Remarks, rules.Group.ID)
+		}
+		candidates, selected, err := policy(rules.Group.ID, proxyRemarks)
+		if err != nil {
+			return nil, err
+		}
 		fmt.Fprintf(&output, "%s = select,%s,policy-select-name=%s\n",
 			rules.Group.Remarks, strings.Join(candidates, ","), selected)
 		if rules.Group.ID == "cn" {
@@ -89,14 +107,19 @@ func reservedPolicyName(value string) bool {
 	}
 }
 
-func policy(id string) ([]string, string) {
+func policy(id, proxyRemarks string) ([]string, string, error) {
 	switch id {
 	case "reject":
-		return []string{"REJECT", "PROXY", "DIRECT"}, "REJECT"
+		return []string{"REJECT", "PROXY", "DIRECT"}, "REJECT", nil
 	case "cn", "private", "direct":
-		return []string{"DIRECT", "PROXY"}, "DIRECT"
+		return []string{"DIRECT", "PROXY"}, "DIRECT", nil
+	case "tld_not_cn":
+		if proxyRemarks == "" {
+			return nil, "", fmt.Errorf("tld_not_cn requires proxy remarks")
+		}
+		return []string{proxyRemarks}, proxyRemarks, nil
 	default:
-		return []string{"PROXY", "DIRECT"}, "PROXY"
+		return []string{"PROXY", "DIRECT"}, "PROXY", nil
 	}
 }
 

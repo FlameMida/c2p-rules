@@ -1363,7 +1363,7 @@ git commit -m "feat(T4): 增加两段 GeoSite 编译"
 - 消费：现有 `[]shadowrocket.GroupRules`，不改变 YAML schema。
 - 产出：`tld_not_cn` 按 `proxy` group ID 解析 remarks；`policy` 改为 `func policy(id, proxyRemarks string) ([]string, string, error)`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `internal/shadowrocket/render_test.go` 增加：
 
@@ -1400,7 +1400,7 @@ func TestRemarks变化时按ID建立引用(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 go test ./internal/shadowrocket -run 'Test(非中国域名跟随代理规则|Remarks变化时按ID建立引用)' -count=1
@@ -1408,7 +1408,7 @@ go test ./internal/shadowrocket -run 'Test(非中国域名跟随代理规则|Rem
 
 预期：FAIL；旧 renderer 输出 `非中国域名 = select,PROXY,DIRECT,policy-select-name=PROXY`。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 在 `Render` 写任何 `[Proxy Group]` 行前完成 ID/remarks 两套索引：
 
@@ -1464,7 +1464,7 @@ func policy(id, proxyRemarks string) ([]string, string, error) {
 
 索引只形成 `tld_not_cn → proxy` 一条边；proxy 仍只含内建 `PROXY,DIRECT`，所以不存在回边或环。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 gofmt -w internal/shadowrocket/render.go internal/shadowrocket/render_test.go
@@ -1473,7 +1473,7 @@ go test ./internal/shadowrocket -count=1
 
 预期：PASS；原 reject/direct/default 与 rule tail golden 全部保持。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/shadowrocket/render.go internal/shadowrocket/render_test.go
