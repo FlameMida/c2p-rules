@@ -1008,7 +1008,7 @@ git commit -m "feat(T3): 保留生成型残差标签"
 - 消费：任务 1 的 `geodat.DecodeGeoSite`、任务 2 的 `geosite.Derive`、任务 3 的 generated tag 常量与 writer。
 - 产出：`Layout.IntermediateGeoSite`；`Dependencies.CompileIntermediateGeoSite`、`Dependencies.DeriveResidualGeoSite`、`Dependencies.VerifyFullGeoSiteTags` 三个 stage；正式 `CompileGeoSite` 仍输出 `publish/geosite.dat`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `internal/workspace/transaction_test.go` 增加：
 
@@ -1152,7 +1152,7 @@ func appTestFieldVarint(number, value uint64) []byte {
 
 另加 `missing` 子测试：从 clone 删除 `gfw` 后写 final，断言错误含 `gfw`。测试 encoder 不导入 production encoder，也不调用外部 compiler。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 go test ./internal/workspace ./internal/app -run 'Test(IntermediateGeoSite位于Build且不在Publish|SkipCompile不生成残差发布物|中间DAT不污染最终探测缓存|完整标签与Reject指纹门禁)' -count=1
@@ -1160,7 +1160,7 @@ go test ./internal/workspace ./internal/app -run 'Test(IntermediateGeoSite位于
 
 预期：FAIL，报 `Layout.IntermediateGeoSite undefined` 或新 dependency stage 未定义。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `internal/workspace/layout.go` 的 `Layout` 增加字段并在 `newLayout` 初始化：
 
@@ -1337,7 +1337,7 @@ func verifyFullGeoSiteTags(finalPath string, intermediate map[string]geodat.Site
 
 更新 `buildFixture.dependencies()`：为四个新 stage 分别登记上述精确 name；中间 compile 写 `Layout.IntermediateGeoSite`，最终 compile 写 `publish/geosite.dat`，verify stage 在 fixture 中只记录顺序。原 `TestSkipCompile不产出Conf` 合并进新的 `TestSkipCompile不生成残差发布物`，避免两个 active Scenario 名竞争同一行为。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 gofmt -w internal/workspace internal/app/build.go internal/app/deps.go internal/app/build_test.go
@@ -1346,7 +1346,7 @@ go test ./internal/workspace ./internal/app -count=1
 
 预期：PASS；`--skip-compile` 在 prepare 后返回，中间/最终 compiler 与 publish switch 均未运行。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/workspace internal/app/build.go internal/app/deps.go internal/app/build_test.go

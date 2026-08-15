@@ -110,6 +110,21 @@ func TestLayoutKeepsAllIntermediatesInsideStaging(t *testing.T) {
 	}
 }
 
+func TestIntermediateGeoSite位于Build且不在Publish(t *testing.T) {
+	tx, err := workspace.Begin(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Abort()
+	layout := tx.Layout()
+	if filepath.Dir(layout.IntermediateGeoSite) != filepath.Join(layout.Build, "intermediate-geosite") {
+		t.Fatalf("intermediate=%s build=%s", layout.IntermediateGeoSite, layout.Build)
+	}
+	if strings.HasPrefix(layout.IntermediateGeoSite, layout.Publish+string(os.PathSeparator)) {
+		t.Fatal("intermediate DAT is under publish")
+	}
+}
+
 func TestConcurrentTransactionsNeverPublishMixedGenerations(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "build", "generation"), "old")

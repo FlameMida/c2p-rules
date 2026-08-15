@@ -79,7 +79,7 @@ func BeginWithFS(root string, filesystem FS) (*Transaction, error) {
 		return nil, fmt.Errorf("create staging in %s: %w", absolute, err)
 	}
 	layout := newLayout(staging)
-	for _, directory := range []string{layout.Build, layout.Publish, layout.DataMerged, layout.IP} {
+	for _, directory := range []string{layout.Build, layout.Publish, layout.DataMerged, layout.IP, filepath.Dir(layout.IntermediateGeoSite)} {
 		if err := filesystem.MkdirAll(directory, 0o755); err != nil {
 			_ = filesystem.RemoveAll(staging)
 			return nil, fmt.Errorf("create staging directory %s: %w", directory, err)

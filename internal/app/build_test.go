@@ -2,15 +2,19 @@ package app
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 
+	"clash-rules-srs/internal/geodat"
 	"clash-rules-srs/internal/manifest"
 	"clash-rules-srs/internal/model"
+	"clash-rules-srs/internal/targets"
 	"clash-rules-srs/internal/verify"
 	"clash-rules-srs/internal/workspace"
 )
@@ -112,7 +116,7 @@ func Test展开失败则不发布(t *testing.T) {
 	fixture.assertBuildAndPublished("old")
 }
 
-func TestSkipCompile不产出Conf(t *testing.T) {
+func TestSkipCompile不生成残差发布物(t *testing.T) {
 	fixture := newBuildFixture(t)
 	fixture.seedPublished("old")
 	options := fixture.options()
@@ -122,14 +126,155 @@ func TestSkipCompile不产出Conf(t *testing.T) {
 	}
 	fixture.assertBuildAndPublished("old")
 	for _, forbidden := range []string{
-		"compile geosite",
+		"compile intermediate geosite",
+		"derive residual geosite",
+		"compile final geosite",
+		"verify full geosite tags",
 		"render shadowrocket conf and checksum",
-		"verify release assets",
 	} {
 		if slices.Contains(fixture.calls, forbidden) {
-			t.Fatalf("%s ran during skip-compile: %v", forbidden, fixture.calls)
+			t.Fatalf("%s ran: %v", forbidden, fixture.calls)
 		}
 	}
+}
+
+func Test中间DAT不污染最终探测缓存(t *testing.T) {
+	fixture := newBuildFixture(t)
+	if err := Build(context.Background(), fixture.options(), fixture.dependencies()); err != nil {
+		t.Fatal(err)
+	}
+	wantOrder := []string{
+		"compile intermediate geosite",
+		"derive residual geosite",
+		"compile final geosite",
+		"compile geoip",
+		"verify full geosite tags",
+		"validate passwall groups",
+		"probe required and forbidden tags",
+	}
+	last := -1
+	for _, name := range wantOrder {
+		index := slices.Index(fixture.calls, name)
+		if index <= last {
+			t.Fatalf("stage %q out of order: %v", name, fixture.calls)
+		}
+		last = index
+	}
+}
+
+func Test完整标签与Reject指纹门禁(t *testing.T) {
+	baseline := map[string]geodat.SiteTag{}
+	for _, tag := range []string{"gfw", "proxy", "direct", "reject"} {
+		baseline[tag] = geodat.SiteTag{Name: strings.ToUpper(tag), Domains: []model.DomainRule{{
+			Kind: model.DomainSuffix, Value: tag + ".example", Attrs: []string{"@cn"},
+		}}}
+	}
+	baseline["reject"] = geodat.SiteTag{Name: "REJECT", Domains: []model.DomainRule{
+		{Kind: model.DomainSuffix, Value: "ads-one.example", Attrs: []string{"@cn"}},
+		{Kind: model.DomainFull, Value: "ads-two.example"},
+	}}
+	baseline[targets.ProxyResidualTag] = geodat.SiteTag{
+		Name: targets.ProxyResidualTag, Domains: []model.DomainRule{{Kind: model.DomainFull, Value: "proxy-residual.example"}},
+	}
+	baseline[targets.DirectResidualTag] = geodat.SiteTag{
+		Name: targets.DirectResidualTag, Domains: []model.DomainRule{{Kind: model.DomainFull, Value: "direct-residual.example"}},
+	}
+
+	writeFinal := func(tags map[string]geodat.SiteTag) string {
+		path := filepath.Join(t.TempDir(), "geosite.dat")
+		if err := os.WriteFile(path, encodeAppTestSiteDAT(tags), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	if err := verifyFullGeoSiteTags(writeFinal(baseline), baseline); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, mutation := range []struct {
+		name string
+		tag  string
+		rule model.DomainRule
+	}{
+		{name: "kind", tag: "gfw", rule: model.DomainRule{Kind: model.DomainFull, Value: "gfw.example", Attrs: []string{"@cn"}}},
+		{name: "value", tag: "proxy", rule: model.DomainRule{Kind: model.DomainSuffix, Value: "changed.example", Attrs: []string{"@cn"}}},
+		{name: "attrs", tag: "direct", rule: model.DomainRule{Kind: model.DomainSuffix, Value: "direct.example", Attrs: []string{"@other"}}},
+		{name: "order", tag: "reject"},
+	} {
+		t.Run(mutation.name, func(t *testing.T) {
+			changed := cloneSiteTags(baseline)
+			if mutation.name == "order" {
+				rules := changed[mutation.tag].Domains
+				changed[mutation.tag] = geodat.SiteTag{Name: "REJECT", Domains: []model.DomainRule{rules[1], rules[0]}}
+			} else {
+				changed[mutation.tag] = geodat.SiteTag{Name: strings.ToUpper(mutation.tag), Domains: []model.DomainRule{mutation.rule}}
+			}
+			err := verifyFullGeoSiteTags(writeFinal(changed), baseline)
+			if err == nil || !strings.Contains(err.Error(), mutation.tag) {
+				t.Fatalf("err=%v", err)
+			}
+		})
+	}
+
+	t.Run("missing", func(t *testing.T) {
+		changed := cloneSiteTags(baseline)
+		delete(changed, "gfw")
+		err := verifyFullGeoSiteTags(writeFinal(changed), baseline)
+		if err == nil || !strings.Contains(err.Error(), "gfw") {
+			t.Fatalf("err=%v", err)
+		}
+	})
+}
+
+func cloneSiteTags(input map[string]geodat.SiteTag) map[string]geodat.SiteTag {
+	result := make(map[string]geodat.SiteTag, len(input))
+	for key, tag := range input {
+		tag.Domains = append([]model.DomainRule(nil), tag.Domains...)
+		result[key] = tag
+	}
+	return result
+}
+
+func encodeAppTestSiteDAT(tags map[string]geodat.SiteTag) []byte {
+	names := make([]string, 0, len(tags))
+	for name := range tags {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var document []byte
+	for _, name := range names {
+		tag := tags[name]
+		entry := appTestFieldBytes(1, []byte(tag.Name))
+		for _, rule := range tag.Domains {
+			kind := map[model.DomainKind]uint64{
+				model.DomainKeyword: 0,
+				model.DomainRegexp:  1,
+				model.DomainSuffix:  2,
+				model.DomainFull:    3,
+			}[rule.Kind]
+			domain := appTestFieldVarint(1, kind)
+			domain = append(domain, appTestFieldBytes(2, []byte(rule.Value))...)
+			for _, attr := range rule.Attrs {
+				attribute := appTestFieldBytes(1, []byte(strings.TrimPrefix(attr, "@")))
+				attribute = append(attribute, appTestFieldVarint(2, 1)...)
+				domain = append(domain, appTestFieldBytes(3, attribute)...)
+			}
+			entry = append(entry, appTestFieldBytes(2, domain)...)
+		}
+		document = append(document, appTestFieldBytes(1, entry)...)
+	}
+	return document
+}
+
+func appTestFieldBytes(number uint64, value []byte) []byte {
+	result := binary.AppendUvarint(nil, number<<3|2)
+	result = binary.AppendUvarint(result, uint64(len(value)))
+	return append(result, value...)
+}
+
+func appTestFieldVarint(number, value uint64) []byte {
+	result := binary.AppendUvarint(nil, number<<3)
+	return binary.AppendUvarint(result, value)
 }
 
 func TestCachedTagLookupProbesEachExactTagOnce(t *testing.T) {
@@ -254,12 +399,17 @@ func (f *buildFixture) dependencies() Dependencies {
 			f.required = state.Manifest.Required
 			return manifest.Write(state.Tx.Layout().Manifest, state.Manifest)
 		}),
-		CompileGeoSite: stage("compile geosite", func(state *buildState) error {
+		CompileIntermediateGeoSite: stage("compile intermediate geosite", func(state *buildState) error {
+			return os.WriteFile(state.Tx.Layout().IntermediateGeoSite, []byte("intermediate-site"), 0o600)
+		}),
+		DeriveResidualGeoSite: stage("derive residual geosite", nil),
+		CompileGeoSite: stage("compile final geosite", func(state *buildState) error {
 			return os.WriteFile(filepath.Join(state.Tx.Layout().Publish, "geosite.dat"), []byte("site"), 0o600)
 		}),
 		CompileGeoIP: stage("compile geoip", func(state *buildState) error {
 			return os.WriteFile(filepath.Join(state.Tx.Layout().Publish, "geoip.dat"), []byte("ip"), 0o600)
 		}),
+		VerifyFullGeoSiteTags: stage("verify full geosite tags", nil),
 		ProbeTags: stage("probe required and forbidden tags", func(state *buildState) error {
 			for _, tag := range state.Manifest.Required.GeoSite {
 				f.probes = append(f.probes, "geosite:"+tag)

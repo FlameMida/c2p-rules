@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"clash-rules-srs/internal/geodat"
 	"clash-rules-srs/internal/geoip"
+	"clash-rules-srs/internal/geosite"
 	"clash-rules-srs/internal/manifest"
 	"clash-rules-srs/internal/model"
 	"clash-rules-srs/internal/targets"
@@ -26,40 +28,45 @@ type BuildOptions struct {
 }
 
 type buildState struct {
-	Options       BuildOptions
-	Tx            *workspace.Transaction
-	Sources       []model.Source
-	Groups        []model.Group
-	Registry      *targets.Registry
-	Contributions []model.Contribution
-	BaseGeoIP     string
-	GeoIPTemplate *geoip.Template
-	GeoInputs     []geoip.Input
-	Manifest      manifest.Document
-	GeoSiteSHA    string
-	GeoIPSHA      string
-	FinalLookup   verify.TagLookup
+	Options              BuildOptions
+	Tx                   *workspace.Transaction
+	Sources              []model.Source
+	Groups               []model.Group
+	Registry             *targets.Registry
+	Contributions        []model.Contribution
+	BaseGeoIP            string
+	GeoIPTemplate        *geoip.Template
+	GeoInputs            []geoip.Input
+	Manifest             manifest.Document
+	GeoSiteSHA           string
+	GeoIPSHA             string
+	IntermediateSiteTags map[string]geodat.SiteTag
+	ResidualReports      map[string]geosite.ResidualReport
+	FinalLookup          verify.TagLookup
 }
 
 type buildStage func(context.Context, *buildState) error
 
 type Dependencies struct {
-	Begin               func(string) (*workspace.Transaction, error)
-	LoadConfig          buildStage
-	FetchBaseGeoIP      buildStage
-	BuildRegistry       buildStage
-	FetchRemote         buildStage
-	LoadCustom          buildStage
-	MergeGeoSite        buildStage
-	PrepareGeoIP        buildStage
-	WriteManifest       buildStage
-	CompileGeoSite      buildStage
-	CompileGeoIP        buildStage
-	ProbeTags           buildStage
-	ValidateGroups      buildStage
-	RenderInstaller     buildStage
-	RenderShadowrocket  buildStage
-	VerifyReleaseAssets buildStage
+	Begin                      func(string) (*workspace.Transaction, error)
+	LoadConfig                 buildStage
+	FetchBaseGeoIP             buildStage
+	BuildRegistry              buildStage
+	FetchRemote                buildStage
+	LoadCustom                 buildStage
+	MergeGeoSite               buildStage
+	PrepareGeoIP               buildStage
+	WriteManifest              buildStage
+	CompileIntermediateGeoSite buildStage
+	DeriveResidualGeoSite      buildStage
+	CompileGeoSite             buildStage
+	CompileGeoIP               buildStage
+	VerifyFullGeoSiteTags      buildStage
+	ProbeTags                  buildStage
+	ValidateGroups             buildStage
+	RenderInstaller            buildStage
+	RenderShadowrocket         buildStage
+	VerifyReleaseAssets        buildStage
 }
 
 type namedStage struct {
@@ -104,8 +111,11 @@ func Build(ctx context.Context, options BuildOptions, dependencies Dependencies)
 	}
 
 	finish := []namedStage{
-		{"compile geosite", dependencies.CompileGeoSite},
+		{"compile intermediate geosite", dependencies.CompileIntermediateGeoSite},
+		{"derive residual geosite", dependencies.DeriveResidualGeoSite},
+		{"compile final geosite", dependencies.CompileGeoSite},
 		{"compile geoip", dependencies.CompileGeoIP},
+		{"verify full geosite tags", dependencies.VerifyFullGeoSiteTags},
 		{"validate passwall groups", dependencies.ValidateGroups},
 		{"probe required and forbidden tags", dependencies.ProbeTags},
 		{"render installer and checksums", dependencies.RenderInstaller},

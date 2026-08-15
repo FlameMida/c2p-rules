@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 
 	"clash-rules-srs/internal/config"
 	"clash-rules-srs/internal/fetch"
 	"clash-rules-srs/internal/fileutil"
+	"clash-rules-srs/internal/geodat"
 	"clash-rules-srs/internal/geoip"
 	"clash-rules-srs/internal/geosite"
 	"clash-rules-srs/internal/manifest"
@@ -170,31 +173,74 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			state.Manifest = manifest.Build(state.Sources, state.Groups)
 			return manifest.Write(state.Tx.Layout().Manifest, state.Manifest)
 		},
-		CompileGeoSite: func(ctx context.Context, state *buildState) error {
-			if runner == nil {
-				return fmt.Errorf("tool runner is nil")
+		CompileIntermediateGeoSite: func(ctx context.Context, state *buildState) error {
+			return compileGeoSite(
+				ctx,
+				runner,
+				state.Options.Root,
+				state.Tx.Layout().DataMerged,
+				filepath.Dir(state.Tx.Layout().IntermediateGeoSite),
+			)
+		},
+		DeriveResidualGeoSite: func(_ context.Context, state *buildState) error {
+			data, err := os.ReadFile(state.Tx.Layout().IntermediateGeoSite)
+			if err != nil {
+				return fmt.Errorf("read intermediate geosite: %w", err)
 			}
-			if err := runner.Run(ctx, "domain-list-custom", state.Options.Root,
-				"--datapath="+state.Tx.Layout().DataMerged,
-				"--datname=geosite.dat",
-				"--outputpath="+state.Tx.Layout().Publish,
-				"--exportlists=",
-				"--togfwlist=",
-			); err != nil {
+			tags, err := geodat.DecodeGeoSite(data)
+			if err != nil {
+				return fmt.Errorf("decode intermediate geosite: %w", err)
+			}
+			state.IntermediateSiteTags = tags
+			state.ResidualReports = make(map[string]geosite.ResidualReport, 2)
+
+			proxySpec := geosite.ResidualSpec{
+				OutputTag:         targets.ProxyResidualTag,
+				BasisTags:         []string{"gfw", "proxy"},
+				EarlierActiveTags: []string{"reject", "youtube", "netflix", "spotify", "tiktok", "ai", "apple", "icloud", "google"},
+				LaterEquivalentTags: []string{
+					"tld-not-cn",
+				},
+			}
+			proxy, report, err := geosite.Derive(tags, proxySpec)
+			if err != nil {
 				return err
 			}
-			// The pinned compiler creates an empty gfwlist.txt even when
-			// --togfwlist is empty. It is not part of the release contract.
-			if err := os.Remove(filepath.Join(state.Tx.Layout().Publish, "gfwlist.txt")); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("remove compiler side asset: %w", err)
+			if err := geosite.WriteGenerated(state.Tx.Layout().DataMerged, proxySpec.OutputTag, proxy); err != nil {
+				return err
 			}
+			state.ResidualReports[proxySpec.OutputTag] = report
+			tags[strings.ToLower(proxySpec.OutputTag)] = geodat.SiteTag{Name: proxySpec.OutputTag, Domains: proxy}
+
+			directSpec := geosite.ResidualSpec{
+				OutputTag: targets.DirectResidualTag,
+				BasisTags: []string{"direct"},
+				EarlierActiveTags: []string{
+					"reject", "youtube", "netflix", "spotify", "tiktok", "ai", "apple", "icloud", "google",
+					targets.ProxyResidualTag, "tld-not-cn", "private", "cn",
+				},
+			}
+			direct, report, err := geosite.Derive(tags, directSpec)
+			if err != nil {
+				return err
+			}
+			if err := geosite.WriteGenerated(state.Tx.Layout().DataMerged, directSpec.OutputTag, direct); err != nil {
+				return err
+			}
+			state.ResidualReports[directSpec.OutputTag] = report
 			return nil
+		},
+		CompileGeoSite: func(ctx context.Context, state *buildState) error {
+			return compileGeoSite(ctx, runner, state.Options.Root, state.Tx.Layout().DataMerged, state.Tx.Layout().Publish)
 		},
 		CompileGeoIP: func(ctx context.Context, state *buildState) error {
 			if runner == nil {
 				return fmt.Errorf("tool runner is nil")
 			}
 			return runner.Run(ctx, "geoip", state.Options.Root, "convert", "-c", state.Tx.Layout().GeoIPConfig)
+		},
+		VerifyFullGeoSiteTags: func(_ context.Context, state *buildState) error {
+			return verifyFullGeoSiteTags(filepath.Join(state.Tx.Layout().Publish, "geosite.dat"), state.IntermediateSiteTags)
 		},
 		ProbeTags: func(ctx context.Context, state *buildState) error {
 			prober := finalProber(runner, state)
@@ -261,6 +307,55 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			return verify.Assets(state.Tx.Layout().Publish, verify.ReleaseAssets())
 		},
 	}
+}
+
+func compileGeoSite(ctx context.Context, runner *tools.Runner, root, dataPath, outputPath string) error {
+	if runner == nil {
+		return fmt.Errorf("tool runner is nil")
+	}
+	if err := os.MkdirAll(outputPath, 0o755); err != nil {
+		return fmt.Errorf("create geosite output: %w", err)
+	}
+	if err := runner.Run(ctx, "domain-list-custom", root,
+		"--datapath="+dataPath,
+		"--datname=geosite.dat",
+		"--outputpath="+outputPath,
+		"--exportlists=",
+		"--togfwlist=",
+	); err != nil {
+		return err
+	}
+	// The pinned compiler creates an empty gfwlist.txt even when
+	// --togfwlist is empty. It is not part of the release contract.
+	if err := os.Remove(filepath.Join(outputPath, "gfwlist.txt")); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove compiler side asset: %w", err)
+	}
+	return nil
+}
+
+func verifyFullGeoSiteTags(finalPath string, intermediate map[string]geodat.SiteTag) error {
+	data, err := os.ReadFile(finalPath)
+	if err != nil {
+		return fmt.Errorf("read final geosite: %w", err)
+	}
+	final, err := geodat.DecodeGeoSite(data)
+	if err != nil {
+		return fmt.Errorf("decode final geosite: %w", err)
+	}
+	for _, tag := range []string{"gfw", "proxy", "direct", "reject"} {
+		before, beforeOK := intermediate[tag]
+		after, afterOK := final[tag]
+		if !beforeOK || !afterOK || !reflect.DeepEqual(before.Domains, after.Domains) {
+			return fmt.Errorf("full geosite:%s fingerprint changed", tag)
+		}
+	}
+	for _, tag := range targets.GeneratedGeoSiteTags() {
+		record, ok := final[tag]
+		if !ok || len(record.Domains) == 0 {
+			return fmt.Errorf("generated geosite:%s is missing or empty", tag)
+		}
+	}
+	return nil
 }
 
 func finalProber(runner *tools.Runner, state *buildState) verify.TagLookup {
