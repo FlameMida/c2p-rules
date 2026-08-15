@@ -70,7 +70,10 @@ func TestRegistryRequireAcceptsUnreferencedBaseAndRejectsUnknown(t *testing.T) {
 func TestRegistryPropagatesBaseLookupErrors(t *testing.T) {
 	want := errors.New("probe failed")
 	output := model.Output{Tag: "google", Mode: model.MergeBase}
-	_, err := targets.New([]model.Source{{ID: "source", Outputs: model.Outputs{GeoSite: &output}}}, func(model.Side, string) (bool, error) {
+	_, err := targets.New([]model.Source{{ID: "source", Outputs: model.Outputs{GeoSite: &output}}}, func(_ model.Side, tag string) (bool, error) {
+		if targets.IsGenerated(model.GeoSite, tag) {
+			return false, nil
+		}
 		return false, want
 	})
 	if !errors.Is(err, want) || !strings.Contains(err.Error(), "geosite:google") {
@@ -87,7 +90,13 @@ func TestRegistryLooksUpTargetsInStableOrder(t *testing.T) {
 		{ID: "a", Outputs: model.Outputs{GeoSite: &a}},
 		{ID: "b", Outputs: model.Outputs{GeoIP: &b}},
 	}
-	want := []string{"geosite:a", "geosite:z", "geoip:b"}
+	want := []string{
+		"geosite:" + targets.DirectResidualTag,
+		"geosite:" + targets.ProxyResidualTag,
+		"geosite:a",
+		"geosite:z",
+		"geoip:b",
+	}
 	for attempt := 0; attempt < 32; attempt++ {
 		var calls []string
 		_, err := targets.New(sources, func(side model.Side, tag string) (bool, error) {
@@ -100,5 +109,35 @@ func TestRegistryLooksUpTargetsInStableOrder(t *testing.T) {
 		if !reflect.DeepEqual(calls, want) {
 			t.Fatalf("calls=%v want=%v", calls, want)
 		}
+	}
+}
+
+func Test生成标签被来源占用(t *testing.T) {
+	for _, owner := range []string{"source", "community"} {
+		t.Run(owner, func(t *testing.T) {
+			lookup := func(side model.Side, tag string) (bool, error) {
+				return owner == "community" && side == model.GeoSite && tag == targets.ProxyResidualTag, nil
+			}
+			var sources []model.Source
+			if owner == "source" {
+				output := model.Output{Tag: targets.ProxyResidualTag, Mode: model.Create}
+				sources = []model.Source{{ID: "reserved-owner", Outputs: model.Outputs{GeoSite: &output}}}
+			}
+			_, err := targets.New(sources, lookup)
+			if err == nil || !strings.Contains(err.Error(), targets.ProxyResidualTag) || !strings.Contains(err.Error(), "generated") {
+				t.Fatalf("err=%v", err)
+			}
+		})
+	}
+}
+
+func TestGenerated标签拒绝CustomRequire(t *testing.T) {
+	registry, err := targets.New(nil, func(model.Side, string) (bool, error) { return false, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = registry.Require(model.GeoSite, targets.DirectResidualTag)
+	if err == nil || !strings.Contains(err.Error(), "generated") {
+		t.Fatalf("err=%v", err)
 	}
 }

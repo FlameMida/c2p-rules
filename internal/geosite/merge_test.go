@@ -9,6 +9,7 @@ import (
 
 	"clash-rules-srs/internal/geosite"
 	"clash-rules-srs/internal/model"
+	"clash-rules-srs/internal/targets"
 )
 
 func TestMergeDeduplicatesExactRulesButPreservesKindAndAttrs(t *testing.T) {
@@ -100,6 +101,34 @@ func TestMergeRejectsNonGeositeAndUnsafeTags(t *testing.T) {
 				t.Fatal("expected error")
 			}
 		})
+	}
+}
+
+func TestGenerated标签安全写入(t *testing.T) {
+	root := t.TempDir()
+	rules := []model.DomainRule{
+		{Kind: model.DomainSuffix, Value: "z.example", Attrs: []string{"@cn"}},
+		{Kind: model.DomainFull, Value: "a.example"},
+	}
+	if err := geosite.WriteGenerated(root, targets.ProxyResidualTag, rules); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, targets.ProxyResidualTag))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "domain:z.example @cn\nfull:a.example\n" {
+		t.Fatalf("data=%q", data)
+	}
+	if err := geosite.WriteGenerated(root, targets.ProxyResidualTag, rules); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestGenerated标签拒绝空规则(t *testing.T) {
+	err := geosite.WriteGenerated(t.TempDir(), targets.DirectResidualTag, nil)
+	if err == nil || !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("err=%v", err)
 	}
 }
 

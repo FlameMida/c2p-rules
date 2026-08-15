@@ -9,6 +9,7 @@ import (
 
 	"clash-rules-srs/internal/model"
 	"clash-rules-srs/internal/rules"
+	"clash-rules-srs/internal/targets"
 )
 
 type checker map[model.Side]map[string]bool
@@ -105,6 +106,19 @@ func TestCustomRejectsUnknownDuplicateAliasMergeAndControlYAML(t *testing.T) {
 				t.Fatalf("err=%v", err)
 			}
 		})
+	}
+}
+
+func TestGenerated标签拒绝Custom输入(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "geosite", targets.ProxyResidualTag+".yaml"), "payload:\n  - DOMAIN-SUFFIX,example.test\n")
+	registry, err := targets.New(nil, func(model.Side, string) (bool, error) { return false, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := rules.LoadCustom(root, registry)
+	if err == nil || len(got) != 0 || !strings.Contains(err.Error(), targets.ProxyResidualTag) || !strings.Contains(err.Error(), "generated") {
+		t.Fatalf("got=%#v err=%v", got, err)
 	}
 }
 

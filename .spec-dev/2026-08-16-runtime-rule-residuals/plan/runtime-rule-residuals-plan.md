@@ -812,7 +812,7 @@ git commit -m "feat(T2): 实现保守残差推导"
 - 消费：任务 2 输出的 `[]model.DomainRule`。
 - 产出：`targets.ProxyResidualTag`、`targets.DirectResidualTag`、`targets.GeneratedGeoSiteTags()`、`targets.IsGenerated(model.Side, string)`、`geosite.WriteGenerated(string, string, []model.DomainRule) error`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `internal/targets/registry_test.go` 增加：
 
@@ -883,7 +883,7 @@ func TestGenerated标签拒绝Custom输入(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 go test ./internal/targets ./internal/geosite ./internal/rules -run 'Test(生成标签被来源占用|Generated标签拒绝CustomRequire|Generated标签安全写入|Generated标签拒绝空规则)' -count=1
@@ -891,7 +891,7 @@ go test ./internal/targets ./internal/geosite ./internal/rules -run 'Test(生成
 
 预期：FAIL，报 generated 常量或 `WriteGenerated` 未定义。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `internal/targets/generated.go`：
 
@@ -976,7 +976,7 @@ func WriteGenerated(root, tag string, rules []model.DomainRule) error {
 
 这里故意不允许第二次覆盖同名文件：同一次构建每个 generated tag 只能写一次；重复完整构建发生在新 staging 中，仍可幂等成功。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 gofmt -w internal/targets internal/geosite/generated.go internal/geosite/merge_test.go internal/rules/custom_test.go
@@ -985,7 +985,7 @@ go test ./internal/targets ./internal/geosite ./internal/rules -count=1
 
 预期：PASS；source、community 与 custom 三条占用路径都在最终编译前失败。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/targets internal/geosite/generated.go internal/geosite/merge_test.go internal/rules/custom_test.go
