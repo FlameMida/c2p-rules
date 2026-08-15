@@ -1413,7 +1413,7 @@ git commit -m "feat(T4): 将 Shadowrocket 资产纳入发布门禁"
 - 消费：任务 4 的八资产闭集与 release-decision。
 - 产出：build Artifact、publish exact check、draft upload、API 资产名回读、下载回读和四份 checksum 校验均使用同一八资产集合。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 把 internal/app/workflow_contract_test.go 的草稿事务测试改名为 Test变化后草稿Release八资产回读契约，并将精确 upload 期望改为：
 
@@ -1481,7 +1481,7 @@ func TestWorkflow上传与校验八资产(t *testing.T) {
 }
 ~~~
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ~~~bash
 go test ./internal/app -run 'Test(变化后草稿Release八资产回读契约|Workflow上传与校验八资产)$' -v
@@ -1489,7 +1489,7 @@ go test ./internal/app -run 'Test(变化后草稿Release八资产回读契约|Wo
 
 预期：FAIL，指出 Artifact path、checksum 或 gh release upload 缺 shadowrocket.conf 两个资产。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 在 .github/workflows/build.yml 做以下精确替换：
 
@@ -1541,7 +1541,7 @@ sha256sum -c shadowrocket.conf.sha256sum
 
 expected 仍通过 sort 与 actual 精确相等；不得只检查“至少存在”。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ~~~bash
 go test ./internal/app -run 'Test(变化后草稿Release八资产回读契约|Workflow上传与校验八资产|干净Runner完成无变化判定契约|WorkflowPermissionsOutputsAndConcurrency)$' -v
@@ -1549,7 +1549,7 @@ go test ./internal/app -run 'Test(变化后草稿Release八资产回读契约|Wo
 
 预期：全部 PASS；Workflow YAML 可解析；八个名字在 Artifact 与 Release upload 中各出现一次，四份 checksum 在构建和回读阶段均校验。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ~~~bash
 git add internal/app/workflow_contract_test.go .github/workflows/build.yml

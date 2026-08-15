@@ -168,7 +168,7 @@ func Test比较后Latest被外部替换(t *testing.T) {
 	)
 }
 
-func Test变化后草稿Release六资产回读契约(t *testing.T) {
+func Test变化后草稿Release八资产回读契约(t *testing.T) {
 	publish := loadWorkflow(t).Jobs["publish"]
 	stage := stepByName(t, publish, "Stage, read back, and publish exact Release")
 	strictReadback := "go run ./cmd/geodata-build release-decision \\\n  --candidate \"$readback\" \\\n  --candidate-tag \"$TAG\" \\\n  --force"
@@ -178,7 +178,11 @@ func Test变化后草稿Release六资产回读契约(t *testing.T) {
 		`release_id=$(gh release view "$TAG" --json databaseId --jq '.databaseId')`,
 		"gh release upload", `releases/$release_id`,
 		`.assets[].name`, `.tag_name`, `.target_commitish`,
-		`gh release download "$TAG"`, "sha256sum -c geoip.dat.sha256sum",
+		`gh release download "$TAG"`,
+		"sha256sum -c geoip.dat.sha256sum",
+		"sha256sum -c geosite.dat.sha256sum",
+		"sha256sum -c install_passwall2_rules.sh.sha256sum",
+		"sha256sum -c shadowrocket.conf.sha256sum",
 		strictReadback,
 		`gh release edit "$TAG" --draft=false --latest`,
 		`git/ref/tags/$TAG`,
@@ -189,9 +193,17 @@ func Test变化后草稿Release六资产回读契约(t *testing.T) {
 		}
 		previous = index
 	}
-	upload := "gh release upload \"$TAG\" \\\n  publish/geoip.dat \\\n  publish/geoip.dat.sha256sum \\\n  publish/geosite.dat \\\n  publish/geosite.dat.sha256sum \\\n  publish/install_passwall2_rules.sh \\\n  publish/install_passwall2_rules.sh.sha256sum"
+	upload := "gh release upload \"$TAG\" \\\n" +
+		"  publish/geoip.dat \\\n" +
+		"  publish/geoip.dat.sha256sum \\\n" +
+		"  publish/geosite.dat \\\n" +
+		"  publish/geosite.dat.sha256sum \\\n" +
+		"  publish/install_passwall2_rules.sh \\\n" +
+		"  publish/install_passwall2_rules.sh.sha256sum \\\n" +
+		"  publish/shadowrocket.conf \\\n" +
+		"  publish/shadowrocket.conf.sha256sum"
 	if !strings.Contains(stage.Run, upload) {
-		t.Fatalf("release upload is not exact six assets:\n%s", stage.Run)
+		t.Fatalf("release upload is not exact eight assets:\n%s", stage.Run)
 	}
 	for _, block := range []string{
 		`test "$(jq -r '.draft' "$draft_response")" = "true"`,
@@ -208,6 +220,41 @@ func Test变化后草稿Release六资产回读契约(t *testing.T) {
 	}
 	if strings.Count(stage.Run, "git/ref/tags/$TAG") != 1 {
 		t.Fatalf("Git tag must be checked exactly once after publication:\n%s", stage.Run)
+	}
+}
+
+func TestWorkflow上传与校验八资产(t *testing.T) {
+	document := loadWorkflow(t)
+	build := document.Jobs["build"]
+	upload := stepByUses(t, build, "actions/upload-artifact@")
+	path, ok := upload.With["path"].(string)
+	if !ok {
+		t.Fatalf("artifact path=%#v", upload.With["path"])
+	}
+	for _, name := range []string{
+		"geoip.dat", "geoip.dat.sha256sum",
+		"geosite.dat", "geosite.dat.sha256sum",
+		"install_passwall2_rules.sh", "install_passwall2_rules.sh.sha256sum",
+		"shadowrocket.conf", "shadowrocket.conf.sha256sum",
+	} {
+		if strings.Count("\n"+path+"\n", "\npublish/"+name+"\n") != 1 {
+			t.Fatalf("artifact path count for %s:\n%s", name, path)
+		}
+	}
+	for _, step := range []workflowStep{
+		stepByName(t, document.Jobs["publish"], "Verify exact payload and checksums"),
+		stepByName(t, document.Jobs["publish"], "Stage, read back, and publish exact Release"),
+	} {
+		assertRunContains(t, step, "shadowrocket.conf \\", "shadowrocket.conf.sha256sum")
+	}
+	for _, step := range []workflowStep{
+		stepByName(t, build, "Verify all checksums"),
+		stepByName(t, document.Jobs["publish"], "Verify exact payload and checksums"),
+		stepByName(t, document.Jobs["publish"], "Stage, read back, and publish exact Release"),
+	} {
+		if !strings.Contains(step.Run, "sha256sum -c shadowrocket.conf.sha256sum") {
+			t.Fatalf("%s misses Shadowrocket checksum:\n%s", step.Name, step.Run)
+		}
 	}
 }
 

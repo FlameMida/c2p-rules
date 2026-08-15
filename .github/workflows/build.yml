@@ -69,6 +69,7 @@ jobs:
           sha256sum -c geoip.dat.sha256sum
           sha256sum -c geosite.dat.sha256sum
           sha256sum -c install_passwall2_rules.sh.sha256sum
+          sha256sum -c shadowrocket.conf.sha256sum
 
       - name: Resolve release decision
         id: release_decision
@@ -141,7 +142,7 @@ jobs:
           echo "baseline_release_id=$baseline_release_id" >> "$GITHUB_OUTPUT"
           echo "baseline_tag=$baseline_tag" >> "$GITHUB_OUTPUT"
 
-      - name: Upload verified six-asset payload
+      - name: Upload verified eight-asset payload
         if: steps.release_decision.outputs.should_publish == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -153,6 +154,8 @@ jobs:
             publish/geosite.dat.sha256sum
             publish/install_passwall2_rules.sh
             publish/install_passwall2_rules.sh.sha256sum
+            publish/shadowrocket.conf
+            publish/shadowrocket.conf.sha256sum
           if-no-files-found: error
           retention-days: 1
 
@@ -186,13 +189,16 @@ jobs:
             geosite.dat \
             geosite.dat.sha256sum \
             install_passwall2_rules.sh \
-            install_passwall2_rules.sh.sha256sum)
+            install_passwall2_rules.sh.sha256sum \
+            shadowrocket.conf \
+            shadowrocket.conf.sha256sum)
           actual=$(find publish -maxdepth 1 -type f -exec basename {} \; | sort)
           test "$actual" = "$expected"
           cd publish
           sha256sum -c geoip.dat.sha256sum
           sha256sum -c geosite.dat.sha256sum
           sha256sum -c install_passwall2_rules.sh.sha256sum
+          sha256sum -c shadowrocket.conf.sha256sum
 
       - name: Recheck release baseline before write
         env:
@@ -324,14 +330,18 @@ jobs:
             publish/geosite.dat \
             publish/geosite.dat.sha256sum \
             publish/install_passwall2_rules.sh \
-            publish/install_passwall2_rules.sh.sha256sum
+            publish/install_passwall2_rules.sh.sha256sum \
+            publish/shadowrocket.conf \
+            publish/shadowrocket.conf.sha256sum
           expected=$(printf '%s\n' \
             geoip.dat \
             geoip.dat.sha256sum \
             geosite.dat \
             geosite.dat.sha256sum \
             install_passwall2_rules.sh \
-            install_passwall2_rules.sh.sha256sum)
+            install_passwall2_rules.sh.sha256sum \
+            shadowrocket.conf \
+            shadowrocket.conf.sha256sum)
           draft_response=$(mktemp)
           gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$draft_response"
           actual=$(jq -r '.assets[].name' "$draft_response" | sort)
@@ -349,6 +359,7 @@ jobs:
             sha256sum -c geoip.dat.sha256sum
             sha256sum -c geosite.dat.sha256sum
             sha256sum -c install_passwall2_rules.sh.sha256sum
+            sha256sum -c shadowrocket.conf.sha256sum
           )
           go run ./cmd/geodata-build release-decision \
             --candidate "$readback" \
