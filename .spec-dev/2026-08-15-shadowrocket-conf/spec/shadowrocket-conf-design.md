@@ -20,6 +20,8 @@ spec_dev:
 
 # Shadowrocket 胖配置 设计
 
+> **Superseded-pending (2026-08-16)** — 本 spec 的「Requirement: 十六个具名策略组与默认出口」将被 .spec-dev/2026-08-16-runtime-rule-residuals/spec/runtime-rule-residuals-design.md 部分取代（待其交付）；新工作以新 spec 为准，本 spec 仍描述当前已实现行为。
+
 ## 背景与目标
 
 本仓库已把 Clash 规则与 GeoSite/GeoIP 底包合成 PassWall2 可消费的 `geosite.dat` / `geoip.dat`。iOS Shadowrocket 没有 `GEOSITE` 语法，也不能加载这两个 dat。需要把同一套托管分流转成一份可远程导入、可自动更新的 Surge 风格配置。

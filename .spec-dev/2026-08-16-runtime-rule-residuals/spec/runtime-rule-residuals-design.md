@@ -3,7 +3,7 @@
 spec_dev:
   version: 1
   feature: runtime-rule-residuals
-  status: draft
+  status: active
   covers:
     - "sources.yaml"
     - "config/passwall2-groups.yaml"
