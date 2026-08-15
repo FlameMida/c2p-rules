@@ -2058,7 +2058,7 @@ git commit -m "feat(T7): 收敛十四组并移除 BilibiliHMT"
 - 消费：任务 1–7 的完整生产 pipeline。
 - 产出：用固定本地 HTTPS source 响应与真实 pinned compiler 验证中间 DAT、最终 DAT、manifest、installer、Shadowrocket 与事务 Abort。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 把 `internal/app/testdata/groups.yaml` 完整替换为：
 
@@ -2250,7 +2250,7 @@ t.Run("最终 DAT 不含 BilibiliHMT", func(t *testing.T) {
 
 Shadowrocket conf 断言 14 个策略组、`非中国域名 = select,代理规则,policy-select-name=代理规则`、不含 GFW/BilibiliHMT，并确认 installer fragment 仍有 `crs_proxy`/`crs_direct` section 且 domain_list 指向两个 residual tag。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 go test -tags=integration ./internal/app -count=1
@@ -2258,7 +2258,7 @@ go test -tags=integration ./internal/app -count=1
 
 预期：FAIL；旧 fixture 仍要求 BilibiliHMT，且尚未证明两个 generated tag、完整标签指纹和 14 组发布物。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 按步骤 1 的精确 fixture/断言修改集成测试，并完成这些辅助函数：
 
@@ -2275,7 +2275,7 @@ func hasDomainRule(rules []model.DomainRule, kind model.DomainKind, value string
 
 manifest 断言改为：required GeoSite 含两个 residual 与完整 source tags；forbidden 双侧含 `BilibiliHMT`/`xiaolin-bilibili`；required/forbidden probe 都通过。保留八资产集合与 checksum、latest update URL、YouTube-before-Google、发布 tag 不进入 conf 的既有断言。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 gofmt -w internal/app/build_integration_test.go
@@ -2287,7 +2287,7 @@ git diff --check
 
 预期：全部 PASS；真实 compiler 跑了两次 GeoSite、一次 GeoIP，正式 publish 是八资产闭集，旧 generation 在所有新失败路径下均保留。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/app/build_integration_test.go internal/app/testdata

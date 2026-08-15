@@ -1,23 +1,25 @@
 sources:
-  - id: loyalsoldier-google
+  - id: fixture-reject
     behavior: domain
-    url: "{{SERVER}}/google"
-    outputs:
-      geosite: {tag: google, mode: merge-base}
-  - id: xiaolin-youtube
-    behavior: classical
-    url: "{{SERVER}}/youtube"
-    outputs:
-      geosite: {tag: youtube, mode: merge-base}
-  - id: xiaolin-netflix
-    behavior: classical
-    url: "{{SERVER}}/netflix"
-    outputs:
-      geosite: {tag: netflix, mode: merge-base}
-      geoip: {tag: netflix, mode: merge-base}
-  - id: xiaolin-bilibili
-    behavior: classical
-    url: "{{SERVER}}/bilibili"
-    outputs:
-      geosite: {tag: BilibiliHMT, mode: create}
-      geoip: {tag: BilibiliHMT, mode: create}
+    url: "{{SERVER}}/reject"
+    outputs: {geosite: {tag: reject, mode: create}}
+  - id: fixture-gfw
+    behavior: domain
+    url: "{{SERVER}}/gfw"
+    outputs: {geosite: {tag: gfw, mode: create}}
+  - id: fixture-proxy
+    behavior: domain
+    url: "{{SERVER}}/proxy"
+    outputs: {geosite: {tag: proxy, mode: create}}
+  - id: fixture-direct
+    behavior: domain
+    url: "{{SERVER}}/direct"
+    outputs: {geosite: {tag: direct, mode: create}}
+  - id: fixture-tld-not-cn
+    behavior: domain
+    url: "{{SERVER}}/tld-not-cn"
+    outputs: {geosite: {tag: tld-not-cn, mode: create}}
+  - id: fixture-ai
+    behavior: domain
+    url: "{{SERVER}}/ai"
+    outputs: {geosite: {tag: ai, mode: create}}
