@@ -97,6 +97,80 @@ func TestExpand拒绝缺失Tag与空组(t *testing.T) {
 	}
 }
 
+func TestExpand拒绝损坏Dat(t *testing.T) {
+	invalidPrefix := append(fieldBytes(1, netip.MustParseAddr("192.0.2.1").AsSlice()), fieldVarint(2, 33)...)
+	tests := map[string]struct {
+		site   []byte
+		ip     []byte
+		groups []model.Group
+		want   string
+	}{
+		"known field wrong wire": {
+			site: fieldVarint(1, 1), ip: geoIPDat(), want: "geosite entry has wire type",
+		},
+		"truncated bytes": {
+			site: []byte{0x0a, 0x02, 0x01}, ip: geoIPDat(), want: "truncated protobuf bytes",
+		},
+		"truncated varint": {
+			site: []byte{0x80}, ip: geoIPDat(), want: "invalid protobuf field key",
+		},
+		"invalid domain enum": {
+			site: geoSiteDat(siteEntry("TEST", domainEntry(4, "bad.example"))), ip: geoIPDat(), want: "unsupported domain kind 4",
+		},
+		"invalid ip": {
+			site: geoSiteDat(), ip: geoIPDat(ipEntry("TEST", fieldBytes(1, []byte{1, 2, 3}))), want: "invalid cidr address",
+		},
+		"invalid prefix": {
+			site: geoSiteDat(), ip: geoIPDat(ipEntry("TEST", invalidPrefix)), want: "invalid /33",
+		},
+		"duplicate geosite tag": {
+			site: geoSiteDat(
+				siteEntry("TEST", domainEntry(2, "one.example")),
+				siteEntry("test", domainEntry(2, "two.example")),
+			),
+			ip: geoIPDat(), want: "duplicate geosite tag",
+		},
+		"duplicate geoip tag": {
+			site: geoSiteDat(),
+			ip: geoIPDat(
+				ipEntry("TEST", cidrEntry(netip.MustParsePrefix("192.0.2.0/24"))),
+				ipEntry("test", cidrEntry(netip.MustParsePrefix("198.51.100.0/24"))),
+			),
+			want: "duplicate geoip tag",
+		},
+		"missing geoip tag": {
+			site: geoSiteDat(), ip: geoIPDat(),
+			groups: []model.Group{{ID: "test", Remarks: "测试组", GeoIP: []string{"not-exist"}}},
+			want:   "geoip:not-exist",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			site, ip := writeDatPair(t, test.site, test.ip)
+			_, err := shadowrocket.Expand(context.Background(), site, ip, test.groups)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("err=%v want substring %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestExpand消费未知普通字段(t *testing.T) {
+	domain := append(domainEntry(2, "kept.example"), fieldVarint(99, 7)...)
+	entry := append(siteEntry("TEST", domain), fieldBytes(100, []byte("ignored"))...)
+	siteData := append(geoSiteDat(entry), fieldVarint(101, 9)...)
+	site, ip := writeDatPair(t, siteData, geoIPDat())
+	got, err := shadowrocket.Expand(context.Background(), site, ip, []model.Group{{
+		ID: "test", Remarks: "测试组", GeoSite: []string{"test"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || len(got[0].Domains) != 1 || got[0].Domains[0].Value != "kept.example" {
+		t.Fatalf("expanded=%+v", got)
+	}
+}
+
 func writeDatPair(t *testing.T, siteData, ipData []byte) (string, string) {
 	t.Helper()
 	root := t.TempDir()

@@ -60,13 +60,13 @@ func Test组名与顺序对齐YAML(t *testing.T) {
 		if !strings.Contains(proxyGroups, group.Remarks+" = select,") {
 			t.Fatalf("missing policy group %q", group.Remarks)
 		}
+		wantRule := "DOMAIN-SUFFIX," + group.ID + ".example," + group.Remarks + "\n"
+		if !strings.Contains(rules, wantRule) {
+			t.Fatalf("missing rule policy %q", group.Remarks)
+		}
 	}
-	if strings.Index(proxyGroups, "YouTube =") >= strings.Index(proxyGroups, "Google 服务 =") {
-		t.Fatal("YouTube policy group does not precede Google")
-	}
-	if strings.Index(rules, ",YouTube\n") >= strings.Index(rules, ",Google 服务\n") {
-		t.Fatal("YouTube rules do not precede Google")
-	}
+	assertAppearsBefore(t, proxyGroups, "YouTube =", "Google 服务 =")
+	assertAppearsBefore(t, rules, ",YouTube\n", ",Google 服务\n")
 	if strings.Contains(rendered, "[Proxy]\n") {
 		t.Fatal("renderer emitted node definitions")
 	}
@@ -100,6 +100,36 @@ func Test空组失败(t *testing.T) {
 	}}, "FlameMida/c2p-rules")
 	if err == nil || !strings.Contains(err.Error(), "中国大陆") {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func Test策略组名称拒绝重复与保留名(t *testing.T) {
+	tests := map[string][]shadowrocket.GroupRules{
+		"duplicate": {
+			oneRule("youtube", "同名策略"),
+			oneRule("google", "同名策略"),
+			oneRule("cn", "中国大陆"),
+		},
+		"reserved proxy": {
+			oneRule("proxy_group", "PROXY"),
+			oneRule("cn", "中国大陆"),
+		},
+		"reserved direct case variant": {
+			oneRule("direct_group", "direct"),
+			oneRule("cn", "中国大陆"),
+		},
+		"reserved reject": {
+			oneRule("reject_group", "REJECT"),
+			oneRule("cn", "中国大陆"),
+		},
+	}
+	for name, groups := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := shadowrocket.Render(groups, "FlameMida/c2p-rules")
+			if err == nil || !strings.Contains(err.Error(), "policy group name") {
+				t.Fatalf("err=%v", err)
+			}
+		})
 	}
 }
 
@@ -158,4 +188,16 @@ func section(document, header string) string {
 		value = value[:end+1]
 	}
 	return value
+}
+
+func assertAppearsBefore(t *testing.T, text, first, second string) {
+	t.Helper()
+	firstIndex := strings.Index(text, first)
+	secondIndex := strings.Index(text, second)
+	if firstIndex < 0 || secondIndex < 0 {
+		t.Fatalf("missing order marker first=%q(%d) second=%q(%d)", first, firstIndex, second, secondIndex)
+	}
+	if firstIndex >= secondIndex {
+		t.Fatalf("%q does not precede %q", first, second)
+	}
 }

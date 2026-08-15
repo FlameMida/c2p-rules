@@ -24,6 +24,7 @@ func Render(groups []GroupRules, repo string) ([]byte, error) {
 	fmt.Fprintf(&output, "[General]\nupdate-url = https://github.com/%s/releases/latest/download/shadowrocket.conf\n\n", repo)
 	output.WriteString("[Proxy Group]\n")
 	cnRemarks := ""
+	seenRemarks := make(map[string]string, len(groups))
 	for _, rules := range groups {
 		if len(rules.Domains) == 0 && len(rules.CIDRs) == 0 {
 			return nil, fmt.Errorf("group %q (%s) has zero rules", rules.Group.Remarks, rules.Group.ID)
@@ -31,6 +32,13 @@ func Render(groups []GroupRules, repo string) ([]byte, error) {
 		if err := validateRemark(rules.Group.Remarks); err != nil {
 			return nil, fmt.Errorf("group %q: %w", rules.Group.ID, err)
 		}
+		if reservedPolicyName(rules.Group.Remarks) {
+			return nil, fmt.Errorf("group %q uses reserved policy group name %q", rules.Group.ID, rules.Group.Remarks)
+		}
+		if previousID, duplicate := seenRemarks[rules.Group.Remarks]; duplicate {
+			return nil, fmt.Errorf("groups %q and %q repeat policy group name %q", previousID, rules.Group.ID, rules.Group.Remarks)
+		}
+		seenRemarks[rules.Group.Remarks] = rules.Group.ID
 		candidates, selected := policy(rules.Group.ID)
 		fmt.Fprintf(&output, "%s = select,%s,policy-select-name=%s\n",
 			rules.Group.Remarks, strings.Join(candidates, ","), selected)
@@ -70,6 +78,15 @@ func Render(groups []GroupRules, repo string) ([]byte, error) {
 	}
 	fmt.Fprintf(&output, "GEOIP,CN,%s\nFINAL,PROXY\n", cnRemarks)
 	return output.Bytes(), nil
+}
+
+func reservedPolicyName(value string) bool {
+	switch {
+	case strings.EqualFold(value, "PROXY"), strings.EqualFold(value, "DIRECT"), strings.EqualFold(value, "REJECT"):
+		return true
+	default:
+		return false
+	}
 }
 
 func policy(id string) ([]string, string) {

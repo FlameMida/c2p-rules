@@ -129,7 +129,7 @@ spec_dev:
 
 ### Requirement: 十六个具名策略组与默认出口
 
-conf SHALL 含 `[Proxy Group]` 段，为每个托管组生成一个 `select` 策略组，组名等于该组 `remarks`。默认出口按 **group id** 决定，不按 remarks 文案匹配：`reject` 默认 `REJECT`；`cn`、`private`、`direct` 默认 `DIRECT`；其余 id 默认 `PROXY`。每组行 SHALL 含对应候选（广告另含 `PROXY` 与 `DIRECT`；国内三类另含 `PROXY`；其余另含 `DIRECT`），并写 `policy-select-name=<默认出口>`，不得只靠「列表第一项即默认」。`[Rule]` 中该组规则的策略列 SHALL 为该组 remarks。conf SHALL NOT 包含 `[Proxy]` 节点定义。
+conf SHALL 含 `[Proxy Group]` 段，为每个托管组生成一个 `select` 策略组，组名等于该组 `remarks`。所有策略组名 SHALL 唯一，且 SHALL NOT 与渲染器使用的内建策略名 `PROXY`、`DIRECT`、`REJECT`（不区分大小写）冲突。默认出口按 **group id** 决定，不按 remarks 文案匹配：`reject` 默认 `REJECT`；`cn`、`private`、`direct` 默认 `DIRECT`；其余 id 默认 `PROXY`。每组行 SHALL 含对应候选（广告另含 `PROXY` 与 `DIRECT`；国内三类另含 `PROXY`；其余另含 `DIRECT`），并写 `policy-select-name=<默认出口>`，不得只靠「列表第一项即默认」。`[Rule]` 中该组规则的策略列 SHALL 为该组 remarks。conf SHALL NOT 包含 `[Proxy]` 节点定义。
 
 #### Scenario: 组名与顺序对齐 YAML
 
@@ -148,6 +148,12 @@ conf SHALL 含 `[Proxy Group]` 段，为每个托管组生成一个 `select` 策
 - **GIVEN** 某托管组展开后零条规则
 - **WHEN** 渲染 conf
 - **THEN** 构建失败，错误含该组 remarks 或 id
+
+#### Scenario: 重复或保留策略组名失败
+
+- **GIVEN** 两个不同 group id 使用相同 remarks，或任一 remarks 等于 `PROXY`、`DIRECT`、`REJECT` 的大小写变体
+- **WHEN** 渲染 conf
+- **THEN** 构建失败，错误标明冲突的策略组名；不得发布含歧义或自引用策略的配置
 
 ### Requirement: 配置头与兜底规则
 
@@ -262,6 +268,7 @@ func Render(groups []GroupRules, repo string) ([]byte, error)
 | 组名与顺序对齐 YAML | unit | 任务内 TDD | YouTube 在 Google 前 |
 | 广告与国内默认 | unit | 任务内 TDD | select 首项 |
 | 空组失败 | unit | 任务内 TDD | error 含组名 |
+| 重复或保留策略组名失败 | unit | 任务内 TDD | Render 拒绝重复与内建策略名 |
 | latest update-url | unit | 任务内 TDD | 无 tag 字面量 |
 | 兜底顺序 | unit | 任务内 TDD | 末两行 |
 | 只改 conf 判定 changed | unit | 任务内 TDD | releasecmp |

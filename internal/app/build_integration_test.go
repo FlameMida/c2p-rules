@@ -136,17 +136,16 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 	if err != nil || !strings.HasSuffix(string(checksum), "  shadowrocket.conf\n") {
 		t.Fatalf("checksum=%q err=%v", checksum, err)
 	}
-	if strings.Index(conf, ",YouTube\n") >= strings.Index(conf, ",Google 服务\n") {
-		t.Fatal("YouTube rules do not precede Google rules")
+	assertAppearsBefore(t, conf, ",YouTube\n", ",Google 服务\n")
+	if strings.Contains(conf, options.ReleaseTag) {
+		t.Fatalf("conf contains release tag %q", options.ReleaseTag)
 	}
 	installer, err := os.ReadFile(filepath.Join(root, "publish", "install_passwall2_rules.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	fragment := decodeInstallerFragment(t, string(installer))
-	if strings.Index(fragment, "YouTube") >= strings.Index(fragment, "Google 服务") {
-		t.Fatalf("YouTube does not precede Google 服务")
-	}
+	assertAppearsBefore(t, fragment, "YouTube", "Google 服务")
 }
 
 func TestProductionDependenciesFailuresPreservePreviousGeneration(t *testing.T) {
@@ -425,6 +424,18 @@ func assertFileContains(t *testing.T, path, value string, count int) {
 	}
 	if strings.Count(string(data), value) != count {
 		t.Fatalf("%s count in %s = %d, want %d\n%s", value, path, strings.Count(string(data), value), count, data)
+	}
+}
+
+func assertAppearsBefore(t *testing.T, text, first, second string) {
+	t.Helper()
+	firstIndex := strings.Index(text, first)
+	secondIndex := strings.Index(text, second)
+	if firstIndex < 0 || secondIndex < 0 {
+		t.Fatalf("missing order marker first=%q(%d) second=%q(%d)", first, firstIndex, second, secondIndex)
+	}
+	if firstIndex >= secondIndex {
+		t.Fatalf("%q does not precede %q", first, second)
 	}
 }
 

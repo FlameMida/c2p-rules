@@ -1000,6 +1000,7 @@ git commit -m "feat(T2): 渲染 Shadowrocket 胖配置"
 - 修改：internal/app/build_test.go:18-294
 - 修改：internal/app/build_integration_test.go:26-131,300-385
 - 修改：internal/app/testdata/groups.yaml
+- 修改：internal/verify/assets.go、internal/verify/assets_test.go（执行时为解除 T3→T4 依赖倒置，从任务 4 前移八资产权威清单与对应红灯测试）
 
 **接口**：
 - 消费：任务 1 的 shadowrocket.Expand、任务 2 的 shadowrocket.Render、现有 fileutil.AtomicWrite 与 verify.WriteSHA256。
@@ -1199,9 +1200,11 @@ go test -tags=integration ./internal/app -run 'Test(完整构建得到八文件�
 - [x] **步骤 5：提交**
 
 ~~~bash
-git add internal/app/build.go internal/app/deps.go internal/app/build_test.go internal/app/build_integration_test.go internal/app/testdata/groups.yaml
+git add internal/app/build.go internal/app/deps.go internal/app/build_test.go internal/app/build_integration_test.go internal/app/testdata/groups.yaml internal/verify/assets.go internal/verify/assets_test.go
 git commit -m "feat(T3): 将 Shadowrocket 配置接入事务构建"
 ~~~
+
+**执行偏差记录**：T3 的 `VerifyReleaseAssets` 要在同一任务的真实完整构建中校验八资产，但原计划把 `verify.ReleaseAssets()` 的 6→8 变更排在 T4，形成依赖倒置。实施时先在 T3 为八资产清单写失败测试，确认旧六名实现失败，再把权威清单最小改为八名；因此该部分不在 T4 重复制造红灯。
 
 ### 任务 4：升级资产闭集与发布指纹
 
@@ -1357,7 +1360,7 @@ go test ./internal/releasecmp -run 'Test(只改Conf判定Changed|只换Tag不改
 go test ./internal/app -run Test六文件基线不得当成ChangedCLI -v
 ~~~
 
-预期：verify 因仍返回六名而 FAIL；releasecmp / app helper 在资产验证或 conf 指纹断言处 FAIL。
+原计划预期 verify 因仍返回六名而 FAIL；实际因上述 T3 前移，verify 两项与 app CLI 旧六资产拒绝测试在本步骤直接 PASS，只有 `Test只改Conf判定Changed` 因指纹尚未纳入 conf 而按预期 FAIL。此处 `[x]` 表示三条命令均已执行并核对真实结果，不表示三条都观察到红灯；T4 的生产改动仅为 releasecmp conf 指纹，verify 生产契约已在 T3 完成。
 
 - [x] **步骤 3：写最小实现**
 
@@ -1712,6 +1715,8 @@ git commit -m "docs(T6): 说明 Shadowrocket 导入与首次发布"
 ### 任务 7：验收（acceptance-qa）
 
 > 本任务由 executing-plans 收尾审查阶段触发 acceptance-qa 按下表执行，不参与逐任务连续执行；报告与证据落盘特性目录 acceptance/ 子目录。
+
+- [x] 已执行收尾多维审查、对抗复核、受影响范围与 integration 验收；真机项按下表记录为 DEFERRED，审查修复复审后零发现。
 
 | Scenario / 检查项 | 维度 | 执行方式 | 目标 | 阈值/预期 | 验收证据 |
 |-------------------|------|---------|------|----------|---------|
