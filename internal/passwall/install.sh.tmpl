@@ -208,6 +208,123 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+preflight_shunt_nodes() {
+	awk '
+		function unquote(value) {
+			if (length(value) >= 2 && substr(value, 1, 1) == "\047" && substr(value, length(value), 1) == "\047")
+				return substr(value, 2, length(value) - 2)
+			return value
+		}
+		function reset( key) {
+			for (key in values) delete values[key]
+			section = ""; id = ""; protocol = ""
+		}
+		function check_family(suffix, label, gfw, proxy, tld, merged) {
+			gfw = values["crs_gfw" suffix]
+			proxy = values["crs_proxy" suffix]
+			tld = values["crs_tld_not_cn" suffix]
+			if (gfw != "" && proxy != "" && gfw != proxy) {
+				printf "ERROR: Shunt node %s conflict in %s: crs_gfw/crs_proxy differ\n", id, label > "/dev/stderr"
+				failed = 1
+				return
+			}
+			merged = proxy != "" ? proxy : gfw
+			if (merged != tld) {
+				printf "ERROR: Shunt node %s proxy/tld_not_cn mismatch in %s\n", id, label > "/dev/stderr"
+				failed = 1
+			}
+			if ((gfw == "") != (proxy == ""))
+				printf "WARNING: Shunt node %s %s normalized from one-sided close; merged universe enabled\n", id, label > "/dev/stderr"
+		}
+		function check_block() {
+			if (section != "nodes" || protocol != "_shunt") return
+			check_family("", "main")
+			check_family("_fakedns", "fakedns")
+			check_family("_proxy_tag", "proxy_tag")
+		}
+		$1 == "config" {
+			check_block(); reset()
+			section = unquote($2); id = unquote($3)
+			next
+		}
+		$1 == "option" {
+			name = unquote($2)
+			raw = $0
+			sub(/^[ \t]*option[ \t]+[^ \t]+[ \t]+/, "", raw)
+			values[name] = unquote(raw)
+			if (name == "protocol") protocol = values[name]
+		}
+		END { check_block(); exit failed ? 1 : 0 }
+	' "$STAGE"
+}
+
+migrate_and_filter_config() {
+	awk '
+		function unquote(value) {
+			if (length(value) >= 2 && substr(value, 1, 1) == "\047" && substr(value, length(value), 1) == "\047")
+				return substr(value, 2, length(value) - 2)
+			return value
+		}
+		function reset( key) {
+			for (key in values) delete values[key]
+			for (key in raw_values) delete raw_values[key]
+			for (key in lines) delete lines[key]
+			for (key in names) delete names[key]
+			count = 0; section = ""; id = ""; protocol = ""; managed = 0
+		}
+		function deprecated(name) {
+			return name ~ /^crs_gfw(_fakedns|_proxy_tag)?$/ || name ~ /^crs_bilibili_hmt(_fakedns|_proxy_tag)?$/
+		}
+		function gfw_for_proxy(name) {
+			if (name == "crs_proxy") return "crs_gfw"
+			if (name == "crs_proxy_fakedns") return "crs_gfw_fakedns"
+			if (name == "crs_proxy_proxy_tag") return "crs_gfw_proxy_tag"
+			return ""
+		}
+		function append_proxy(proxy, gfw) {
+			if (values[proxy] == "" && values[gfw] != "")
+				printf "\toption %s %s\n", proxy, raw_values[gfw]
+		}
+		function emit( i, name, source) {
+			if (count == 0) return
+			if (section == "shunt_rules" && (managed || id ~ /^c2p_/)) { reset(); return }
+			if (section != "nodes" || protocol != "_shunt") {
+				for (i = 1; i <= count; i++) print lines[i]
+				reset(); return
+			}
+			for (i = 1; i <= count; i++) {
+				name = names[i]
+				if (deprecated(name)) continue
+				source = gfw_for_proxy(name)
+				if (source != "" && values[name] == "" && values[source] != "") continue
+				print lines[i]
+			}
+			append_proxy("crs_proxy", "crs_gfw")
+			append_proxy("crs_proxy_fakedns", "crs_gfw_fakedns")
+			append_proxy("crs_proxy_proxy_tag", "crs_gfw_proxy_tag")
+			reset()
+		}
+		$1 == "config" {
+			emit()
+			count++; lines[count] = $0; names[count] = ""
+			section = unquote($2); id = unquote($3)
+			next
+		}
+		{
+			count++; lines[count] = $0; names[count] = ""
+			if ($1 == "option") {
+				name = unquote($2); names[count] = name
+				raw = $0
+				sub(/^[ \t]*option[ \t]+[^ \t]+[ \t]+/, "", raw)
+				raw_values[name] = raw; values[name] = unquote(raw)
+				if (name == "protocol") protocol = values[name]
+				if (name == "managed_by" && values[name] == "clash-rules-srs") managed = 1
+			}
+		}
+		END { emit() }
+	' "$STAGE"
+}
+
 OFFICIAL_IMMUTABLE="https://github.com/$REPO/releases/download/$RELEASE_TAG"
 GH_PROXY_IMMUTABLE="https://gh-proxy.com/$OFFICIAL_IMMUTABLE"
 GHFAST_IMMUTABLE="https://ghfast.top/$OFFICIAL_IMMUTABLE"
@@ -218,27 +335,8 @@ uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q set "passwall2.@global_rules[0].geoip_url=
 uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q commit passwall2
 
 printf '%s' "$FRAGMENT_B64" | base64 -d > "$FRAGMENT"
-awk '
-	function emit() {
-		if (block == "") return
-		drop = section == "shunt_rules" && (managed || id ~ /^c2p_/)
-		if (!drop) printf "%s", block
-	}
-	$1 == "config" {
-		emit()
-		block = $0 ORS
-		section = $2
-		id = $3
-		gsub(/\047/, "", id)
-		managed = 0
-		next
-	}
-	{
-		block = block $0 ORS
-		if ($1 == "option" && $2 == "managed_by" && $3 == "\047clash-rules-srs\047") managed = 1
-	}
-	END { emit() }
-' "$STAGE" > "$STAGE.filtered"
+preflight_shunt_nodes
+migrate_and_filter_config > "$STAGE.filtered"
 mv "$STAGE.filtered" "$STAGE"
 cat "$FRAGMENT" >> "$STAGE"
 uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q show passwall2 >/dev/null

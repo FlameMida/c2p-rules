@@ -30,7 +30,7 @@ config shunt_rules 'c2p_Proxy'
 
 config shunt_rules 'crs_old'
 	option managed_by 'clash-rules-srs'
-`)
+` + compatibleShuntNode("shunt_a"))
 	script := harness.render(validInstallOptions())
 	firstOutput := harness.run(script, true)
 	first := harness.readConfig()
@@ -322,6 +322,129 @@ func TestInstallerPreflightRejectsInvalidRuleTimeout(t *testing.T) {
 	}
 }
 
+func TestProxy缺失时继承GFW(t *testing.T) {
+	h := newHarness(t)
+	h.seedConfig(compatibleShuntNode("shunt_a"))
+	h.run(h.render(validInstallOptions()), true)
+	got := h.readConfig()
+	for _, want := range []string{
+		"option crs_proxy '_default'",
+		"option crs_proxy_fakedns '1'",
+		"option crs_proxy_proxy_tag 'proxy-tag'",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in\n%s", want, got)
+		}
+	}
+}
+
+func Test单侧关闭按非空一侧归一化(t *testing.T) {
+	h := newHarness(t)
+	node := strings.ReplaceAll(compatibleShuntNode("shunt_a"), "\toption crs_gfw '_default'\n", "")
+	node = strings.ReplaceAll(node, "\toption crs_gfw_fakedns '1'\n", "")
+	node = strings.ReplaceAll(node, "\toption crs_gfw_proxy_tag 'proxy-tag'\n", "")
+	node = strings.Replace(node, "\toption crs_tld_not_cn '_default'\n", "\toption crs_proxy '_default'\n\toption crs_tld_not_cn '_default'\n", 1)
+	node = strings.Replace(node, "\toption crs_tld_not_cn_fakedns '1'\n", "\toption crs_proxy_fakedns '1'\n\toption crs_tld_not_cn_fakedns '1'\n", 1)
+	node = strings.Replace(node, "\toption crs_tld_not_cn_proxy_tag 'proxy-tag'\n", "\toption crs_proxy_proxy_tag 'proxy-tag'\n\toption crs_tld_not_cn_proxy_tag 'proxy-tag'\n", 1)
+	h.seedConfig(node)
+	output := h.run(h.render(validInstallOptions()), true)
+	if !strings.Contains(output, "WARNING: Shunt node shunt_a") || !strings.Contains(output, "merged universe enabled") {
+		t.Fatalf("missing warning:\n%s", output)
+	}
+}
+
+func TestGFW与Proxy冲突时零修改失败(t *testing.T) {
+	h := newHarness(t)
+	node := strings.Replace(
+		compatibleShuntNode("shunt_a"),
+		"\toption crs_tld_not_cn '_default'\n",
+		"\toption crs_proxy 'other-node'\n\toption crs_tld_not_cn '_default'\n",
+		1,
+	)
+	h.seedConfig(node)
+	beforeConfig, beforeSite, beforeIP := h.snapshot()
+	output := h.run(h.render(validInstallOptions()), false)
+	if !strings.Contains(output, "shunt_a") || !strings.Contains(output, "crs_gfw/crs_proxy") {
+		t.Fatalf("output=%s", output)
+	}
+	h.assertSnapshot(beforeConfig, beforeSite, beforeIP)
+}
+
+func Test两组均继承Default(t *testing.T) {
+	h := newHarness(t)
+	h.seedConfig(compatibleShuntNode("shunt_a"))
+	h.run(h.render(validInstallOptions()), true)
+}
+
+func Test等价出口条件不成立(t *testing.T) {
+	for name, mutate := range map[string]func(string) string{
+		"main": func(node string) string {
+			return strings.Replace(node, "\toption crs_gfw '_default'\n", "\toption crs_proxy 'other-node'\n", 1)
+		},
+		"fakedns": func(node string) string {
+			node = strings.Replace(node, "\toption crs_gfw '_default'\n", "\toption crs_proxy '_default'\n", 1)
+			node = strings.Replace(node, "\toption crs_gfw_fakedns '1'\n", "\toption crs_proxy_fakedns '0'\n", 1)
+			return strings.Replace(node, "\toption crs_gfw_proxy_tag 'proxy-tag'\n", "\toption crs_proxy_proxy_tag 'proxy-tag'\n", 1)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t)
+			node := mutate(compatibleShuntNode("shunt_a"))
+			h.seedConfig(node)
+			beforeConfig, beforeSite, beforeIP := h.snapshot()
+			output := h.run(h.render(validInstallOptions()), false)
+			if !strings.Contains(output, "proxy/tld_not_cn mismatch") {
+				t.Fatalf("output=%s", output)
+			}
+			h.assertSnapshot(beforeConfig, beforeSite, beforeIP)
+		})
+	}
+}
+
+func Test后续步骤失败时恢复节点(t *testing.T) {
+	h := newHarness(t)
+	h.seedConfig(compatibleShuntNode("shunt_a"))
+	beforeConfig, beforeSite, beforeIP := h.snapshot()
+	h.siteContent = "wrong-site"
+	h.ipContent = "wrong-ip"
+	h.run(h.render(validInstallOptions()), false)
+	h.assertSnapshot(beforeConfig, beforeSite, beforeIP)
+}
+
+func Test成功安装后无废弃字段(t *testing.T) {
+	h := newHarness(t)
+	h.seedConfig(compatibleShuntNode("shunt_a") + "\n" + compatibleShuntNode("shunt_b"))
+	h.run(h.render(validInstallOptions()), true)
+	got := h.readConfig()
+	for _, field := range []string{
+		"crs_gfw", "crs_gfw_fakedns", "crs_gfw_proxy_tag",
+		"crs_bilibili_hmt", "crs_bilibili_hmt_fakedns", "crs_bilibili_hmt_proxy_tag",
+	} {
+		if strings.Contains(got, "option "+field+" ") {
+			t.Fatalf("%s remains in\n%s", field, got)
+		}
+	}
+}
+
+func Test默认代理和三组直连不被重写(t *testing.T) {
+	h := newHarness(t)
+	h.seedConfig(compatibleShuntNode("shunt_a"))
+	keep := []string{
+		"option default_node 'proxy-node'",
+		"option crs_reject '_blackhole'", "option crs_reject_fakedns '0'", "option crs_reject_proxy_tag 'reject-tag'",
+		"option crs_private '_direct'", "option crs_private_fakedns '0'", "option crs_private_proxy_tag 'direct-tag'",
+		"option crs_cn '_direct'", "option crs_cn_fakedns '0'", "option crs_cn_proxy_tag 'direct-tag'",
+		"option crs_direct '_direct'", "option crs_direct_fakedns '0'", "option crs_direct_proxy_tag 'direct-tag'",
+	}
+	h.run(h.render(validInstallOptions()), true)
+	got := h.readConfig()
+	for _, line := range keep {
+		if strings.Count(got, line) != 1 {
+			t.Fatalf("line %q changed in\n%s", line, got)
+		}
+	}
+}
+
 func TestRenderInstallerValidatesInputsAndEmbedsOnlyBase64Fragment(t *testing.T) {
 	options := validInstallOptions()
 	script, err := passwall.RenderInstaller(options)
@@ -540,6 +663,35 @@ func validInstallOptions() passwall.InstallOptions {
 		GeoSiteSHA: digest("new-site"), GeoIPSHA: digest("new-ip"),
 		Fragment: []byte("config shunt_rules 'crs_apple_services'\n\toption remarks '苹果服务'\n\toption managed_by 'clash-rules-srs'\n\toption network 'tcp,udp'\n\toption domain_list 'geosite:apple\ngeosite:icloud'\n"),
 	}
+}
+
+func compatibleShuntNode(id string) string {
+	return fmt.Sprintf(`config nodes '%s'
+	option protocol '_shunt'
+	option remarks '兼容分流'
+	option default_node 'proxy-node'
+	option crs_gfw '_default'
+	option crs_gfw_fakedns '1'
+	option crs_gfw_proxy_tag 'proxy-tag'
+	option crs_tld_not_cn '_default'
+	option crs_tld_not_cn_fakedns '1'
+	option crs_tld_not_cn_proxy_tag 'proxy-tag'
+	option crs_bilibili_hmt '_direct'
+	option crs_bilibili_hmt_fakedns '0'
+	option crs_bilibili_hmt_proxy_tag 'old-bili-tag'
+	option crs_reject '_blackhole'
+	option crs_reject_fakedns '0'
+	option crs_reject_proxy_tag 'reject-tag'
+	option crs_private '_direct'
+	option crs_private_fakedns '0'
+	option crs_private_proxy_tag 'direct-tag'
+	option crs_cn '_direct'
+	option crs_cn_fakedns '0'
+	option crs_cn_proxy_tag 'direct-tag'
+	option crs_direct '_direct'
+	option crs_direct_fakedns '0'
+	option crs_direct_proxy_tag 'direct-tag'
+`, id)
 }
 
 func digest(value string) string {

@@ -1490,7 +1490,7 @@ git commit -m "feat(T5): 绑定非中国域名代理策略"
 - 消费：现有 standalone installer 的 staged UCI 文件 `$STAGE` 与完整 live backup `$BACKUP`。
 - 产出：`preflight_shunt_nodes` 与 `migrate_and_filter_config` 两个 shell 函数；不新增外部命令依赖。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `internal/passwall/installer_test.go` 增加统一 fixture：
 
@@ -1637,7 +1637,7 @@ func Test默认代理和三组直连不被重写(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 go test ./internal/passwall -run 'Test(Proxy缺失时继承GFW|单侧关闭按非空一侧归一化|GFW与Proxy冲突时零修改失败|两组均继承Default|等价出口条件不成立|后续步骤失败时恢复节点|成功安装后无废弃字段|默认代理和三组直连不被重写|InstallerIsIdempotentAndPreservesUserRulesAndNodes)' -count=1
@@ -1645,7 +1645,7 @@ go test ./internal/passwall -run 'Test(Proxy缺失时继承GFW|单侧关闭按�
 
 预期：FAIL；旧 installer 不迁移 `crs_gfw*`、不检查 proxy/tld-not-cn，且不会清理 BilibiliHMT options。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 在 `install.sh.tmpl` 的 `trap` 定义之后、phase 3 前增加两个函数。预检读取 `$STAGE`，扫描完全部节点后才以非零退出；它只读 staging，live UCI 尚未变化：
 
@@ -1780,7 +1780,7 @@ uci -c "$ROOT" -t "$STAGE_SAVEDIR" -q show passwall2 >/dev/null
 
 后续仍由现有 `cp "$STAGE" "$CONF_NEW"` → atomic `mv` → `uci commit` 切换；任一下载、SHA、commit 或 final URL 步骤失败时，现有 `restore` 从 `$BACKUP` 恢复整个 config，因此节点 options、managed rules、URLs 与 DAT 同属一个回滚域。不要在预检前调用 live `uci set/delete`。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 gofmt -w internal/passwall/installer_test.go
@@ -1789,7 +1789,7 @@ go test ./internal/passwall -count=1
 
 预期：PASS；测试输出仍含原 5 阶段进度与回滚进度，未增加新的运行时命令依赖。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/passwall/install.sh.tmpl internal/passwall/installer_test.go
