@@ -55,13 +55,13 @@ internal/shadowrocket 在基线尚不存在，因此从任务 1 开始加入聚�
 
 ### 任务 0：建立隔离工作区
 
-- [ ] **步骤 1：检测已有隔离**
+- [x] **步骤 1：检测已有隔离**
 
 运行：git rev-parse --git-dir 与 git rev-parse --git-common-dir
 两者不同、且 git rev-parse --show-superproject-working-tree 无输出（排除 submodule）
 → 已在隔离工作区，跳过本任务。
 
-- [ ] **步骤 2：建立 worktree**
+- [x] **步骤 2：建立 worktree**
 
 有原生 worktree 工具（如 EnterWorktree）或 using-git-worktrees skill 时优先使用（Codex 无原生 worktree 工具，直接走下面的手工路径）；否则手工降级：
 确认 .worktrees/ 已被忽略（git check-ignore -q .worktrees；当前 .gitignore 已包含该目录），然后运行：
@@ -71,7 +71,7 @@ git worktree add .worktrees/plan-2026-08-15-shadowrocket-conf -b plan/2026-08-15
 cd .worktrees/plan-2026-08-15-shadowrocket-conf
 ~~~
 
-- [ ] **步骤 3：安装依赖并验证基线**
+- [x] **步骤 3：安装依赖并验证基线**
 
 ~~~bash
 go mod download
@@ -93,7 +93,7 @@ go test -tags=integration ./internal/app
 - 消费：model.Group、model.DomainKind、context.Context、最终 geosite.dat / geoip.dat 文件路径。
 - 产出：DomainLine、GroupRules，以及 Expand(ctx context.Context, siteDat, ipDat string, groups []model.Group) ([]GroupRules, error)。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 创建 internal/shadowrocket/expand_test.go。测试夹具直接编码最终 dat 的 wire message，确保测试不借道 data-merged、build/ip 或 geoview：
 
@@ -275,7 +275,7 @@ func hasDomain(lines []shadowrocket.DomainLine, kind model.DomainKind, value str
 }
 ~~~
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：
 
@@ -285,7 +285,7 @@ go test ./internal/shadowrocket -run 'Test(Include被展开进Google组|MergeBas
 
 预期：FAIL，报 internal/shadowrocket 不存在或 Expand / DomainLine 未定义。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 创建 internal/shadowrocket/expand.go。wireCursor 每次完整消费一个字段；未知普通 protobuf 字段会被消费，已知字段 wire type 错误、截断、非法 enum / IP / prefix、重复 tag 和缺 tag 都返回错误：
 
@@ -643,7 +643,7 @@ func (c *wireCursor) next() (field, wire uint64, payload []byte, scalar uint64, 
 }
 ~~~
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ~~~bash
 gofmt -w internal/shadowrocket/expand.go internal/shadowrocket/expand_test.go
@@ -652,7 +652,7 @@ go test ./internal/shadowrocket -run 'Test(Include被展开进Google组|MergeBas
 
 预期：4 个测试 PASS；go.mod / go.sum 无变化。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ~~~bash
 git add internal/shadowrocket/expand.go internal/shadowrocket/expand_test.go
