@@ -13,7 +13,7 @@ spec_dev:
     - ".github/workflows/build.yml"
     - "README.md"
     - "context.md"
-  sync_commit: null
+  sync_commit: a57f8209577e28cf6e07bd18c482b0fbe37de7ca
   supersedes: []
   superseded_by: null
 ---

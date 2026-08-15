@@ -1773,7 +1773,7 @@ git merge plan/2026-08-15-shadowrocket-conf
 
 逐条执行资源台账各行的清理命令并勾选。命令失败则该行保持未勾选并报告；资源已不存在则勾选并注明“已不存在”。台账外文件、容器和数据一律不动。
 
-- [ ] **步骤 6：sync_commit 锚定**
+- [x] **步骤 6：sync_commit 锚定**
 
 ~~~bash
 SYNC=$(git rev-parse HEAD)
