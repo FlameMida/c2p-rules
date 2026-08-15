@@ -10,7 +10,7 @@
 |-----------|-----------|------|------|------|------------|-------|
 | unit | D | 140 | 0 | 0 | 0 | 受影响四个 package，无缓存复跑 |
 | integration | D | 65 | 0 | 0 | 0 | 真实固定工具，无缓存复跑 |
-| repository regression | D | — | — | — | 1 | 最终任务运行 `go test ./...` 后回填 |
+| repository regression | D | 314 | 0 | 0 | 0 | `go test -count=1 ./...` |
 | e2e (Shadowrocket device) | D | 0 | 0 | 0 | 1 | 无已发布八资产 Release 与授权真机，DEFERRED |
 
 ## Requirement Coverage
@@ -65,10 +65,10 @@
 
 - 受影响测试：`go test -count=1 ./internal/shadowrocket ./internal/app ./internal/verify ./internal/releasecmp`，140 pass / 0 fail。
 - integration：`go test -tags=integration ./internal/app`，65 pass / 0 fail。
-- 全仓回归：最终任务待回填。
+- 全仓回归：`go test -count=1 ./...`，314 pass / 0 fail。
 - 真机记录：`.spec-dev/2026-08-15-shadowrocket-conf/acceptance/shadowrocket-device.md`。
 - 审查原始报告：本次执行临时目录中的 A/B/C 与 completeness 报告；合并前按最终处置汇总到本报告。
 
 ## coverage_note
 
-已执行所有与代码变更相交的 unit / integration 矩阵行；全仓回归由最终任务执行后回填。visual、a11y、perf-web、perf-api 与本次 Go CLI / 配置资产形态不适用而裁剪；未配置覆盖率门槛，未临时增加阈值。Shadowrocket 真机 e2e、自动更新和大 conf 真机编译耗时因没有已发布八资产 Release 与授权设备而标记 unverified / DEFERRED。
+已执行所有与代码变更相交的 unit / integration 矩阵行和无缓存全仓回归。visual、a11y、perf-web、perf-api 与本次 Go CLI / 配置资产形态不适用而裁剪；未配置覆盖率门槛，未临时增加阈值。Shadowrocket 真机 e2e、自动更新和大 conf 真机编译耗时因没有已发布八资产 Release 与授权设备而标记 unverified / DEFERRED。

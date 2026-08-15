@@ -1730,7 +1730,7 @@ git commit -m "docs(T6): 说明 Shadowrocket 导入与首次发布"
 
 台账总则：**清理只遍历本台账、台账外一律不动**（可疑残留只报告不删）；共享缓存（~/.cargo、pnpm store、npm cache、Go module cache 等）默认保留，仅用户显式要求清理时才登记入账；台账限定持久资源（容器、测试库/表、临时目录、后台服务），worktree 内构建产物随 worktree 删除自然回收、不入账。
 
-- [ ] **步骤 1：全量验证（安全网）与归属裁决**
+- [x] **步骤 1：全量验证（安全网）与归属裁决**
 
 在 worktree 内运行完整测试套件：
 
@@ -1743,7 +1743,7 @@ go test -tags=integration ./internal/app
 - 失败测试在相关测试范围内 → 修复并复跑全绿后进入步骤 2。
 - 失败测试在范围之外 → 在主工作区来源分支复跑该测试；主工作区有未提交改动时先询问用户。来源分支同样失败则报告“既有失败”并请用户裁决是否阻塞合并；来源分支通过则判定为本次回归，修复并复跑全绿。
 
-- [ ] **步骤 2：测试退役检查**
+- [x] **步骤 2：测试退役检查**
 
 扫描相关范围 internal/app、internal/verify、internal/releasecmp、internal/shadowrocket 的测试名。只把同时满足以下两项的测试列为候选：
 
@@ -1752,9 +1752,13 @@ go test -tags=integration ./internal/app
 
 候选非空则列清单征询用户，同意后才删除并计入本任务提交；无候选则声明“无孤儿测试”。历史上不遵循 Scenario 命名约定的测试保守豁免。
 
-- [ ] **步骤 3：取代回写**
+执行结果：无孤儿测试。新增测试均对应 active spec 的现行 Scenario、计划明确的 protobuf 严格失败边界或收尾审查补强，且没有 Requirement 被 REMOVED / Superseded。
+
+- [x] **步骤 3：取代回写**
 
 本 spec 的 supersedes 为空数组，声明“无取代回写”后跳过。
+
+执行结果：无取代回写。
 
 - [ ] **步骤 4：合并回来源分支**
 
