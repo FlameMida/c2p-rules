@@ -129,7 +129,7 @@ spec_dev:
 
 ### Requirement: 十六个具名策略组与默认出口
 
-conf SHALL 含 `[Proxy Group]` 段，为每个托管组生成一个 `select` 策略组，组名等于该组 `remarks`。广告拦截组的候选 SHALL 以 `REJECT` 为首，并含 `PROXY` 与 `DIRECT`。中国大陆、私有网络、直连规则三组的候选 SHALL 以 `DIRECT` 为首，并含 `PROXY`。其余托管组的候选 SHALL 以 `PROXY` 为首，并含 `DIRECT`。`[Rule]` 中该组规则的策略列 SHALL 为该组 remarks。conf SHALL NOT 包含 `[Proxy]` 节点定义。
+conf SHALL 含 `[Proxy Group]` 段，为每个托管组生成一个 `select` 策略组，组名等于该组 `remarks`。默认出口按 **group id** 决定，不按 remarks 文案匹配：`reject` 默认 `REJECT`；`cn`、`private`、`direct` 默认 `DIRECT`；其余 id 默认 `PROXY`。每组行 SHALL 含对应候选（广告另含 `PROXY` 与 `DIRECT`；国内三类另含 `PROXY`；其余另含 `DIRECT`），并写 `policy-select-name=<默认出口>`，不得只靠「列表第一项即默认」。`[Rule]` 中该组规则的策略列 SHALL 为该组 remarks。conf SHALL NOT 包含 `[Proxy]` 节点定义。
 
 #### Scenario: 组名与顺序对齐 YAML
 
@@ -141,7 +141,7 @@ conf SHALL 含 `[Proxy Group]` 段，为每个托管组生成一个 `select` 策
 
 - **GIVEN** 默认托管组
 - **WHEN** 读取 `[Proxy Group]`
-- **THEN** 「广告拦截」一行以 `select, REJECT` 开头；「中国大陆」一行以 `select, DIRECT` 开头；「YouTube」一行以 `select, PROXY` 开头
+- **THEN** id `reject` 对应行含 `policy-select-name=REJECT`；id `cn` 对应行含 `policy-select-name=DIRECT`；id `youtube` 对应行含 `policy-select-name=PROXY`
 
 #### Scenario: 空组失败
 
@@ -181,6 +181,12 @@ conf SHALL 含 `[General]`，其中 `update-url` 等于 `https://github.com/<构
 - **WHEN** 运行 `release-decision --baseline`
 - **THEN** 输出含 `should_publish=false` 与 `reason=unchanged`
 
+#### Scenario: 六文件基线不得当成 changed
+
+- **GIVEN** 候选为完整八资产，基线目录只有旧六资产
+- **WHEN** 运行 `release-decision --baseline`
+- **THEN** 命令失败（非零退出），标准错误含 `asset set mismatch` 与 `missing`，且不输出 `reason=changed`
+
 ### Requirement: 文档说明导入与首次强制发布
 
 README 与 context.md SHALL 列出八个发布文件，并说明：用配置页粘贴 latest 的 `shadowrocket.conf` URL 导入；可用同一 URL 生成二维码；可用 `shadowrocket://config/add/` 接该 HTTPS 作为增强入口；镜像前缀不得写入 `update-url`；将发布集合从六文件切到八文件时必须在默认分支执行一次 `force_publish=true`。
@@ -189,7 +195,7 @@ README 与 context.md SHALL 列出八个发布文件，并说明：用配置页�
 
 - **GIVEN** 更新后的 README.md 与 context.md
 - **WHEN** 运行文档契约测试
-- **THEN** 两份文档均含 `shadowrocket.conf.sha256sum`、`force_publish`，以及 `shadowrocket://config/add/`
+- **THEN** 两份文档均含 `shadowrocket.conf.sha256sum`、`force_publish`、`shadowrocket://config/add/`，且不得再把 Release 描述成「精确六个文件」或「三主资产」而不提 conf
 
 ## 方案设计
 
@@ -232,7 +238,7 @@ func Expand(ctx context.Context, siteDat, ipDat string, groups []model.Group) ([
 func Render(groups []GroupRules, repo string) ([]byte, error)
 ```
 
-`repo` 仅用于拼 `update-url`，须通过与安装器相同的仓库名规则（拒绝 `owner/repo` 占位）。
+`repo` 仅用于拼 `update-url`，须通过与安装器相同的仓库名规则（拒绝 `owner/repo` 占位）。`[General]` SHALL 含 `update-url`；MAY 另含与分流无关的稳妥键（如 `bypass-system`），golden 测试不得把「只有 update-url 一行」当成闭集。
 
 ### 错误处理
 
@@ -260,6 +266,7 @@ func Render(groups []GroupRules, repo string) ([]byte, error)
 | 兜底顺序 | unit | 任务内 TDD | 末两行 |
 | 只改 conf 判定 changed | unit | 任务内 TDD | releasecmp |
 | 只换 tag 不改 conf 判定 unchanged | unit | 任务内 TDD | releasecmp |
+| 六文件基线不得当成 changed | unit | 任务内 TDD | releasecmp |
 | 文档含新资产与导入入口 | unit | 任务内 TDD | docs_contract |
 | workflow 上传八文件 | unit | 任务内 TDD | workflow_contract |
 | 真机导入与自动更新 | e2e | 验收任务 (D) | DEFERRED，记录于验收报告 |
