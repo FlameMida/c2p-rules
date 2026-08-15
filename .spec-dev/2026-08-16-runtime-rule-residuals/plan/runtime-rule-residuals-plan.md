@@ -566,7 +566,7 @@ git commit -m "feat(T1): 共享无损 DAT 解码"
 - 消费：任务 1 的 `geodat.SiteTag` 与 `model.DomainRule`。
 - 产出：`ResidualSpec`、`ResidualReport`、`Derive(map[string]geodat.SiteTag, ResidualSpec) ([]model.DomainRule, ResidualReport, error)`。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `internal/geosite/residual_test.go` 写一个 `siteTags(map[string][]model.DomainRule)` helper，并逐 Scenario 建立以下断言：
 
@@ -671,7 +671,7 @@ func siteTags(input map[string][]model.DomainRule) map[string]geodat.SiteTag {
 
 另加 table test 覆盖：full←full/suffix/keyword、suffix←suffix/keyword、keyword←keyword；attributes 不同一律保留；缺 basis tag 与空结果都返回含 output tag 的错误。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 go test ./internal/geosite -run 'Test(GFW与Proxy合并且服务组优先|不借用后序直连组裁剪Proxy|TLDNotCN与CN使Direct规则不可达|GeoIP不作为域名覆盖证据|Suffix标签边界不产生假覆盖|正则只做同类等值去重|输出顺序可重现)' -count=1
@@ -679,7 +679,7 @@ go test ./internal/geosite -run 'Test(GFW与Proxy合并且服务组优先|不借
 
 预期：FAIL，报 `undefined: geosite.Derive`。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `internal/geosite/residual.go`：
 
@@ -782,7 +782,7 @@ func sameOrParent(parent, value string) bool {
 }
 ```
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 gofmt -w internal/geosite/residual.go internal/geosite/residual_test.go
@@ -791,7 +791,7 @@ go test ./internal/geosite -count=1
 
 预期：PASS；测试直接证明不存在 GeoIP 参数入口、后序直连组不会进入 proxy 的 coverage 集。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/geosite/residual.go internal/geosite/residual_test.go
