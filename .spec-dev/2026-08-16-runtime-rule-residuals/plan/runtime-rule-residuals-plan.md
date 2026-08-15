@@ -156,7 +156,7 @@ go test -tags=integration ./internal/app
 - 消费：`model.DomainRule`、`model.DomainKind` 与 `netip.Prefix`。
 - 产出：`func DecodeGeoSite([]byte) (map[string]SiteTag, error)`、`func DecodeGeoIP([]byte) (map[string]IPTag, error)`；map key 为小写 tag，record 的 `Name` 保留 DAT 原始大小写。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `internal/geodat/decode_test.go` 建立只依赖 `encoding/binary` 的 wire fixture helper，并写以下测试；每个 `t.Run` 名逐字沿用 spec Scenario：
 
@@ -271,7 +271,7 @@ withAttribute := append(domainEntry(2, "kept.example"), fieldBytes(3, typedAttri
 
 该测试已有 `len(got[0].Domains) == 1` 断言，继续证明带 attributes 的 suffix 与无 attributes 的同 `kind+value` 在 Shadowrocket 投影层只输出一条，且 regexp 不输出。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：
 
@@ -281,7 +281,7 @@ go test ./internal/geodat ./internal/shadowrocket -run 'Test(Include与属性在
 
 预期：FAIL，首先报 `package clash-rules-srs/internal/geodat is not in std` 或 `undefined: geodat.DecodeGeoSite`。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `internal/geodat/decode.go` 使用以下公开类型，并把现有 Shadowrocket GeoIP wire 逻辑搬入同一包；GeoSite decoder 不得在共享层跳过 regexp 或 attributes：
 
@@ -540,7 +540,7 @@ for _, rule := range record.Domains {
 
 GeoIP 改读 `record.Prefixes`，其余公开 `Expand` 契约不变。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 gofmt -w internal/geodat internal/shadowrocket/expand.go internal/shadowrocket/expand_test.go
@@ -549,7 +549,7 @@ go test ./internal/geodat ./internal/shadowrocket -count=1
 
 预期：PASS；现有 Shadowrocket golden 不变。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add internal/geodat internal/shadowrocket/expand.go internal/shadowrocket/expand_test.go

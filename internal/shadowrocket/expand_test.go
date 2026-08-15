@@ -53,7 +53,8 @@ func TestMergeBaseGeoIP含底包(t *testing.T) {
 }
 
 func TestRegexp被跳过(t *testing.T) {
-	withAttribute := append(domainEntry(2, "kept.example"), fieldBytes(3, fieldBytes(1, []byte("cn")))...)
+	typedAttribute := append(fieldBytes(1, []byte("cn")), fieldVarint(2, 1)...)
+	withAttribute := append(domainEntry(2, "kept.example"), fieldBytes(3, typedAttribute)...)
 	site, ip := writeDatPair(t,
 		geoSiteDat(siteEntry("TEST",
 			withAttribute,
