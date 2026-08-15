@@ -100,7 +100,19 @@ func TestBuildForbiddenProbeFailurePreservesOldOutputs(t *testing.T) {
 	fixture.assertBuildAndPublished("old")
 }
 
-func TestBuildSkipCompileDoesNotSwitchOutputs(t *testing.T) {
+func Test展开失败则不发布(t *testing.T) {
+	fixture := newBuildFixture(t)
+	fixture.seedPublished("old")
+	fixture.failStage = "render shadowrocket conf and checksum"
+	fixture.failError = errors.New("group \"坏组\" references missing geosite:not-exist")
+	err := Build(context.Background(), fixture.options(), fixture.dependencies())
+	if err == nil || !strings.Contains(err.Error(), "坏组") || !strings.Contains(err.Error(), "geosite:not-exist") {
+		t.Fatalf("err=%v", err)
+	}
+	fixture.assertBuildAndPublished("old")
+}
+
+func TestSkipCompile不产出Conf(t *testing.T) {
 	fixture := newBuildFixture(t)
 	fixture.seedPublished("old")
 	options := fixture.options()
@@ -109,8 +121,14 @@ func TestBuildSkipCompileDoesNotSwitchOutputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture.assertBuildAndPublished("old")
-	if slices.Contains(fixture.calls, "compile geosite") {
-		t.Fatalf("compile ran: %v", fixture.calls)
+	for _, forbidden := range []string{
+		"compile geosite",
+		"render shadowrocket conf and checksum",
+		"verify release assets",
+	} {
+		if slices.Contains(fixture.calls, forbidden) {
+			t.Fatalf("%s ran during skip-compile: %v", forbidden, fixture.calls)
+		}
 	}
 }
 
@@ -264,7 +282,15 @@ func (f *buildFixture) dependencies() Dependencies {
 			}
 			return nil
 		}),
-		VerifySixAssets: stage("verify six assets", func(state *buildState) error {
+		RenderShadowrocket: stage("render shadowrocket conf and checksum", func(state *buildState) error {
+			path := filepath.Join(state.Tx.Layout().Publish, "shadowrocket.conf")
+			if err := os.WriteFile(path, []byte("[General]\n"), 0o600); err != nil {
+				return err
+			}
+			_, err := verify.WriteSHA256(path)
+			return err
+		}),
+		VerifyReleaseAssets: stage("verify release assets", func(state *buildState) error {
 			return verify.Assets(state.Tx.Layout().Publish, verify.ReleaseAssets())
 		}),
 	}

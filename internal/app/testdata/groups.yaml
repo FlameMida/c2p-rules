@@ -15,3 +15,7 @@ groups:
     remarks: 哔哩哔哩港澳台
     geosite: [BilibiliHMT]
     geoip: [BilibiliHMT]
+  - id: cn
+    remarks: 中国大陆
+    geosite: [cn]
+    geoip: [cn]

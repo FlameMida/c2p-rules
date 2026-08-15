@@ -1005,7 +1005,7 @@ git commit -m "feat(T2): 渲染 Shadowrocket 胖配置"
 - 消费：任务 1 的 shadowrocket.Expand、任务 2 的 shadowrocket.Render、现有 fileutil.AtomicWrite 与 verify.WriteSHA256。
 - 产出：Dependencies.RenderShadowrocket buildStage；Dependencies.VerifyReleaseAssets buildStage；完整 build 的 staging publish/ 含 conf 与 checksum 后才 Commit。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 internal/app/build_test.go 增加事务、skip-compile 与新阶段断言，并把 fixture 的正式资产由六个改为八个：
 
@@ -1102,7 +1102,7 @@ if strings.Index(conf, ",YouTube\n") >= strings.Index(conf, ",Google 服务\n") 
 
 替换该测试内旧的六资产显式列表断言，避免同一权威清单出现两份。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ~~~bash
 go test ./internal/app -run 'Test(展开失败则不发布|SkipCompile不产出Conf)$' -v
@@ -1111,7 +1111,7 @@ go test -tags=integration ./internal/app -run Test完整构建得到八文件且
 
 预期：第一个命令因 Dependencies 缺 RenderShadowrocket / VerifyReleaseAssets 而构建失败；第二个命令因缺 shadowrocket.conf 或资产集合仍为六文件而 FAIL。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 在 internal/app/build.go 把 Dependencies 尾部与 finish 阶段改为：
 
@@ -1186,7 +1186,7 @@ VerifyReleaseAssets: func(_ context.Context, state *buildState) error {
 
 删除旧 VerifySixAssets 初始化。RenderShadowrocket 的任何错误由 Build defer Abort staging；Commit 之前不会切换 build/ 或 publish/。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ~~~bash
 gofmt -w internal/app/build.go internal/app/deps.go internal/app/build_test.go internal/app/build_integration_test.go
@@ -1196,7 +1196,7 @@ go test -tags=integration ./internal/app -run 'Test(完整构建得到八文件�
 
 预期：全部 PASS；真实工具集成测试证明 Google 组含 youtube include 域名、cn 含两个底包前缀、checksum 格式正确、失败仍保留 old generation。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ~~~bash
 git add internal/app/build.go internal/app/deps.go internal/app/build_test.go internal/app/build_integration_test.go internal/app/testdata/groups.yaml

@@ -23,7 +23,7 @@ import (
 	"clash-rules-srs/internal/verify"
 )
 
-func TestSyntheticFullBuildMergesAndSeparatesApprovedTags(t *testing.T) {
+func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 	repositoryRoot, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
@@ -114,11 +114,30 @@ func TestSyntheticFullBuildMergesAndSeparatesApprovedTags(t *testing.T) {
 	if err := verify.Forbidden(context.Background(), prober, document); err != nil {
 		t.Fatal(err)
 	}
-	if err := verify.Assets(filepath.Join(root, "publish"), []string{
-		"geoip.dat", "geoip.dat.sha256sum", "geosite.dat", "geosite.dat.sha256sum",
-		"install_passwall2_rules.sh", "install_passwall2_rules.sh.sha256sum",
-	}); err != nil {
+	publish := filepath.Join(root, "publish")
+	if err := verify.Assets(publish, verify.ReleaseAssets()); err != nil {
 		t.Fatal(err)
+	}
+	confBytes, err := os.ReadFile(filepath.Join(publish, "shadowrocket.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	conf := string(confBytes)
+	for _, want := range []string{
+		"DOMAIN-SUFFIX,youtube-base.example,Google 服务",
+		"IP-CIDR,192.0.2.0/24,中国大陆,no-resolve",
+		"IP-CIDR6,2001:db8::/32,中国大陆,no-resolve",
+	} {
+		if !strings.Contains(conf, want+"\n") {
+			t.Fatalf("conf missing %q:\n%s", want, conf)
+		}
+	}
+	checksum, err := os.ReadFile(filepath.Join(publish, "shadowrocket.conf.sha256sum"))
+	if err != nil || !strings.HasSuffix(string(checksum), "  shadowrocket.conf\n") {
+		t.Fatalf("checksum=%q err=%v", checksum, err)
+	}
+	if strings.Index(conf, ",YouTube\n") >= strings.Index(conf, ",Google 服务\n") {
+		t.Fatal("YouTube rules do not precede Google rules")
 	}
 	installer, err := os.ReadFile(filepath.Join(root, "publish", "install_passwall2_rules.sh"))
 	if err != nil {
@@ -305,7 +324,7 @@ func buildSyntheticBaseGeoIP(t *testing.T, runner *tools.Runner) string {
 		t.Fatal(err)
 	}
 	for name, content := range map[string]string{
-		"cn":      "192.0.2.0/24\n",
+		"cn":      "192.0.2.0/24\n2001:db8::/32\n",
 		"private": "10.0.0.0/8\n",
 		"netflix": "198.51.100.0/24\n",
 	} {

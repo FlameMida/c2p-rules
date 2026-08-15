@@ -44,21 +44,22 @@ type buildState struct {
 type buildStage func(context.Context, *buildState) error
 
 type Dependencies struct {
-	Begin           func(string) (*workspace.Transaction, error)
-	LoadConfig      buildStage
-	FetchBaseGeoIP  buildStage
-	BuildRegistry   buildStage
-	FetchRemote     buildStage
-	LoadCustom      buildStage
-	MergeGeoSite    buildStage
-	PrepareGeoIP    buildStage
-	WriteManifest   buildStage
-	CompileGeoSite  buildStage
-	CompileGeoIP    buildStage
-	ProbeTags       buildStage
-	ValidateGroups  buildStage
-	RenderInstaller buildStage
-	VerifySixAssets buildStage
+	Begin               func(string) (*workspace.Transaction, error)
+	LoadConfig          buildStage
+	FetchBaseGeoIP      buildStage
+	BuildRegistry       buildStage
+	FetchRemote         buildStage
+	LoadCustom          buildStage
+	MergeGeoSite        buildStage
+	PrepareGeoIP        buildStage
+	WriteManifest       buildStage
+	CompileGeoSite      buildStage
+	CompileGeoIP        buildStage
+	ProbeTags           buildStage
+	ValidateGroups      buildStage
+	RenderInstaller     buildStage
+	RenderShadowrocket  buildStage
+	VerifyReleaseAssets buildStage
 }
 
 type namedStage struct {
@@ -108,7 +109,8 @@ func Build(ctx context.Context, options BuildOptions, dependencies Dependencies)
 		{"validate passwall groups", dependencies.ValidateGroups},
 		{"probe required and forbidden tags", dependencies.ProbeTags},
 		{"render installer and checksums", dependencies.RenderInstaller},
-		{"verify six assets", dependencies.VerifySixAssets},
+		{"render shadowrocket conf and checksum", dependencies.RenderShadowrocket},
+		{"verify release assets", dependencies.VerifyReleaseAssets},
 	}
 	if err := runStages(ctx, state, finish); err != nil {
 		return err

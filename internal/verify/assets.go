@@ -20,6 +20,8 @@ var releaseAssetNames = [...]string{
 	"geosite.dat.sha256sum",
 	"install_passwall2_rules.sh",
 	"install_passwall2_rules.sh.sha256sum",
+	"shadowrocket.conf",
+	"shadowrocket.conf.sha256sum",
 }
 
 func ReleaseAssets() []string {

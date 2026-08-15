@@ -16,6 +16,7 @@ import (
 	"clash-rules-srs/internal/model"
 	"clash-rules-srs/internal/passwall"
 	"clash-rules-srs/internal/rules"
+	"clash-rules-srs/internal/shadowrocket"
 	"clash-rules-srs/internal/targets"
 	"clash-rules-srs/internal/tools"
 	"clash-rules-srs/internal/verify"
@@ -234,7 +235,29 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			_, err = verify.WriteSHA256(installerPath)
 			return err
 		},
-		VerifySixAssets: func(_ context.Context, state *buildState) error {
+		RenderShadowrocket: func(ctx context.Context, state *buildState) error {
+			publish := state.Tx.Layout().Publish
+			expanded, err := shadowrocket.Expand(
+				ctx,
+				filepath.Join(publish, "geosite.dat"),
+				filepath.Join(publish, "geoip.dat"),
+				state.Groups,
+			)
+			if err != nil {
+				return err
+			}
+			conf, err := shadowrocket.Render(expanded, state.Options.Repo)
+			if err != nil {
+				return err
+			}
+			path := filepath.Join(publish, "shadowrocket.conf")
+			if err := fileutil.AtomicWrite(path, conf, 0o644); err != nil {
+				return err
+			}
+			_, err = verify.WriteSHA256(path)
+			return err
+		},
+		VerifyReleaseAssets: func(_ context.Context, state *buildState) error {
 			return verify.Assets(state.Tx.Layout().Publish, verify.ReleaseAssets())
 		},
 	}

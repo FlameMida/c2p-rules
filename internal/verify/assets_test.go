@@ -29,6 +29,22 @@ func TestReleaseAssetsReturnsIndependentExactSixNames(t *testing.T) {
 	}
 }
 
+func TestReleaseAssets包含Shadowrocket八资产(t *testing.T) {
+	want := []string{
+		"geoip.dat",
+		"geoip.dat.sha256sum",
+		"geosite.dat",
+		"geosite.dat.sha256sum",
+		"install_passwall2_rules.sh",
+		"install_passwall2_rules.sh.sha256sum",
+		"shadowrocket.conf",
+		"shadowrocket.conf.sha256sum",
+	}
+	if got := verify.ReleaseAssets(); !slices.Equal(got, want) {
+		t.Fatalf("assets=%v want=%v", got, want)
+	}
+}
+
 var sixAssets = []string{
 	"geoip.dat",
 	"geoip.dat.sha256sum",
