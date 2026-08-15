@@ -2,7 +2,7 @@
 spec_dev:
   version: 1
   feature: shadowrocket-conf
-  status: draft
+  status: active
   covers:
     - "internal/shadowrocket/**"
     - "internal/verify/assets.go"
