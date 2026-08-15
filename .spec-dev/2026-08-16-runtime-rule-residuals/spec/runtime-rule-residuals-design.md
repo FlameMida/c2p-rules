@@ -12,13 +12,16 @@ spec_dev:
     - "internal/app/**"
     - "internal/config/**"
     - "internal/geodat/**"
+    - "internal/geoip/**"
     - "internal/geosite/**"
     - "internal/manifest/**"
+    - "internal/model/**"
     - "internal/passwall/**"
     - "internal/rules/**"
     - "internal/shadowrocket/**"
     - "internal/targets/**"
     - "internal/verify/**"
+    - "internal/workspace/**"
     - "README.md"
     - "context.md"
   sync_commit: null
@@ -33,7 +36,7 @@ spec_dev:
 
 当前发布的完整 GeoSite/GeoIP DAT 同时承担外部兼容与本仓托管分流；PassWall2 加载托管组、Shadowrocket 展开胖配置时，会重复装入大量已被前序规则或等价出口覆盖的域名规则。需要在保留完整公共标签的同时，为实际运行组生成经过保守证明的残差标签，并安全迁移现有 PassWall2 Shunt 节点配置。
 
-**成功标准 / Success criteria**：相同输入下，PassWall2 与 Shadowrocket 的活动域名规则及 Shadowrocket `[Rule]` 行数/字节数至少下降 30%，`reject` 与完整公共标签保持兼容，Xray `AsIs`、Xray `IPIfNonMatch` 和 sing-box 原生路由的固定语料决策不变，三种运行矩阵的稳定 RSS 中位数均至少下降 5%。
+**成功标准 / Success criteria**：相同输入下，PassWall2 与 Shadowrocket 的活动域名规则及 Shadowrocket `[Rule]` 行数/字节数至少下降 30%，`reject` 与完整公共标签保持兼容；在声明的兼容 Shunt 配置下，Xray `AsIs`、Xray `IPIfNonMatch` 和 sing-box 原生路由的固定语料决策不变，三种运行矩阵的稳定 RSS 中位数均至少下降 5%。
 
 ## 非目标
 
@@ -51,7 +54,10 @@ spec_dev:
 - **覆盖证明 / coverage proof**：单条规则足以证明候选规则的全部匹配集合已由另一条规则接管的保守判定；不做多规则并集或正则语言包含推断。_Avoid_：模糊去重、近似匹配
 - **Shunt 节点 / Shunt node**：PassWall2 `nodes` 中 `protocol='_shunt'` 的节点配置；它按 `crs_<group-id>` 及辅助字段保存每组出口。_Avoid_：`shunt_rules` 规则组
 - **UCI 配置族 / UCI option family**：某规则组在 Shunt 节点上的主出口、`_fakedns` 与 `_proxy_tag` 三个选项。_Avoid_：单一出口字段
-- **路由等价语料 / routing equivalence corpus**：覆盖服务组、代理、非中国域名、国内、私有、直连、拒绝及未命中域名的固定请求集合，用于优化前后设备对照。
+- **路由等价语料 / routing equivalence corpus**：覆盖最终保留的 14 组、合并后的 GFW/proxy 规则、未命中域名与 GeoIP 二次匹配的固定请求集合，用于优化前后设备对照；不包含已批准删除的 BilibiliHMT 契约。
+- **基线发布物 / baseline artifact**：本特性代码改动前，用与候选相同的公共来源响应快照、community、custom 与构建参数生成的八资产。_Avoid_：任意历史 latest、不同上游输入
+- **活动域名规则数 / active domain rule count**：按默认托管组展开最终 GeoSite 标签、组内按 kind/value/attributes 精确去重后逐组求和的规则数；跨组重复仍分别计数。_Avoid_：DAT 全标签总量、文件字节数
+- **兼容 Shunt 配置 / compatible Shunt configuration**：`gfw`、`proxy`、`tld_not_cn` 三组主出口均已启用且相同，三个 UCI 配置族逐项相同或辅助项同时缺失的节点配置；本仓当前目标配置为三组均 `_default`。_Avoid_：任意历史节点、单侧关闭配置
 
 ## 影响面
 
@@ -68,7 +74,7 @@ spec_dev:
 - 选择“编译后 DAT 保守残差”而不是源文本过滤或平台渲染期过滤：include、属性和规则类型语义只在编译后输入上完整可见，且一份派生结果可同时服务 PassWall2 与 Shadowrocket（详见 `../../adr/0003-compiled-dat-residual-tags.md`）
 - `gfw` 托管组并入既有 `proxy`，`proxy` 继续作为唯一规范组 ID；不创建或改名 `crs_proxy`、`crs_direct`
 - 完整删除 BilibiliHMT：删除来源、GeoSite/GeoIP 标签、组、模板、测试和文档，不保留兼容空壳
-- PassWall2 对全部已有 Shunt 节点做安全迁移：缺失值可迁移、相同值可合并、冲突值阻断安装，且整个操作可回滚
+- PassWall2 对全部已有 Shunt 节点做事务化迁移：缺失值按非空一侧归一化、相同值合并、冲突值阻断安装；单侧缺失会有意启用合并全集，不属于路由等价承诺
 - `proxy` 与 `tld_not_cn` 的出口及辅助语义必须一致；PassWall2 安装前校验，Shadowrocket 通过策略组引用结构性绑定
 - `private`、`cn`、`direct` 保持直连配置，不由安装器重写
 - 设备验收覆盖 Xray `AsIs`、Xray `IPIfNonMatch` 与 sing-box 原生路由；本轮不扩大到 `IPOnDemand`
@@ -132,7 +138,7 @@ spec_dev:
 
 ### Requirement: 覆盖证明保持保守和确定
 
-覆盖证明 SHALL 只接受标签边界正确的父级 suffix、确定包含的 keyword、同类等值 regexp 或其他等价的单规则证明，并在无法证明或 attributes 不兼容时保留候选规则。
+覆盖证明 SHALL 仅在 attributes 规范化集合相同，且候选满足“full 被相同 full、标签边界正确的相同/父级 suffix 或确定包含的 keyword 覆盖”“suffix 被标签边界正确的相同/父级 suffix 或确定包含的 keyword 覆盖”“keyword 被其子串 keyword 覆盖”“regexp 文本完全相同”之一时删除候选，否则保留。
 
 #### Scenario: suffix 标签边界不产生假覆盖
 
@@ -168,25 +174,47 @@ spec_dev:
 - **WHEN** 最终 required/forbidden tag 校验运行
 - **THEN** 校验读取最终 DAT 的新鲜视图并成功看到两个残差标签
 
-### Requirement: 完整公共标签与 reject 保持兼容
+#### Scenario: 无法回写的 typed attribute 失败
 
-相同构建输入下，最终 DAT SHALL 保留完整 `gfw`、`proxy`、`direct` 标签，并使 `reject` 规则的类型、值、attributes 与顺序指纹保持不变。
+- **GIVEN** 中间 DAT 含 bool true 以外的 attribute typed value 或未知 attribute wire field
+- **WHEN** 无损解码准备生成 domain-list 文本
+- **THEN** 构建失败并指出 tag、规则与属性，不丢弃或降级该属性
+
+### Requirement: 完整公共标签保持兼容
+
+相同构建输入下，最终 DAT SHALL 保留规则指纹不变的完整 `gfw`、`proxy`、`direct` 标签。
 
 #### Scenario: 完整标签未被残差替换
 
 - **GIVEN** 同一份锁定来源分别运行优化前和优化后构建
-- **WHEN** 展开最终 `gfw`、`proxy`、`direct` 与 `reject`
-- **THEN** 四个完整标签的规则指纹与基线一致，残差标签作为额外标签存在
+- **WHEN** 展开最终 `gfw`、`proxy` 与 `direct`
+- **THEN** 三个完整标签的规则指纹与基线一致，残差标签作为额外标签存在
 
-### Requirement: PassWall2 安全合并 GFW 节点配置
+### Requirement: reject 规则保持完全不变
+
+相同构建输入下，最终 `reject` 标签 SHALL 保持规则类型、值、attributes 与顺序指纹不变。
+
+#### Scenario: reject 指纹不受优化影响
+
+- **GIVEN** 同一份锁定来源分别运行优化前和优化后构建
+- **WHEN** 无损展开最终 `reject`
+- **THEN** 两次规则指纹完全相同，且默认组顺序仍以 reject 为第一组
+
+### Requirement: PassWall2 按规范合并 GFW 节点配置
 
 安装器 SHALL 对每个已有 Shunt 节点的主出口、`_fakedns` 与 `_proxy_tag` 三个 UCI 配置族执行 `gfw → proxy` 的缺失迁移、相同合并和冲突拒绝。
 
 #### Scenario: proxy 缺失时继承 gfw
 
-- **GIVEN** 某 Shunt 节点只有 `crs_gfw='_default'` 及其辅助值，缺少对应 `crs_proxy*`
+- **GIVEN** 某 Shunt 节点有 `crs_gfw='_default'` 及其辅助值、缺少对应 `crs_proxy*`，且 `crs_tld_not_cn*` 与迁移后的 proxy 逐项等价
 - **WHEN** 安装器执行迁移
 - **THEN** 三个值迁入对应 `crs_proxy*`，随后旧 `crs_gfw*` 被删除
+
+#### Scenario: 单侧关闭按非空一侧归一化
+
+- **GIVEN** 某 Shunt 节点只启用了 gfw 或只启用了 proxy，且合并后的 proxy 与 `tld_not_cn` 满足等价预检
+- **WHEN** 安装器合并两个旧组
+- **THEN** 合并后的 `crs_proxy*` 采用非空一侧配置并承载 `gfw ∪ proxy`，安装日志明确提示该节点从单侧关闭归一化为合并全集启用
 
 #### Scenario: gfw 与 proxy 冲突时零修改失败
 
@@ -226,6 +254,26 @@ spec_dev:
 - **WHEN** 安装器进入回滚
 - **THEN** 节点字段、托管规则与全局 URL 均恢复安装前值，并输出回滚结果
 
+### Requirement: 安装器清理全部废弃节点字段
+
+预检通过后的成功安装 SHALL 从每个 Shunt 节点删除 `crs_gfw*` 与 `crs_bilibili_hmt*` 三个 UCI 配置族。
+
+#### Scenario: 成功安装后无废弃字段
+
+- **GIVEN** 多个 Shunt 节点分别保存 GFW 和 BilibiliHMT 的主出口、FakeDNS 或 proxy tag 字段
+- **WHEN** 安装器成功提交
+- **THEN** `uci show passwall2` 中不再出现任何 `crs_gfw`、`crs_gfw_fakedns`、`crs_gfw_proxy_tag` 或对应 `crs_bilibili_hmt*` 字段
+
+### Requirement: 安装器保留无关节点语义
+
+安装器 SHALL 保持 Shunt 节点的 `default_node`、reject 及 `private`、`cn`、`direct` 配置族与安装前完全相同。
+
+#### Scenario: 默认代理和三组直连不被重写
+
+- **GIVEN** Shunt 节点的 Default 为代理，reject 保持原配置，`private`、`cn`、`direct` 主出口均为 `_direct`
+- **WHEN** 安装器成功完成规则更新
+- **THEN** 上述字段及其辅助字段逐项等于安装前快照
+
 ### Requirement: 生成型标签不接受 custom 输入
 
 仓库目标契约 SHALL 把两个残差标签声明为构建生成且保留的目标，不要求或接受对应的 `custom/geosite/*.yaml` 模板。
@@ -248,7 +296,7 @@ spec_dev:
 
 ### Requirement: 优化前后路由决策等价
 
-候选发布物 SHALL 对路由等价语料保持与基线发布物相同的最终出口。
+候选发布物 SHALL 在兼容 Shunt 配置下对保留的 14 组及路由等价语料保持与基线发布物相同的最终出口，BilibiliHMT 的显式删除除外。
 
 #### Scenario: Xray AsIs 域名路由等价
 
@@ -268,15 +316,19 @@ spec_dev:
 - **WHEN** 分别运行基线与候选
 - **THEN** 每个请求的命中规则与最终出口一致，不把 Xray 的 `domainStrategy` 名称套用于 sing-box
 
-### Requirement: 活动规则与 RSS 达到量化降幅
+### Requirement: 活动规则规模下降至少 30%
 
-候选发布物 SHALL 在相同输入、设备、节点与流量下使活动域名规则数及 Shadowrocket `[Rule]` 行数/字节数不高于基线的 70%，并使三种设备矩阵的五次稳定 RSS 中位数不高于各自基线的 95%。
+候选发布物 SHALL 在相同输入下使活动域名规则数及 Shadowrocket `[Rule]` 行数/字节数不高于基线的 70%。
 
 #### Scenario: 静态规则规模下降至少 30%
 
 - **GIVEN** 基线与候选使用同一来源快照和完整 DAT 输入
 - **WHEN** 统计 PassWall2 托管组实际引用的 GeoSite 规则以及 Shadowrocket `[Rule]`
 - **THEN** 候选的活动域名规则总数、Shadowrocket 规则行数和规则字节数分别不超过基线的 70%
+
+### Requirement: 三种运行矩阵 RSS 下降至少 5%
+
+候选发布物 SHALL 在相同设备、节点与流量下使 Xray AsIs、Xray IPIfNonMatch 和 sing-box 原生路由的五次稳定 RSS 中位数分别不高于各自基线的 95%。
 
 #### Scenario: 三种运行矩阵 RSS 下降至少 5%
 
@@ -330,7 +382,7 @@ Shadowrocket conf SHALL 为 14 个托管组生成具名策略组，其中 `tld_n
 
 ### 架构与组件
 
-- **`internal/geodat`**：从 GeoSite protobuf wire 格式无损解码 tag、domain kind、value 与 attributes；提供给残差推导和 Shadowrocket 投影复用。Shadowrocket 可继续跳过 regexp/attributes，但共享解码层不得丢失它们。
+- **`internal/geodat`**：从 GeoSite protobuf wire 格式无损解码 tag、domain kind、value 与 attributes；当前编译器产生的 bool true attribute 还原为 `@key`，遇到 false、int 或未知 typed value 则失败。该层提供给残差推导和 Shadowrocket 投影复用；Shadowrocket 可继续跳过 regexp/attributes，但共享解码层不得丢失它们。
 - **`internal/geosite` 残差推导器**：接受已展开 tag 集合、组优先级与生成规格，返回两个确定排序的 `model.DomainRule` 列表和计数报告；不下载、不执行编译器、不写 publish。
 - **`internal/app` 两次编译编排**：第一次把基础数据编译到 staging 的 intermediate 路径；推导器写两个生成标签到 `data-merged`；第二次才把最终 `geosite.dat` 写入 publish。GeoIP 保持现有单次编译。
 - **`internal/passwall` 迁移模板**：在删除并重建 managed `shunt_rules` 前扫描所有 Shunt 节点，完成全局预检后才暂存节点改动；备份/恢复范围扩展到节点 options。
@@ -357,7 +409,7 @@ load/fetch/custom → merge 基础 data-merged → compile intermediate geosite.
 ```go
 type SiteTag struct {
     Name    string
-    Domains []model.DomainRule // suffix/full/keyword/regexp + Attrs
+    Domains []model.DomainRule // suffix/full/keyword/regexp + bool-true Attr keys
 }
 
 type ResidualSpec struct {
@@ -383,7 +435,7 @@ func Derive(tags map[string]SiteTag, spec ResidualSpec) ([]model.DomainRule, Res
 - suffix 候选：标签边界正确的相同/父级 suffix，或值中确定包含的已有 keyword 可覆盖
 - keyword 候选：已有 keyword 是候选 keyword 的子串时可覆盖
 - regexp 候选：仅 regexp 文本与 attributes 均相同可覆盖
-- attributes 不同或不兼容时不做包含推断；大小写/IDN 以编译后 DAT 的规范值为准
+- attributes 排序去重成规范化集合，只有集合完全相同才做覆盖推断；大小写/IDN 以编译后 DAT 的规范值为准
 - 不组合多条规则证明覆盖，不做 regexp 语言包含，不借助 GeoIP
 
 ### 错误处理
@@ -410,13 +462,18 @@ func Derive(tags map[string]SiteTag, spec ResidualSpec) ([]model.DomainRule, Res
 | 输出顺序可重现 | unit | 任务内 TDD | 两次字节相同 |
 | 生成标签被来源占用 | unit/integration | 任务内 TDD | reserved tag 错误与 publish 未切换 |
 | 中间 DAT 不污染最终探测缓存 | integration | 任务内 TDD | final lookup 新鲜读取 |
-| 完整标签未被残差替换 | integration | 任务内 TDD | 四标签指纹一致 |
+| 无法回写的 typed attribute 失败 | unit/integration | 任务内 TDD | false/int/unknown attribute 拒绝测试 |
+| 完整标签未被残差替换 | integration | 任务内 TDD | 三个完整公共标签指纹一致 |
+| reject 指纹不受优化影响 | integration | 任务内 TDD | reject 无损指纹一致 |
 | proxy 缺失时继承 gfw | integration-shell | 任务内 TDD | fake UCI 三族迁移 |
+| 单侧关闭按非空一侧归一化 | integration-shell | 任务内 TDD | 明确启用全集并输出警告 |
 | gfw 与 proxy 冲突时零修改失败 | integration-shell | 任务内 TDD | UCI 前后快照一致 |
 | 重复安装保持幂等 | integration-shell | 任务内 TDD | 第二次 diff 为空 |
 | 两组均继承 Default | integration-shell | 任务内 TDD | `_default` 预检通过 |
 | 等价出口条件不成立 | integration-shell | 任务内 TDD | 节点/字段错误且零修改 |
 | 后续步骤失败时恢复节点 | integration-shell | 任务内 TDD | rules/nodes/URLs 全量回读 |
+| 成功安装后无废弃字段 | integration-shell | 任务内 TDD | fake/live UCI 均无旧字段 |
+| 默认代理和三组直连不被重写 | integration-shell | 任务内 TDD | 相关节点字段前后快照一致 |
 | 默认 custom 模板审计忽略生成型标签 | unit | 任务内 TDD | repository/custom contract 通过 |
 | 最终 DAT 不含 BilibiliHMT | integration | 任务内 TDD | 双侧 forbidden probe + `rg` 契约 |
 | 默认组 ID、顺序与标签精确匹配 | unit | 任务内 TDD | config/render golden |
@@ -437,8 +494,10 @@ func Derive(tags map[string]SiteTag, spec ResidualSpec) ([]model.DomainRule, Res
 - 上游规则会漂移，因此 30% 使用同一输入的相对基线，不使用历史 Release 的固定行数。
 - RSS 包含核心基线内存和设备噪声；固定设备/配置/流量、冷启动、稳定等待、五次中位数用于降低方差，任一矩阵未达 5% 即不通过性能验收。
 - 所有 Shunt 节点都会被预检；一个未使用但仍保存冲突字段的节点也会阻止安装，以避免静默损坏未来切换配置。
+- 旧节点若只启用 gfw/proxy 其中一组，合并后会按非空一侧启用二者全集；这是用户批准的迁移规则，安装器必须显式告警，路由等价验收不覆盖该非兼容配置。
 - 完整 `gfw` 标签继续允许 custom 扩展，即使它不再是托管组；两个残差标签禁止 custom 扩展。
 - BilibiliHMT 从双侧 DAT 删除可能影响直接消费该标签的外部用户，这是用户批准的显式破坏性变化。
+- BilibiliHMT 旧规则、旧策略组或旧节点独立出口不参加路由等价比较；候选中它们必须不存在，而不是保持旧出口。
 
 ## 开放问题
 
