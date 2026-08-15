@@ -82,12 +82,6 @@ sources:
     url: https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/Spotify.txt
     outputs:
       geosite: {tag: spotify, mode: merge-base}
-  - id: xiaolin-bilibili
-    behavior: classical
-    url: https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/BilibiliHMT.txt
-    outputs:
-      geosite: {tag: BilibiliHMT, mode: create}
-      geoip: {tag: BilibiliHMT, mode: create}
   - id: xiaolin-tiktok
     behavior: classical
     url: https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/TikTok.txt

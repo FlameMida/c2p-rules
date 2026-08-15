@@ -34,18 +34,18 @@ func TestMergeDeduplicatesExactRulesButPreservesKindAndAttrs(t *testing.T) {
 	}
 }
 
-func TestMergeKeepsGoogleYouTubeAndBilibiliTargetsIndependent(t *testing.T) {
+func TestMergeKeepsGoogleYouTubeAndProxyTargetsIndependent(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "merged")
 	inputs := []model.Contribution{
 		{SourceID: "youtube", Side: model.GeoSite, Tag: "youtube", Domains: []model.DomainRule{{Kind: "full", Value: "youtubei.googleapis.com"}}},
 		{SourceID: "google", Side: model.GeoSite, Tag: "google", Domains: []model.DomainRule{{Kind: "domain", Value: "googleapis.com"}}},
-		{SourceID: "hmt", Side: model.GeoSite, Tag: "BilibiliHMT", Domains: []model.DomainRule{{Kind: "domain", Value: "hmt-only.example"}}},
+		{SourceID: "proxy", Side: model.GeoSite, Tag: "proxy", Domains: []model.DomainRule{{Kind: "domain", Value: "proxy-only.example"}}},
 	}
 	if err := geosite.Merge("testdata/community", out, inputs); err != nil {
 		t.Fatal(err)
 	}
 	assertContainsOnly(t, out, "youtubei.googleapis.com", "youtube", "google")
-	assertContainsOnly(t, out, "hmt-only.example", "BilibiliHMT", "bilibili")
+	assertContainsOnly(t, out, "proxy-only.example", "proxy", "google")
 	google, _ := os.ReadFile(filepath.Join(out, "google"))
 	if !bytes.Contains(google, []byte("domain:googleapis.com")) {
 		t.Fatalf("google=%s", google)

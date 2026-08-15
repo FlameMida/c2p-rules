@@ -1820,7 +1820,7 @@ git commit -m "feat(T6): 事务迁移 Shunt 节点配置"
 - 消费：任务 3 generated tag 注册、任务 4 最终 DAT 生成、任务 5 Shadowrocket alias、任务 6 节点迁移。
 - 产出：仓库默认 14 组；完整公共 gfw/proxy/direct source 仍保留；BilibiliHMT 只在 manifest forbidden 与防回归测试中出现。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 把 `internal/config/repository_contract_test.go` 的默认组断言替换为 spec 精确序列，并同时渲染 PassWall2 section ID：
 
@@ -1897,7 +1897,7 @@ func TestBilibiliHMT仓库契约已移除(t *testing.T) {
 
 更新 `manifest_test.go`：默认 required GeoSite 必含两个 residual；Forbidden GeoSite/GeoIP 都含 `BilibiliHMT`，两侧仍含 `xiaolin-bilibili`。更新 Shadowrocket 默认组测试期望 14，并断言非中国域名 alias 行。更新 installer 默认 fragment 数量期望 14。把 geoip 排序 fixture 的 Bilibili tag 换成普通 `alpha`，把 geosite/rules 测试改成验证完整公共 `proxy` custom，不再用已删除契约作为一般功能样例。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 go test ./internal/config ./internal/manifest ./internal/rules ./internal/geosite ./internal/geoip ./internal/shadowrocket ./internal/passwall -count=1
@@ -1905,7 +1905,7 @@ go test ./internal/config ./internal/manifest ./internal/rules ./internal/geosit
 
 预期：FAIL；默认配置仍有 16 组、Bilibili source/templates/docs，manifest 尚未禁止双侧 BilibiliHMT。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 `config/passwall2-groups.yaml` 完整替换为：
 
@@ -2020,7 +2020,7 @@ README/context 必须明确写出：
 - installer 会预检所有 Shunt 节点，三族迁移/冲突失败/单侧启用警告/废弃字段清理均在同一事务。
 - private/cn/direct 仍直连，reject 不变；`IPOnDemand` 不在本轮验收。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 gofmt -w internal/config/repository_contract_test.go internal/manifest internal/rules/custom_test.go internal/geosite/merge_test.go internal/geoip/config_test.go internal/shadowrocket/render_test.go internal/passwall/installer_test.go
@@ -2030,7 +2030,7 @@ go test ./internal/config ./internal/manifest ./internal/rules ./internal/geosit
 
 预期：Go tests PASS；最后一条 `rg` 退出 1 且无输出。manifest 与防回归测试内的禁止字符串不在该扫描范围，属于有意保留；integration fixture 在任务 8 同步清理并单独扫描。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add sources.yaml config/passwall2-groups.yaml custom internal/config internal/manifest internal/rules internal/geosite/merge_test.go internal/geoip/config_test.go internal/shadowrocket/render_test.go internal/passwall/installer_test.go README.md context.md

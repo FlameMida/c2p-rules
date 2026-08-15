@@ -4,10 +4,6 @@ groups:
     remarks: 广告拦截
     geosite: [reject]
     geoip: []
-  - id: bilibili_hmt
-    remarks: 哔哩哔哩港澳台
-    geosite: [BilibiliHMT]
-    geoip: [BilibiliHMT]
   - id: youtube
     remarks: YouTube
     geosite: [youtube]
@@ -40,13 +36,9 @@ groups:
     remarks: Google 服务
     geosite: [google]
     geoip: []
-  - id: gfw
-    remarks: GFW
-    geosite: [gfw]
-    geoip: []
   - id: proxy
     remarks: 代理规则
-    geosite: [proxy]
+    geosite: [crs-proxy-residual]
     geoip: []
   - id: tld_not_cn
     remarks: 非中国域名
@@ -62,5 +54,5 @@ groups:
     geoip: [cn]
   - id: direct
     remarks: 直连规则
-    geosite: [direct]
+    geosite: [crs-direct-residual]
     geoip: []

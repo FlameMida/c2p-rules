@@ -41,7 +41,7 @@ func Test组名与顺序对齐YAML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(groups) != 16 {
+	if len(groups) != 14 {
 		t.Fatalf("groups=%d", len(groups))
 	}
 	expanded := make([]shadowrocket.GroupRules, len(groups))
@@ -67,6 +67,9 @@ func Test组名与顺序对齐YAML(t *testing.T) {
 	}
 	assertAppearsBefore(t, proxyGroups, "YouTube =", "Google 服务 =")
 	assertAppearsBefore(t, rules, ",YouTube\n", ",Google 服务\n")
+	if !strings.Contains(proxyGroups, "非中国域名 = select,代理规则,policy-select-name=代理规则\n") {
+		t.Fatalf("tld_not_cn alias missing:\n%s", proxyGroups)
+	}
 	if strings.Contains(rendered, "[Proxy]\n") {
 		t.Fatal("renderer emitted node definitions")
 	}

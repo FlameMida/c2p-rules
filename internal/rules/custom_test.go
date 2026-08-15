@@ -21,9 +21,9 @@ func (c checker) Require(side model.Side, tag string) error {
 	return fmt.Errorf("unknown target %s:%s", side, tag)
 }
 
-func TestCustomCanExtendCreatedBilibiliHMT(t *testing.T) {
+func TestCustomCanExtendCreatedProxy(t *testing.T) {
 	got, err := rules.LoadCustom("testdata/custom", checker{
-		model.GeoSite: {"BilibiliHMT": true},
+		model.GeoSite: {"proxy": true},
 		model.GeoIP:   {"netflix": true},
 	})
 	if err != nil {
@@ -32,7 +32,7 @@ func TestCustomCanExtendCreatedBilibiliHMT(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got=%#v", got)
 	}
-	if got[0].Tag != "BilibiliHMT" || got[0].Domains[0].Value != "example.test" {
+	if got[0].Tag != "proxy" || got[0].Domains[0].Value != "example.test" {
 		t.Fatalf("got=%#v", got)
 	}
 	if got[1].Tag != "netflix" || len(got[1].CIDRs) != 1 {

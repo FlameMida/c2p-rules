@@ -31,8 +31,11 @@ sources.yaml + custom/geosite + custom/geoip
   -> 严格配置与 Clash 规则解析
   -> 显式 create / merge-base 目标注册
   -> community GeoSite 精确去重合并
+  -> 中间 GeoSite DAT 编译与无损解码
+  -> proxy/direct 保守残差推导
+  -> 最终 GeoSite DAT 第二次编译
   -> base GeoIP + 规范化 CIDR 输入合并
-  -> pinned domain-list-custom / geoip
+  -> pinned geoip 编译
   -> geoview required + forbidden 探针
   -> config/passwall2-groups.yaml 引用验证
   -> 从最终 dat 展开并渲染 shadowrocket.conf
@@ -49,7 +52,8 @@ sources.yaml + custom/geosite + custom/geoip
 - `merge-base` 要求底包中已经存在目标。
 - 多个 source 只有在同 tag、同 side、同 mode 时才可共享目标。
 - Google 合入 `geosite:google`，YouTube 合入 `geosite:youtube`，Netflix 合入标准双侧 `netflix`。
-- `BilibiliHMT` 使用独立 create 双侧 tag，不与底包 `bilibili` 合并。
+- 最终 DAT 保留完整 `gfw`、`proxy`、`direct` 公共标签；托管组只消费 `crs-proxy-residual` 与 `crs-direct-residual`。
+- 原港澳台专用来源与双侧标签已破坏性移除，不提供兼容入口。
 
 GeoSite 去重键是完整的 `kind + value + attrs`，不会做父子域覆盖推导。GeoIP 只做 CIDR Mask、稳定排序和完全相同前缀去重，不删除父前缀内部的子前缀。
 
@@ -61,9 +65,11 @@ GeoSite 去重键是完整的 `kind + value + attrs`，不会做父子域覆盖�
 
 ## 5. 分流与安装
 
-`config/passwall2-groups.yaml` 显式列出 16 个托管组及双侧引用。数组顺序是托管优先级，YouTube 位于 Google 之前；苹果服务为 `[apple, icloud]`；中国大陆为 GeoSite/GeoIP 双 `cn`；BilibiliHMT 独立双侧。
+`config/passwall2-groups.yaml` 显式列出 14 个托管组：reject、youtube、netflix、spotify、tiktok、ai、apple_services、telegram、google、proxy、tld_not_cn、private、cn、direct。数组顺序是托管优先级；苹果服务为 `[apple, icloud]`；中国大陆为 GeoSite/GeoIP 双 `cn`。完整 GFW 规则并入 proxy 残差，`tld_not_cn` 必须与 proxy 同出口；Shadowrocket 按 group ID 建立单向引用。
 
-renderer 生成稳定 `crs_<id>` section，并设置 `managed_by=clash-rules-srs`。安装器只清理旧 `c2p_` 分流和该标记下的托管 section，保留用户规则、节点及其原顺序。
+renderer 生成稳定 `crs_<id>` section，并设置 `managed_by=clash-rules-srs`。安装器只清理旧 `c2p_` 分流和该标记下的托管 section。它会先在隔离暂存配置中预检所有 Shunt 节点的主字段、FakeDNS 与 proxy-tag 三族：GFW/proxy 冲突或 proxy/tld_not_cn 不等价时 live 配置零修改失败；单侧启用会告警并按非空一侧归一化。成功后删除废弃字段，保留 `default_node`、reject、private、cn、direct；后续失败从完整配置快照恢复节点、规则与 URL。
+
+`reject` 行为不变，`private`、`cn`、`direct` 仍默认直连。`IPOnDemand` 不属于本轮验收矩阵。
 
 Shadowrocket 胖配置不含节点；导入前需先在 App 中添加可供 PROXY 使用的订阅或节点。在配置页粘贴官方 latest URL：
 

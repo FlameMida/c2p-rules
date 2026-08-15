@@ -16,7 +16,7 @@ func TestWriteConfigKeepsBaseFirstAndSortsTargets(t *testing.T) {
 	dir := t.TempDir()
 	inputs, err := geoip.WriteInputs(filepath.Join(dir, "ip"), []model.Contribution{
 		{SourceID: "z", Side: model.GeoIP, Tag: "netflix", CIDRs: []netip.Prefix{netip.MustParsePrefix("23.246.0.0/18")}},
-		{SourceID: "a", Side: model.GeoIP, Tag: "BilibiliHMT", CIDRs: []netip.Prefix{netip.MustParsePrefix("203.0.113.0/24")}},
+		{SourceID: "a", Side: model.GeoIP, Tag: "alpha", CIDRs: []netip.Prefix{netip.MustParsePrefix("203.0.113.0/24")}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +41,7 @@ func TestWriteConfigKeepsBaseFirstAndSortsTargets(t *testing.T) {
 	if len(got.Input) != 3 || got.Input[0].Type != "v2rayGeoIPDat" || got.Input[0].Args.URI != base {
 		t.Fatalf("input=%#v", got.Input)
 	}
-	if got.Input[1].Args.Name != "BilibiliHMT" || got.Input[2].Args.Name != "netflix" {
+	if got.Input[1].Args.Name != "alpha" || got.Input[2].Args.Name != "netflix" {
 		t.Fatalf("input=%#v", got.Input)
 	}
 	if !filepath.IsAbs(got.Input[1].Args.URI) || got.Output[0].Args.OutputName != "geoip.dat" || !filepath.IsAbs(got.Output[0].Args.OutputDir) {

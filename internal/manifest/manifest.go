@@ -8,6 +8,7 @@ import (
 
 	"clash-rules-srs/internal/fileutil"
 	"clash-rules-srs/internal/model"
+	"clash-rules-srs/internal/targets"
 )
 
 type Tags struct {
@@ -48,6 +49,7 @@ var legacyForbidden = Tags{
 		"xiaolin-netflix",
 		"xiaolin-spotify",
 		"xiaolin-bilibili",
+		"BilibiliHMT",
 		"xiaolin-tiktok",
 		"sukka-ai",
 	},
@@ -57,11 +59,16 @@ var legacyForbidden = Tags{
 		"loyalsoldier-lancidr",
 		"xiaolin-netflix",
 		"xiaolin-bilibili",
+		"BilibiliHMT",
 	},
 }
 
 func Build(sources []model.Source, groups []model.Group) Document {
-	requiredSite := map[string]struct{}{"cn": {}}
+	requiredSite := map[string]struct{}{
+		"cn":                      {},
+		targets.ProxyResidualTag:  {},
+		targets.DirectResidualTag: {},
+	}
 	requiredIP := map[string]struct{}{"cn": {}, "private": {}}
 	forbiddenSite := stringSet(legacyForbidden.GeoSite)
 	forbiddenIP := stringSet(legacyForbidden.GeoIP)

@@ -10,6 +10,7 @@ import (
 
 	"clash-rules-srs/internal/manifest"
 	"clash-rules-srs/internal/model"
+	"clash-rules-srs/internal/targets"
 )
 
 func TestManifestUsesOutputTagsAndOnlyForbidsExplicitLegacyTags(t *testing.T) {
@@ -24,11 +25,21 @@ func TestManifestUsesOutputTagsAndOnlyForbidsExplicitLegacyTags(t *testing.T) {
 	if !slices.Contains(doc.Required.GeoSite, "google") || slices.Contains(doc.Required.GeoSite, "loyalsoldier-google") {
 		t.Fatalf("required=%v", doc.Required.GeoSite)
 	}
+	for _, tag := range targets.GeneratedGeoSiteTags() {
+		if !slices.Contains(doc.Required.GeoSite, tag) {
+			t.Fatalf("generated tag %s missing from required=%v", tag, doc.Required.GeoSite)
+		}
+	}
 	if !slices.Contains(doc.Forbidden.GeoSite, "loyalsoldier-google") || !slices.Contains(doc.Forbidden.GeoSite, "xiaolin-netflix") || !slices.Contains(doc.Forbidden.GeoIP, "xiaolin-netflix") {
 		t.Fatalf("forbidden=%#v", doc.Forbidden)
 	}
 	if !slices.Contains(doc.Forbidden.GeoSite, "applications") || slices.Contains(doc.Forbidden.GeoIP, "loyalsoldier-google") {
 		t.Fatalf("forbidden=%#v", doc.Forbidden)
+	}
+	for _, side := range [][]string{doc.Forbidden.GeoSite, doc.Forbidden.GeoIP} {
+		if !slices.Contains(side, "BilibiliHMT") || !slices.Contains(side, "xiaolin-bilibili") {
+			t.Fatalf("Bilibili forbidden tags missing: %#v", doc.Forbidden)
+		}
 	}
 	record := doc.Sources["xiaolin-netflix"]
 	if record.GeoSite == nil || record.GeoIP == nil || record.GeoSite.Tag != "netflix" || record.GeoIP.Mode != model.MergeBase {
@@ -54,7 +65,7 @@ func TestManifestAddsGroupRefsAndBaselineRequirements(t *testing.T) {
 	doc := manifest.Build(nil, []model.Group{{
 		ID: "apple", GeoSite: []string{"icloud", "apple"}, GeoIP: []string{"private"},
 	}})
-	if !reflect.DeepEqual(doc.Required.GeoSite, []string{"apple", "cn", "icloud"}) {
+	if !reflect.DeepEqual(doc.Required.GeoSite, []string{"apple", "cn", targets.DirectResidualTag, targets.ProxyResidualTag, "icloud"}) {
 		t.Fatalf("geosite=%v", doc.Required.GeoSite)
 	}
 	if !reflect.DeepEqual(doc.Required.GeoIP, []string{"cn", "private"}) {

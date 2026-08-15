@@ -80,8 +80,8 @@ func TestInstallerSuccessInstallsAllRepositoryGroupsAndValidData(t *testing.T) {
 	harness.seedConfig("config nodes 'node1'\n\toption remarks 'Keep Node'\n")
 	output := harness.run(harness.render(options), true)
 	installed := harness.readConfig()
-	if strings.Count(installed, "option managed_by 'clash-rules-srs'") != 16 {
-		t.Fatalf("managed group count is not 16:\n%s", installed)
+	if strings.Count(installed, "option managed_by 'clash-rules-srs'") != 14 {
+		t.Fatalf("managed group count is not 14:\n%s", installed)
 	}
 	for _, group := range groups {
 		if !strings.Contains(installed, "config shunt_rules 'crs_"+group.ID+"'") {

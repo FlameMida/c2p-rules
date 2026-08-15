@@ -20,10 +20,12 @@ shadowrocket.conf.sha256sum
 `sources.yaml` 为远程源的唯一真源。每个 output 显式指定最终 tag 和模式：
 
 - `merge-base`：与底包同名 tag 做精确规则去重后合并，例如 Google、YouTube、Netflix。
-- `create`：只允许底包中不存在该 tag 时新建，例如 `BilibiliHMT`；它不会与普通 `bilibili` 合并。
+- `create`：只允许底包中不存在该 tag 时新建，例如 `ai`。
 - source ID 只用于追踪，不再作为 dat tag，也不需要 PassWall2 前缀。
 
 GeoSite 只对完全相同的 `kind + value + attrs` 去重，不把父域和子域互相消除。GeoIP 对 CIDR 做掩码规范化、排序和精确去重，保留 `/24` 内有明确声明的 `/25`。
+
+完整构建会先编译一份仅位于 staging/build 的中间 GeoSite DAT，再从编译后规则推导 `crs-proxy-residual` 与 `crs-direct-residual`，写回合并目录后进行第二次正式编译。最终 DAT 继续保留规则指纹不变的完整 `gfw`、`proxy`、`direct` 公共标签；只有托管分流组引用两个残差标签。
 
 ## 自定义规则
 
@@ -47,13 +49,15 @@ payload:
   - IP-CIDR6,2001:db8::/32
 ```
 
-仓库自带的两份模板只有注释，默认是语义空集，不会改变 dat。
+仓库自带的模板只有注释，默认是语义空集，不会改变 dat。两个 generated-only 残差标签不接受 custom 文件；构建会在编译前拒绝同名 source、community 或 custom 输入。
 
 ## 默认 PassWall2 分流
 
-`config/passwall2-groups.yaml` 的数组顺序就是托管分流优先级：广告拦截、哔哩哔哩港澳台、YouTube、Netflix、Spotify、TikTok、AI 服务、苹果服务、Telegram、Google 服务、GFW、代理规则、非中国域名、私有网络、中国大陆、直连规则。
+`config/passwall2-groups.yaml` 的数组顺序就是托管分流优先级，共 14 组：广告拦截、YouTube、Netflix、Spotify、TikTok、AI 服务、苹果服务、Telegram、Google 服务、代理规则、非中国域名、私有网络、中国大陆、直连规则。
 
-其中苹果服务配置 `geosite:apple` 与 `geosite:icloud`；中国大陆同时配置 `geosite:cn` 与 `geoip:cn`；BilibiliHMT 同时配置独立的 GeoSite/GeoIP tag。生成的具名 UCI section 使用 `crs_` 命名空间并带 `managed_by=clash-rules-srs` 标记，用户已有分流组和节点不会被纳入托管清理范围。
+其中苹果服务配置 `geosite:apple` 与 `geosite:icloud`；中国大陆同时配置 `geosite:cn` 与 `geoip:cn`。原 GFW 规则已并入“代理规则”，代理组只引用 `crs-proxy-residual`；“直连规则”只引用 `crs-direct-residual`。代理规则与非中国域名必须使用相同出口，Shadowrocket 通过 `tld_not_cn → proxy` 的单向策略组引用绑定。原港澳台专用来源与双侧标签已破坏性删除，不保留兼容入口。
+
+生成的具名 UCI section 使用 `crs_` 命名空间并带 `managed_by=clash-rules-srs` 标记。`reject` 的规则与默认出口不变；`private`、`cn`、`direct` 仍默认直连。`IPOnDemand` 不在本轮验收范围，路由器建议继续使用 `IPIfNonMatch`。
 
 ## 路由器侧提醒事项
 
@@ -126,7 +130,7 @@ sh install_passwall2_rules.sh
 
 脚本会先检查 UCI 无未提交改动且 PassWall2 没有正在运行的规则更新实例，并在终端实时打印阶段、当前下载源和等待时间。下载顺序固定为 `gh-proxy.com → ghfast.top → GitHub 官方`，默认每个源 60 秒总超时；每次 updater 返回后都用脚本内置的 Release SHA-256 校验两个 dat，超时、失败或哈希不匹配会恢复安装前的 dat，再切换下一个源。可用 `PASSWALL2_RULE_TIMEOUT` 覆盖逐源超时秒数。
 
-事务顺序固定为：备份 → staging UCI 写入首个镜像的不可变 Release URL 并验证托管组 → 安装并提交 live 配置 → 调用 updater 更新两个 dat（按三源逐一尝试并即时校验）→ 校验两个 dat SHA-256 → 持久 URL 切到 `latest`（GitHub 官方）。镜像 URL 只用于本次安装加速，不会持久写入最终配置。重复执行保持幂等；只清理旧 `c2p_` 与本项目 `managed_by=clash-rules-srs` 的 section。配置提交、所有更新源或哈希验证任一步失败都会回滚配置和两个 dat；自动恢复不完整时保留临时恢复目录并逐项打印配置与 dat 的人工恢复路径。
+事务顺序固定为：备份 → staging UCI 写入首个镜像的不可变 Release URL → 预检所有 Shunt 节点并迁移三族主字段、FakeDNS 与 proxy-tag → 验证托管组 → 安装并提交 live 配置 → 调用 updater 更新两个 dat（按三源逐一尝试并即时校验）→ 校验两个 dat SHA-256 → 持久 URL 切到 `latest`（GitHub 官方）。代理/GFW/非中国域名旧配置冲突会在 live 修改前失败；只有一侧启用时会明确警告并按非空一侧归一化。成功安装会清理废弃 GFW 与港澳台节点字段，同时保留 `default_node`、reject 及三组直连字段。镜像 URL 只用于本次安装加速，不会持久写入最终配置。重复执行保持幂等；只清理旧 `c2p_` 与本项目 `managed_by=clash-rules-srs` 的 section。配置提交、所有更新源或哈希验证任一步失败都会把节点、托管规则、URL 和两个 dat 一并回滚；自动恢复不完整时保留临时恢复目录并逐项打印配置与 dat 的人工恢复路径。
 
 设备必须已有 PassWall2、`rule_update.lua`、`uci`、`lua`、`sha256sum`、`base64` 与 `timeout`（PassWall2 上游软件包依赖的 `coreutils-timeout`）。真实路由器上的首次安装、双内核实际分流和断网恢复仍属于设备侧验收，仓库 CI 不假装覆盖这一边界。
 

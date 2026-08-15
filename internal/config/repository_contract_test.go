@@ -3,14 +3,19 @@ package config_test
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"clash-rules-srs/internal/config"
 	"clash-rules-srs/internal/model"
+	"clash-rules-srs/internal/passwall"
 	"clash-rules-srs/internal/rules"
+	"clash-rules-srs/internal/targets"
 )
 
 func TestRepositorySourcesMatchApprovedTargets(t *testing.T) {
@@ -34,7 +39,6 @@ func TestRepositorySourcesMatchApprovedTargets(t *testing.T) {
 		"xiaolin-youtube":           "geosite:youtube:merge-base",
 		"xiaolin-netflix":           "geosite:netflix:merge-base,geoip:netflix:merge-base",
 		"xiaolin-spotify":           "geosite:spotify:merge-base",
-		"xiaolin-bilibili":          "geosite:BilibiliHMT:create,geoip:BilibiliHMT:create",
 		"xiaolin-tiktok":            "geosite:tiktok:merge-base",
 		"sukka-ai":                  "geosite:ai:create",
 	}
@@ -54,14 +58,13 @@ func TestRepositorySourcesMatchApprovedTargets(t *testing.T) {
 	}
 }
 
-func TestRepositoryDefaultGroupsMatchApprovedOrder(t *testing.T) {
+func Test默认组ID顺序与标签精确匹配(t *testing.T) {
 	groups, err := config.LoadGroups("../../config/passwall2-groups.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []model.Group{
 		{ID: "reject", Remarks: "广告拦截", GeoSite: []string{"reject"}, GeoIP: []string{}},
-		{ID: "bilibili_hmt", Remarks: "哔哩哔哩港澳台", GeoSite: []string{"BilibiliHMT"}, GeoIP: []string{"BilibiliHMT"}},
 		{ID: "youtube", Remarks: "YouTube", GeoSite: []string{"youtube"}, GeoIP: []string{}},
 		{ID: "netflix", Remarks: "Netflix", GeoSite: []string{"netflix"}, GeoIP: []string{"netflix"}},
 		{ID: "spotify", Remarks: "Spotify", GeoSite: []string{"spotify"}, GeoIP: []string{}},
@@ -70,19 +73,27 @@ func TestRepositoryDefaultGroupsMatchApprovedOrder(t *testing.T) {
 		{ID: "apple_services", Remarks: "苹果服务", GeoSite: []string{"apple", "icloud"}, GeoIP: []string{}},
 		{ID: "telegram", Remarks: "Telegram", GeoSite: []string{}, GeoIP: []string{"telegram"}},
 		{ID: "google", Remarks: "Google 服务", GeoSite: []string{"google"}, GeoIP: []string{}},
-		{ID: "gfw", Remarks: "GFW", GeoSite: []string{"gfw"}, GeoIP: []string{}},
-		{ID: "proxy", Remarks: "代理规则", GeoSite: []string{"proxy"}, GeoIP: []string{}},
+		{ID: "proxy", Remarks: "代理规则", GeoSite: []string{targets.ProxyResidualTag}, GeoIP: []string{}},
 		{ID: "tld_not_cn", Remarks: "非中国域名", GeoSite: []string{"tld-not-cn"}, GeoIP: []string{}},
 		{ID: "private", Remarks: "私有网络", GeoSite: []string{"private"}, GeoIP: []string{"private"}},
 		{ID: "cn", Remarks: "中国大陆", GeoSite: []string{"cn"}, GeoIP: []string{"cn"}},
-		{ID: "direct", Remarks: "直连规则", GeoSite: []string{"direct"}, GeoIP: []string{}},
+		{ID: "direct", Remarks: "直连规则", GeoSite: []string{targets.DirectResidualTag}, GeoIP: []string{}},
 	}
 	if !reflect.DeepEqual(groups, want) {
 		t.Fatalf("groups mismatch\n got: %#v\nwant: %#v", groups, want)
 	}
+	fragment, err := passwall.Render(groups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(fragment, []byte("config shunt_rules 'crs_proxy'")) ||
+		!bytes.Contains(fragment, []byte("config shunt_rules 'crs_direct'")) ||
+		bytes.Contains(fragment, []byte("crs_gfw")) || bytes.Contains(fragment, []byte("crs_bilibili_hmt")) {
+		t.Fatalf("fragment=%s", fragment)
+	}
 }
 
-func TestEveryDefaultGroupTargetHasDocumentedCustomFile(t *testing.T) {
+func Test默认Custom模板审计忽略生成型标签(t *testing.T) {
 	for _, test := range defaultTemplateCases(t) {
 		data, err := os.ReadFile(test.path)
 		if err != nil {
@@ -125,6 +136,54 @@ func TestEveryDefaultGroupTargetHasDocumentedCustomFile(t *testing.T) {
 			t.Fatalf("%s enabled example produced unexpected rules: %#v", test.path, buckets)
 		}
 	}
+	for _, tag := range targets.GeneratedGeoSiteTags() {
+		path := filepath.Join("../../custom/geosite", tag+".yaml")
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("generated template %s must not exist: %v", path, err)
+		}
+	}
+	for _, test := range defaultTemplateCases(t) {
+		for _, tag := range targets.GeneratedGeoSiteTags() {
+			if strings.Contains(test.path, tag+".yaml") {
+				t.Fatalf("generated target entered template audit: %s", test.path)
+			}
+		}
+	}
+}
+
+func TestBilibiliHMT仓库契约已移除(t *testing.T) {
+	paths := []string{
+		"../../sources.yaml",
+		"../../config/passwall2-groups.yaml",
+		"../../README.md",
+		"../../context.md",
+		"../../custom/geosite",
+		"../../custom/geoip",
+		"../rules/testdata",
+	}
+	for _, root := range paths {
+		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, forbidden := range []string{"BilibiliHMT", "bilibili_hmt", "xiaolin-bilibili"} {
+				if bytes.Contains(data, []byte(forbidden)) {
+					t.Errorf("%s still contains %s", path, forbidden)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 type defaultTemplateCase struct {
@@ -137,6 +196,10 @@ type defaultTemplateCase struct {
 
 func defaultTemplateCases(t *testing.T) []defaultTemplateCase {
 	t.Helper()
+	sources, err := config.LoadSources("../../sources.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
 	groups, err := config.LoadGroups("../../config/passwall2-groups.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -146,6 +209,9 @@ func defaultTemplateCases(t *testing.T) []defaultTemplateCase {
 	var cases []defaultTemplateCase
 	add := func(side model.Side, tags []string, markers []string, example string, wantDomains, wantCIDRs int) {
 		for _, tag := range tags {
+			if targets.IsGenerated(side, tag) {
+				continue
+			}
 			path := fmt.Sprintf("../../custom/%s/%s.yaml", side, tag)
 			if _, exists := seen[path]; exists {
 				continue
@@ -157,9 +223,19 @@ func defaultTemplateCases(t *testing.T) []defaultTemplateCase {
 			})
 		}
 	}
+	siteMarkers := []string{"payload:", "DOMAIN-SUFFIX", "DOMAIN,", "DOMAIN-KEYWORD", "DOMAIN-REGEX"}
+	ipMarkers := []string{"payload:", "IP-CIDR,", "IP-CIDR6", "no-resolve"}
+	for _, source := range sources {
+		if source.Outputs.GeoSite != nil {
+			add(model.GeoSite, []string{source.Outputs.GeoSite.Tag}, siteMarkers, "DOMAIN-SUFFIX,example.com", 1, 0)
+		}
+		if source.Outputs.GeoIP != nil {
+			add(model.GeoIP, []string{source.Outputs.GeoIP.Tag}, ipMarkers, "IP-CIDR,192.0.2.0/24", 0, 1)
+		}
+	}
 	for _, group := range groups {
-		add(model.GeoSite, group.GeoSite, []string{"payload:", "DOMAIN-SUFFIX", "DOMAIN,", "DOMAIN-KEYWORD", "DOMAIN-REGEX"}, "DOMAIN-SUFFIX,example.com", 1, 0)
-		add(model.GeoIP, group.GeoIP, []string{"payload:", "IP-CIDR,", "IP-CIDR6", "no-resolve"}, "IP-CIDR,192.0.2.0/24", 0, 1)
+		add(model.GeoSite, group.GeoSite, siteMarkers, "DOMAIN-SUFFIX,example.com", 1, 0)
+		add(model.GeoIP, group.GeoIP, ipMarkers, "IP-CIDR,192.0.2.0/24", 0, 1)
 	}
 	sort.Slice(cases, func(i, j int) bool { return cases[i].path < cases[j].path })
 	return cases
