@@ -1726,7 +1726,7 @@ git commit -m "docs(T6): 说明 Shadowrocket 导入与首次发布"
 
 **资源台账**（清理依据；执行中创建持久资源时即追加；行格式为复选框、类型、标识和清理命令）：
 
-- [ ] worktree: .worktrees/plan-2026-08-15-shadowrocket-conf —— git worktree remove .worktrees/plan-2026-08-15-shadowrocket-conf && git branch -d plan/2026-08-15-shadowrocket-conf
+- [x] worktree: .worktrees/plan-2026-08-15-shadowrocket-conf —— git worktree remove .worktrees/plan-2026-08-15-shadowrocket-conf && git branch -d plan/2026-08-15-shadowrocket-conf
 
 台账总则：**清理只遍历本台账、台账外一律不动**（可疑残留只报告不删）；共享缓存（~/.cargo、pnpm store、npm cache、Go module cache 等）默认保留，仅用户显式要求清理时才登记入账；台账限定持久资源（容器、测试库/表、临时目录、后台服务），worktree 内构建产物随 worktree 删除自然回收、不入账。
 
@@ -1760,7 +1760,7 @@ go test -tags=integration ./internal/app
 
 执行结果：无取代回写。
 
-- [ ] **步骤 4：合并回来源分支**
+- [x] **步骤 4：合并回来源分支**
 
 ~~~bash
 cd "$(dirname "$(git rev-parse --git-common-dir)")"
@@ -1769,7 +1769,7 @@ git merge plan/2026-08-15-shadowrocket-conf
 
 合并冲突、或主工作区有未提交改动 → 停下向计划作者确认，不强行合并。
 
-- [ ] **步骤 5：清理（按资源台账逐条执行）**
+- [x] **步骤 5：清理（按资源台账逐条执行）**
 
 逐条执行资源台账各行的清理命令并勾选。命令失败则该行保持未勾选并报告；资源已不存在则勾选并注明“已不存在”。台账外文件、容器和数据一律不动。
 
