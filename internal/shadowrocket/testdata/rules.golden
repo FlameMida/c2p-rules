@@ -1,0 +1,7 @@
+DOMAIN-SUFFIX,suffix.example,中国大陆
+DOMAIN,full.example,中国大陆
+DOMAIN-KEYWORD,needle,中国大陆
+IP-CIDR,192.0.2.0/24,中国大陆,no-resolve
+IP-CIDR6,2001:db8::/32,中国大陆,no-resolve
+GEOIP,CN,中国大陆
+FINAL,PROXY

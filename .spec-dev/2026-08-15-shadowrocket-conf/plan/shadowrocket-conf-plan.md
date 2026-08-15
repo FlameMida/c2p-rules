@@ -670,7 +670,7 @@ git commit -m "feat(T1): 从最终 dat 展开 Shadowrocket 规则"
 - 消费：任务 1 的 []GroupRules 与构建参数 repo。
 - 产出：Render(groups []GroupRules, repo string) ([]byte, error)，返回不含 RELEASE_TAG、可直接原子写盘的 UTF-8 conf。
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 创建 internal/shadowrocket/testdata/rules.golden：
 
@@ -850,7 +850,7 @@ func section(document, header string) string {
 }
 ~~~
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ~~~bash
 go test ./internal/shadowrocket -run 'Test(四种可映射类型与CIDR|组名与顺序对齐YAML|广告与国内默认|空组失败|LatestUpdateURL|兜底顺序)$' -v
@@ -858,7 +858,7 @@ go test ./internal/shadowrocket -run 'Test(四种可映射类型与CIDR|组名�
 
 预期：FAIL，报 shadowrocket.Render 未定义。
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 创建 internal/shadowrocket/render.go：
 
@@ -974,7 +974,7 @@ func validateRemark(value string) error {
 }
 ~~~
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ~~~bash
 gofmt -w internal/shadowrocket/render.go internal/shadowrocket/render_test.go
@@ -983,7 +983,7 @@ go test ./internal/shadowrocket -v
 
 预期：任务 1 与任务 2 的 10 个测试全部 PASS；[Rule] golden 匹配；测试明确确认没有 [Proxy]。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ~~~bash
 git add internal/shadowrocket/render.go internal/shadowrocket/render_test.go internal/shadowrocket/testdata/rules.golden
