@@ -1,6 +1,10 @@
 package targets
 
-import "clash-rules-srs/internal/model"
+import (
+	"strings"
+
+	"clash-rules-srs/internal/model"
+)
 
 const (
 	ProxyResidualTag  = "crs-proxy-residual"
@@ -18,7 +22,7 @@ func IsGenerated(side model.Side, tag string) bool {
 		return false
 	}
 	for _, generated := range generatedGeoSiteTags {
-		if tag == generated {
+		if strings.EqualFold(tag, generated) {
 			return true
 		}
 	}

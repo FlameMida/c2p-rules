@@ -41,7 +41,7 @@ func Test组名与顺序对齐YAML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(groups) != 14 {
+	if len(groups) != 13 {
 		t.Fatalf("groups=%d", len(groups))
 	}
 	expanded := make([]shadowrocket.GroupRules, len(groups))
@@ -67,8 +67,8 @@ func Test组名与顺序对齐YAML(t *testing.T) {
 	}
 	assertAppearsBefore(t, proxyGroups, "YouTube =", "Google 服务 =")
 	assertAppearsBefore(t, rules, ",YouTube\n", ",Google 服务\n")
-	if !strings.Contains(proxyGroups, "非中国域名 = select,代理规则,policy-select-name=代理规则\n") {
-		t.Fatalf("tld_not_cn alias missing:\n%s", proxyGroups)
+	if strings.Contains(proxyGroups, "非中国域名") {
+		t.Fatalf("removed tld_not_cn policy group remains:\n%s", proxyGroups)
 	}
 	if strings.Contains(rendered, "[Proxy]\n") {
 		t.Fatal("renderer emitted node definitions")
@@ -97,49 +97,31 @@ func Test广告与国内默认(t *testing.T) {
 	}
 }
 
-func Test非中国域名跟随代理规则(t *testing.T) {
-	rendered := mustRender(t, []shadowrocket.GroupRules{
-		oneRule("proxy", "代理规则"),
-		oneRule("tld_not_cn", "非中国域名"),
-		oneRule("cn", "中国大陆"),
-	}, "FlameMida/c2p-rules")
-	want := "非中国域名 = select,代理规则,policy-select-name=代理规则\n"
-	if !strings.Contains(rendered, want) {
-		t.Fatalf("missing %q in\n%s", want, rendered)
-	}
-	if strings.Contains(rendered, "非中国域名 = select,PROXY,DIRECT") {
-		t.Fatal("tld_not_cn remains independently selectable")
-	}
-}
-
-func TestRemarks变化时按ID建立引用(t *testing.T) {
-	rendered := mustRender(t, []shadowrocket.GroupRules{
-		oneRule("tld_not_cn", "海外域名"),
-		oneRule("proxy", "我的代理规则"),
-		oneRule("cn", "中国大陆"),
-	}, "FlameMida/c2p-rules")
-	if !strings.Contains(rendered, "海外域名 = select,我的代理规则,policy-select-name=我的代理规则\n") {
-		t.Fatalf("rendered=%s", rendered)
-	}
-	for name, groups := range map[string][]shadowrocket.GroupRules{
-		"missing proxy": {
-			oneRule("tld_not_cn", "海外域名"),
-			oneRule("cn", "中国大陆"),
-		},
-		"duplicate proxy id": {
-			oneRule("proxy", "代理一"),
-			oneRule("proxy", "代理二"),
-			oneRule("tld_not_cn", "海外域名"),
-			oneRule("cn", "中国大陆"),
-		},
+func TestTLDNotCN规则归入代理规则(t *testing.T) {
+	proxy := oneRule("proxy", "代理规则")
+	proxy.Domains = append(proxy.Domains, shadowrocket.DomainLine{Kind: model.DomainSuffix, Value: "foreign"})
+	rendered := mustRender(t, []shadowrocket.GroupRules{proxy, oneRule("cn", "中国大陆")}, "FlameMida/c2p-rules")
+	for _, rule := range []string{
+		"DOMAIN-SUFFIX,proxy.example,代理规则\n",
+		"DOMAIN-SUFFIX,foreign,代理规则\n",
 	} {
-		t.Run(name, func(t *testing.T) {
-			_, err := shadowrocket.Render(groups, "FlameMida/c2p-rules")
-			if err == nil || !strings.Contains(err.Error(), "proxy") {
-				t.Fatalf("err=%v", err)
-			}
-		})
+		if !strings.Contains(rendered, rule) {
+			t.Fatalf("missing %q in\n%s", rule, rendered)
+		}
 	}
+	if strings.Contains(rendered, "非中国域名") {
+		t.Fatalf("legacy alias remains:\n%s", rendered)
+	}
+
+	t.Run("旧ID不再触发别名语义", func(t *testing.T) {
+		legacy := mustRender(t, []shadowrocket.GroupRules{
+			oneRule("tld_not_cn", "旧非中国域名"),
+			oneRule("cn", "中国大陆"),
+		}, "FlameMida/c2p-rules")
+		if !strings.Contains(legacy, "旧非中国域名 = select,PROXY,DIRECT,policy-select-name=PROXY\n") {
+			t.Fatalf("legacy id still has alias behavior:\n%s", legacy)
+		}
+	})
 }
 
 func Test空组失败(t *testing.T) {

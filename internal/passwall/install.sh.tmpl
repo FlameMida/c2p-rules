@@ -217,19 +217,30 @@ preflight_shunt_nodes() {
 		}
 		function reset( key) {
 			for (key in values) delete values[key]
+			for (key in present) delete present[key]
 			section = ""; id = ""; protocol = ""
 		}
-		function check_family(suffix, label, gfw, proxy, tld, merged) {
-			gfw = values["crs_gfw" suffix]
-			proxy = values["crs_proxy" suffix]
-			tld = values["crs_tld_not_cn" suffix]
+		function has_legacy(name) {
+			for (name in present)
+				if (name ~ /^crs_gfw(_fakedns|_proxy_tag)?$/ || name ~ /^crs_tld_not_cn(_fakedns|_proxy_tag)?$/) return 1
+			return 0
+		}
+		function check_family(suffix, label, gfw_name, proxy_name, tld_name, gfw, proxy, tld, merged, merged_present, tld_present) {
+			gfw_name = "crs_gfw" suffix
+			proxy_name = "crs_proxy" suffix
+			tld_name = "crs_tld_not_cn" suffix
+			gfw = values[gfw_name]
+			proxy = values[proxy_name]
+			tld = values[tld_name]
 			if (gfw != "" && proxy != "" && gfw != proxy) {
 				printf "ERROR: Shunt node %s conflict in %s: crs_gfw/crs_proxy differ\n", id, label > "/dev/stderr"
 				failed = 1
 				return
 			}
 			merged = proxy != "" ? proxy : gfw
-			if (merged != tld) {
+			merged_present = (gfw_name in present) || (proxy_name in present)
+			tld_present = tld_name in present
+			if (merged_present != tld_present || (merged_present && merged != tld)) {
 				printf "ERROR: Shunt node %s proxy/tld_not_cn mismatch in %s\n", id, label > "/dev/stderr"
 				failed = 1
 			}
@@ -238,6 +249,7 @@ preflight_shunt_nodes() {
 		}
 		function check_block() {
 			if (section != "nodes" || protocol != "_shunt") return
+			if (!has_legacy()) return
 			check_family("", "main")
 			check_family("_fakedns", "fakedns")
 			check_family("_proxy_tag", "proxy_tag")
@@ -249,6 +261,7 @@ preflight_shunt_nodes() {
 		}
 		$1 == "option" {
 			name = unquote($2)
+			present[name] = 1
 			raw = $0
 			sub(/^[ \t]*option[ \t]+[^ \t]+[ \t]+/, "", raw)
 			values[name] = unquote(raw)
@@ -268,12 +281,13 @@ migrate_and_filter_config() {
 		function reset( key) {
 			for (key in values) delete values[key]
 			for (key in raw_values) delete raw_values[key]
+			for (key in present) delete present[key]
 			for (key in lines) delete lines[key]
 			for (key in names) delete names[key]
 			count = 0; section = ""; id = ""; protocol = ""; managed = 0
 		}
 		function deprecated(name) {
-			return name ~ /^crs_gfw(_fakedns|_proxy_tag)?$/ || name ~ /^crs_bilibili_hmt(_fakedns|_proxy_tag)?$/
+			return name ~ /^crs_gfw(_fakedns|_proxy_tag)?$/ || name ~ /^crs_tld_not_cn(_fakedns|_proxy_tag)?$/ || name ~ /^crs_bilibili_hmt(_fakedns|_proxy_tag)?$/
 		}
 		function gfw_for_proxy(name) {
 			if (name == "crs_proxy") return "crs_gfw"
@@ -282,7 +296,7 @@ migrate_and_filter_config() {
 			return ""
 		}
 		function append_proxy(proxy, gfw) {
-			if (values[proxy] == "" && values[gfw] != "")
+			if ((!present[proxy] && present[gfw]) || (present[proxy] && values[proxy] == "" && present[gfw] && values[gfw] != ""))
 				printf "\toption %s %s\n", proxy, raw_values[gfw]
 		}
 		function emit( i, name, source) {
@@ -296,7 +310,7 @@ migrate_and_filter_config() {
 				name = names[i]
 				if (deprecated(name)) continue
 				source = gfw_for_proxy(name)
-				if (source != "" && values[name] == "" && values[source] != "") continue
+				if (source != "" && present[source] && values[name] == "" && values[source] != "") continue
 				print lines[i]
 			}
 			append_proxy("crs_proxy", "crs_gfw")
@@ -313,7 +327,7 @@ migrate_and_filter_config() {
 		{
 			count++; lines[count] = $0; names[count] = ""
 			if ($1 == "option") {
-				name = unquote($2); names[count] = name
+				name = unquote($2); names[count] = name; present[name] = 1
 				raw = $0
 				sub(/^[ \t]*option[ \t]+[^ \t]+[ \t]+/, "", raw)
 				raw_values[name] = raw; values[name] = unquote(raw)

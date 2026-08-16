@@ -1,0 +1,22 @@
+Candidate identity: b74c025f0498d7d3b134926e57fafe9fc4a57483 + uncommitted working tree
+Tracked patch SHA-256: 8317a72d938ad62c3a551292090e54de7264d39f65484d7f0e686804b27eb77e
+Expected: exactly eight release files
+Observed: exactly eight release files
+Status: PASS
+
+17344759  geoip.dat
+      76  geoip.dat.sha256sum
+11239129  geosite.dat
+      78  geosite.dat.sha256sum
+   15948  install_passwall2_rules.sh
+      93  install_passwall2_rules.sh.sha256sum
+13415371  shadowrocket.conf
+      84  shadowrocket.conf.sha256sum
+
+All four checksum verification commands exited 0.
+
+Primary asset SHA-256:
+582ae4356b8538119dfc700d61fc9fd724c00d5fae2f449c67a40a97bda7fae7  geoip.dat
+aae0bfa7b4410b42b6b18fbce77f94a46fed88e474e1a5a1e189aaa79367c5a8  geosite.dat
+400466d6eceb9be5517f9743dcabb0326b2c70a99537f5ddee371c8539c65518  install_passwall2_rules.sh
+22789561f025e385255b0de34423a2f0b5ae0d85b7f9331c8c5ebd2e8fc8a039  shadowrocket.conf

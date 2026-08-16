@@ -7,7 +7,6 @@ import (
 
 	"clash-rules-srs/internal/geodat"
 	"clash-rules-srs/internal/geoip"
-	"clash-rules-srs/internal/geosite"
 	"clash-rules-srs/internal/manifest"
 	"clash-rules-srs/internal/model"
 	"clash-rules-srs/internal/targets"
@@ -28,21 +27,20 @@ type BuildOptions struct {
 }
 
 type buildState struct {
-	Options              BuildOptions
-	Tx                   *workspace.Transaction
-	Sources              []model.Source
-	Groups               []model.Group
-	Registry             *targets.Registry
-	Contributions        []model.Contribution
-	BaseGeoIP            string
-	GeoIPTemplate        *geoip.Template
-	GeoInputs            []geoip.Input
-	Manifest             manifest.Document
-	GeoSiteSHA           string
-	GeoIPSHA             string
-	IntermediateSiteTags map[string]geodat.SiteTag
-	ResidualReports      map[string]geosite.ResidualReport
-	FinalLookup          verify.TagLookup
+	Options          BuildOptions
+	Tx               *workspace.Transaction
+	Sources          []model.Source
+	Groups           []model.Group
+	Registry         *targets.Registry
+	Contributions    []model.Contribution
+	BaseGeoIP        string
+	GeoIPTemplate    *geoip.Template
+	GeoInputs        []geoip.Input
+	Manifest         manifest.Document
+	GeoSiteSHA       string
+	GeoIPSHA         string
+	ExpectedSiteTags map[string]geodat.SiteTag
+	FinalLookup      verify.TagLookup
 }
 
 type buildStage func(context.Context, *buildState) error

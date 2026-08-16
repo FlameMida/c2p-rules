@@ -1,0 +1,47 @@
+Runtime rule residuals local regression
+Date: 2026-08-16 Asia/Shanghai
+Baseline commit: f2276afe7a7204d1d6d47294812bb7079c0e2944
+Candidate identity: b74c025f0498d7d3b134926e57fafe9fc4a57483 + uncommitted working tree
+Tracked patch SHA-256 (acceptance evidence excluded): 8317a72d938ad62c3a551292090e54de7264d39f65484d7f0e686804b27eb77e
+Input snapshot SHA-256: ff4587b6d9da756e7264d5f9e01132219e095bd7584bf47df74d614887eda805
+
+PASS  go test ./... -count=1
+      exit 0 in 56.21s; all packages passed; internal/app 7.238s; internal/passwall 54.102s; internal/releasecmp 11.919s
+PASS  go test -tags=integration ./internal/app -count=1
+      exit 0 in 11.88s; ok clash-rules-srs/internal/app 10.282s
+PASS  go vet ./...
+      exit 0
+PASS  same-source baseline build
+      exit 0; all 19 remote inputs replayed from the sealed snapshot
+PASS  same-source candidate build
+      final guarded build exit 0 in 13.880s; all 18 retained remote inputs replayed from the same sealed snapshot; 13 groups generated
+PASS  same-source candidate reproducibility replay
+      two consecutive builds are byte-identical for geosite.dat, shadowrocket.conf and install_passwall2_rules.sh
+      geosite.dat sha256 aae0bfa7b4410b42b6b18fbce77f94a46fed88e474e1a5a1e189aaa79367c5a8
+      shadowrocket.conf sha256 22789561f025e385255b0de34423a2f0b5ae0d85b7f9331c8c5ebd2e8fc8a039
+      install_passwall2_rules.sh sha256 400466d6eceb9be5517f9743dcabb0326b2c70a99537f5ddee371c8539c65518
+PASS  shasum -a 256 -c for all four publish checksum files
+      geosite.dat: OK
+      geoip.dat: OK
+      install_passwall2_rules.sh: OK
+      shadowrocket.conf: OK
+PASS  go test ./internal/releasecmp -count=1
+      exit 0 in 8.83s; ok clash-rules-srs/internal/releasecmp 8.048s
+PASS  git diff --check
+      exit 0
+
+PASS  static rule-size contract
+      combined gfw/proxy/tld active rules 32,208 -> 18,938 (58.80%, threshold <=70%)
+      all active domain rules 316,761 -> 297,589 (93.95%, strictly lower)
+      Shadowrocket [Rule] lines 322,228 -> 303,044 (94.05%, strictly lower)
+      Shadowrocket [Rule] bytes 14,152,790 -> 13,414,445 (94.78%, strictly lower)
+
+Toolchain:
+  go version go1.26.5 darwin/amd64
+  domain-list-community HEAD 5355f5919be7d365e2d80488da42a77f37a7ea2b
+  domain-list-custom pin efacb51b8950ae673ebb6dcb9e7ecdd1decb1b6d
+  geoip pin 85084dfbe282e4e9cb460b07196e6eecfd126d19
+  geoview pin 3c91926d360b8f49d47520639e574608318baf12
+  domain-list-custom binary sha256 879061a62c8038cb1b77b24cc4f111293a0ca062bf2638742c7309acaee83b5a
+  geoip binary sha256 2cae8ac9dc59a1093cdaa1b97688bf57d3aeb6efcdfe3960cbddcbdec0984da8
+  geoview binary sha256 dc365961d26199487402cfdbe5aa820d0701c99660a05d4645ed9617616bde30

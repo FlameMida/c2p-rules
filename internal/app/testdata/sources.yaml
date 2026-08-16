@@ -14,7 +14,7 @@ sources:
   - id: fixture-direct
     behavior: domain
     url: "{{SERVER}}/direct"
-    outputs: {geosite: {tag: direct, mode: create}}
+    outputs: {geosite: {tag: direct, mode: merge-base}}
   - id: fixture-tld-not-cn
     behavior: domain
     url: "{{SERVER}}/tld-not-cn"

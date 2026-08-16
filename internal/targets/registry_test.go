@@ -141,3 +141,18 @@ func TestGenerated标签拒绝CustomRequire(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+func TestGenerated标签身份不区分大小写(t *testing.T) {
+	for _, tag := range []string{"CRS-PROXY-RESIDUAL", "Crs-Direct-Residual"} {
+		if !targets.IsGenerated(model.GeoSite, tag) {
+			t.Fatalf("%q was not recognized as generated-only", tag)
+		}
+		output := model.Output{Tag: tag, Mode: model.Create}
+		_, err := targets.New([]model.Source{{ID: "mixed-case", Outputs: model.Outputs{GeoSite: &output}}}, func(model.Side, string) (bool, error) {
+			return false, nil
+		})
+		if err == nil || !strings.Contains(err.Error(), "generated") {
+			t.Fatalf("err=%v", err)
+		}
+	}
+}

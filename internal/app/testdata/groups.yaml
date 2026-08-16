@@ -8,8 +8,7 @@ groups:
   - {id: apple_services, remarks: 苹果服务, geosite: [apple, icloud], geoip: []}
   - {id: telegram, remarks: Telegram, geosite: [], geoip: [telegram]}
   - {id: google, remarks: Google 服务, geosite: [google], geoip: []}
-  - {id: proxy, remarks: 代理规则, geosite: [crs-proxy-residual], geoip: []}
-  - {id: tld_not_cn, remarks: 非中国域名, geosite: [tld-not-cn], geoip: []}
+  - {id: proxy, remarks: 代理规则, geosite: [crs-proxy-residual, tld-not-cn], geoip: []}
   - {id: private, remarks: 私有网络, geosite: [private], geoip: [private]}
   - {id: cn, remarks: 中国大陆, geosite: [cn], geoip: [cn]}
   - {id: direct, remarks: 直连规则, geosite: [crs-direct-residual], geoip: []}

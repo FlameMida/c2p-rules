@@ -73,8 +73,7 @@ func Test默认组ID顺序与标签精确匹配(t *testing.T) {
 		{ID: "apple_services", Remarks: "苹果服务", GeoSite: []string{"apple", "icloud"}, GeoIP: []string{}},
 		{ID: "telegram", Remarks: "Telegram", GeoSite: []string{}, GeoIP: []string{"telegram"}},
 		{ID: "google", Remarks: "Google 服务", GeoSite: []string{"google"}, GeoIP: []string{}},
-		{ID: "proxy", Remarks: "代理规则", GeoSite: []string{targets.ProxyResidualTag}, GeoIP: []string{}},
-		{ID: "tld_not_cn", Remarks: "非中国域名", GeoSite: []string{"tld-not-cn"}, GeoIP: []string{}},
+		{ID: "proxy", Remarks: "代理规则", GeoSite: []string{targets.ProxyResidualTag, "tld-not-cn"}, GeoIP: []string{}},
 		{ID: "private", Remarks: "私有网络", GeoSite: []string{"private"}, GeoIP: []string{"private"}},
 		{ID: "cn", Remarks: "中国大陆", GeoSite: []string{"cn"}, GeoIP: []string{"cn"}},
 		{ID: "direct", Remarks: "直连规则", GeoSite: []string{targets.DirectResidualTag}, GeoIP: []string{}},
@@ -88,7 +87,8 @@ func Test默认组ID顺序与标签精确匹配(t *testing.T) {
 	}
 	if !bytes.Contains(fragment, []byte("config shunt_rules 'crs_proxy'")) ||
 		!bytes.Contains(fragment, []byte("config shunt_rules 'crs_direct'")) ||
-		bytes.Contains(fragment, []byte("crs_gfw")) || bytes.Contains(fragment, []byte("crs_bilibili_hmt")) {
+		bytes.Contains(fragment, []byte("crs_gfw")) || bytes.Contains(fragment, []byte("crs_tld_not_cn")) ||
+		bytes.Contains(fragment, []byte("crs_bilibili_hmt")) {
 		t.Fatalf("fragment=%s", fragment)
 	}
 }

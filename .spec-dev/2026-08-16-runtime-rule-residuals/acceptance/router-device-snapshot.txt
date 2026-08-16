@@ -1,0 +1,42 @@
+Runtime rule residuals router RSS acceptance
+Date: 2026-08-16 Asia/Shanghai
+Target: previously confirmed wired PassWall2 router; address intentionally omitted from repository evidence
+
+Device:
+  model: FastRhino R66S
+  firmware: OpenWrt 24.10.3, revision R26.02.20 (by flippy)
+  kernel: 6.18.12-flippy-94+
+  architecture: armsr/armv8
+  memory: 2011924 KiB, no swap
+  luci-app-passwall2: 26.7.16-r1
+  xray-core: 26.7.11-r1
+  sing-box: 1.13.14-r1
+
+Initial and restored state:
+  active node: rulenode
+  node type: Xray
+  protocol: _shunt
+  domainStrategy: AsIs
+  client_proxy: 1
+  dns_redirect: 1
+  config sha256: 63df0ad4eaaca96b7f131d6e32d25553855f0ad9995df2227df6ca7ff7c45760
+  geosite.dat sha256: ac1ef8df5bdd672800487a63c3051674cf67a595d4a8a14e0ec4b83238a83134
+  geoip.dat sha256: 2c7cbc3bfa3d99a529f77c0dbc472c293e4a59b707959ec1a0465962858aad43
+  post-restore process: Xray running
+  post-restore Google SOCKS health: HTTP 204
+  restoration verification: config and both DAT files cmp-identical to the pre-test backup
+
+Uploaded acceptance assets:
+  baseline geosite.dat: 2ff07d622d0188440c700c612e1740242d4f53e15d140ced7af1ed502831be54
+  baseline geoip.dat: 2c7cbc3bfa3d99a529f77c0dbc472c293e4a59b707959ec1a0465962858aad43
+  candidate geosite.dat: aae0bfa7b4410b42b6b18fbce77f94a46fed88e474e1a5a1e189aaa79367c5a8
+  candidate geoip.dat: 582ae4356b8538119dfc700d61fc9fd724c00d5fae2f449c67a40a97bda7fae7
+
+Remote raw-evidence hashes before cleanup:
+  rss-samples.csv: 8d1f5321f75d0b62a14767625dc49cc5106fd9f096b23c4dfcf3228d776f0be7
+  warmup-results.csv: 9965d2a1077e9354418f6aa1731e3ba8812dae6d4c89c3cc124b64bd494a78bc
+  singbox-diagnostic.csv: 578edf13abd183ecbeb2c403c9d90d0cf6efc90b7a7ac6c708fa896bac81e889
+
+Coverage note:
+  Warmup used the router-local PassWall2 SOCKS inbound to standardize core load.
+  HTTP status is health evidence only; it is not a per-request outbound trace and does not prove route equivalence.

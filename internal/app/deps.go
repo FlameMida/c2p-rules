@@ -79,14 +79,7 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			lookup := func(side model.Side, tag string) (bool, error) {
 				switch side {
 				case model.GeoSite:
-					info, err := os.Stat(filepath.Join(state.Options.Community, tag))
-					if os.IsNotExist(err) {
-						return false, nil
-					}
-					if err != nil {
-						return false, err
-					}
-					return info.Mode().IsRegular(), nil
+					return regularFileEqualFold(state.Options.Community, tag)
 				case model.GeoIP:
 					return baseIPProber.Has(ctx, model.GeoIP, tag)
 				default:
@@ -182,7 +175,7 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 				filepath.Dir(state.Tx.Layout().IntermediateGeoSite),
 			)
 		},
-		DeriveResidualGeoSite: func(_ context.Context, state *buildState) error {
+		DeriveResidualGeoSite: func(ctx context.Context, state *buildState) error {
 			data, err := os.ReadFile(state.Tx.Layout().IntermediateGeoSite)
 			if err != nil {
 				return fmt.Errorf("read intermediate geosite: %w", err)
@@ -191,43 +184,37 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			if err != nil {
 				return fmt.Errorf("decode intermediate geosite: %w", err)
 			}
-			state.IntermediateSiteTags = tags
-			state.ResidualReports = make(map[string]geosite.ResidualReport, 2)
-
-			proxySpec := geosite.ResidualSpec{
-				OutputTag:         targets.ProxyResidualTag,
-				BasisTags:         []string{"gfw", "proxy"},
-				EarlierActiveTags: []string{"reject", "youtube", "netflix", "spotify", "tiktok", "ai", "apple", "icloud", "google"},
-				LaterEquivalentTags: []string{
-					"tld-not-cn",
-				},
+			state.ExpectedSiteTags = make(map[string]geodat.SiteTag, 7)
+			for _, tag := range []string{"gfw", "proxy", "tld-not-cn", "direct", "reject"} {
+				record, exists := tags[tag]
+				if !exists {
+					return fmt.Errorf("missing geosite:%s fingerprint", tag)
+				}
+				state.ExpectedSiteTags[tag] = cloneSiteTag(record)
 			}
-			proxy, report, err := geosite.Derive(tags, proxySpec)
+
+			proxySpec, directSpec, err := residualSpecsForGroups(state.Groups)
+			if err != nil {
+				return err
+			}
+			proxy, _, err := geosite.DeriveContext(ctx, tags, proxySpec)
 			if err != nil {
 				return err
 			}
 			if err := geosite.WriteGenerated(state.Tx.Layout().DataMerged, proxySpec.OutputTag, proxy); err != nil {
 				return err
 			}
-			state.ResidualReports[proxySpec.OutputTag] = report
+			state.ExpectedSiteTags[proxySpec.OutputTag] = geodat.SiteTag{Name: proxySpec.OutputTag, Domains: cloneDomainRules(proxy)}
 			tags[strings.ToLower(proxySpec.OutputTag)] = geodat.SiteTag{Name: proxySpec.OutputTag, Domains: proxy}
 
-			directSpec := geosite.ResidualSpec{
-				OutputTag: targets.DirectResidualTag,
-				BasisTags: []string{"direct"},
-				EarlierActiveTags: []string{
-					"reject", "youtube", "netflix", "spotify", "tiktok", "ai", "apple", "icloud", "google",
-					targets.ProxyResidualTag, "tld-not-cn", "private", "cn",
-				},
-			}
-			direct, report, err := geosite.Derive(tags, directSpec)
+			direct, _, err := geosite.DeriveContext(ctx, tags, directSpec)
 			if err != nil {
 				return err
 			}
 			if err := geosite.WriteGenerated(state.Tx.Layout().DataMerged, directSpec.OutputTag, direct); err != nil {
 				return err
 			}
-			state.ResidualReports[directSpec.OutputTag] = report
+			state.ExpectedSiteTags[directSpec.OutputTag] = geodat.SiteTag{Name: directSpec.OutputTag, Domains: cloneDomainRules(direct)}
 			return nil
 		},
 		CompileGeoSite: func(ctx context.Context, state *buildState) error {
@@ -240,7 +227,7 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			return runner.Run(ctx, "geoip", state.Options.Root, "convert", "-c", state.Tx.Layout().GeoIPConfig)
 		},
 		VerifyFullGeoSiteTags: func(_ context.Context, state *buildState) error {
-			return verifyFullGeoSiteTags(filepath.Join(state.Tx.Layout().Publish, "geosite.dat"), state.IntermediateSiteTags)
+			return verifyFullGeoSiteTags(filepath.Join(state.Tx.Layout().Publish, "geosite.dat"), state.ExpectedSiteTags)
 		},
 		ProbeTags: func(ctx context.Context, state *buildState) error {
 			prober := finalProber(runner, state)
@@ -330,10 +317,25 @@ func compileGeoSite(ctx context.Context, runner *tools.Runner, root, dataPath, o
 	if err := os.Remove(filepath.Join(outputPath, "gfwlist.txt")); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove compiler side asset: %w", err)
 	}
+	if err := canonicalizeCompiledGeoSite(filepath.Join(outputPath, "geosite.dat")); err != nil {
+		return fmt.Errorf("canonicalize compiled geosite: %w", err)
+	}
 	return nil
 }
 
-func verifyFullGeoSiteTags(finalPath string, intermediate map[string]geodat.SiteTag) error {
+func canonicalizeCompiledGeoSite(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	canonical, err := geodat.CanonicalizeGeoSite(data)
+	if err != nil {
+		return err
+	}
+	return fileutil.AtomicWrite(path, canonical, 0o644)
+}
+
+func verifyFullGeoSiteTags(finalPath string, expected map[string]geodat.SiteTag) error {
 	data, err := os.ReadFile(finalPath)
 	if err != nil {
 		return fmt.Errorf("read final geosite: %w", err)
@@ -342,20 +344,35 @@ func verifyFullGeoSiteTags(finalPath string, intermediate map[string]geodat.Site
 	if err != nil {
 		return fmt.Errorf("decode final geosite: %w", err)
 	}
-	for _, tag := range []string{"gfw", "proxy", "direct", "reject"} {
-		before, beforeOK := intermediate[tag]
+	for _, tag := range []string{"gfw", "proxy", "tld-not-cn", "direct", "reject"} {
+		before, beforeOK := expected[tag]
 		after, afterOK := final[tag]
 		if !beforeOK || !afterOK || !reflect.DeepEqual(before.Domains, after.Domains) {
-			return fmt.Errorf("full geosite:%s fingerprint changed", tag)
+			return fmt.Errorf("geosite:%s fingerprint changed", tag)
 		}
 	}
 	for _, tag := range targets.GeneratedGeoSiteTags() {
-		record, ok := final[tag]
-		if !ok || len(record.Domains) == 0 {
-			return fmt.Errorf("generated geosite:%s is missing or empty", tag)
+		before, beforeOK := expected[tag]
+		after, afterOK := final[tag]
+		if !beforeOK || !afterOK || !geosite.EquivalentCoverage(before.Domains, after.Domains) {
+			return fmt.Errorf("geosite:%s semantic fingerprint changed", tag)
 		}
 	}
 	return nil
+}
+
+func cloneSiteTag(tag geodat.SiteTag) geodat.SiteTag {
+	tag.Domains = cloneDomainRules(tag.Domains)
+	return tag
+}
+
+func cloneDomainRules(rules []model.DomainRule) []model.DomainRule {
+	cloned := make([]model.DomainRule, len(rules))
+	for index, rule := range rules {
+		rule.Attrs = append([]string(nil), rule.Attrs...)
+		cloned[index] = rule
+	}
+	return cloned
 }
 
 func finalProber(runner *tools.Runner, state *buildState) verify.TagLookup {

@@ -134,14 +134,19 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 			t.Fatalf("google=%#v", google)
 		}
 		for _, tag := range targets.GeneratedGeoSiteTags() {
-			if len(final[tag].Domains) == 0 {
-				t.Fatalf("generated %s=%#v", tag, final[tag])
+			want := readGeneratedRules(t, filepath.Join(mergedRoot, tag))
+			if !sameDomainRules(final[tag].Domains, want) {
+				t.Fatalf("generated %s=%#v want=%#v", tag, final[tag].Domains, want)
 			}
+		}
+		if direct := final[targets.DirectResidualTag].Domains; !hasDomainRule(direct, model.DomainFull, "attr-direct.example", []string{"@cn"}) ||
+			!hasDomainRule(direct, model.DomainRegexp, "^regex-direct\\.example$", nil) {
+			t.Fatalf("direct residual does not preserve attrs/regexp: %#v", direct)
 		}
 	})
 
 	t.Run("完整标签未被残差替换", func(t *testing.T) {
-		for _, tag := range []string{"gfw", "proxy", "direct"} {
+		for _, tag := range []string{"gfw", "proxy", "tld-not-cn", "direct"} {
 			if !reflect.DeepEqual(intermediate[tag].Domains, final[tag].Domains) {
 				t.Fatalf("%s changed", tag)
 			}
@@ -187,9 +192,9 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 	conf := string(confBytes)
 	for _, want := range []string{
 		"DOMAIN-SUFFIX,youtube.example,Google 服务",
+		"DOMAIN-SUFFIX,foreign,代理规则",
 		"IP-CIDR,192.0.2.0/24,中国大陆,no-resolve",
 		"IP-CIDR6,2001:db8::/32,中国大陆,no-resolve",
-		"非中国域名 = select,代理规则,policy-select-name=代理规则",
 	} {
 		if !strings.Contains(conf, want+"\n") {
 			t.Fatalf("conf missing %q:\n%s", want, conf)
@@ -202,10 +207,10 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 	assertAppearsBefore(t, conf, ",YouTube\n", ",Google 服务\n")
 	proxyGroupStart := strings.Index(conf, "[Proxy Group]\n")
 	ruleStart := strings.Index(conf, "\n[Rule]\n")
-	if proxyGroupStart < 0 || ruleStart < proxyGroupStart || strings.Count(conf[proxyGroupStart:ruleStart], " = select,") != 14 {
-		t.Fatalf("Shadowrocket policy group count is not 14:\n%s", conf)
+	if proxyGroupStart < 0 || ruleStart < proxyGroupStart || strings.Count(conf[proxyGroupStart:ruleStart], " = select,") != 13 {
+		t.Fatalf("Shadowrocket policy group count is not 13:\n%s", conf)
 	}
-	if strings.Contains(conf, "GFW") || strings.Contains(conf, "BilibiliHMT") {
+	if strings.Contains(conf, "GFW") || strings.Contains(conf, "BilibiliHMT") || strings.Contains(conf, "非中国域名") {
 		t.Fatalf("Shadowrocket contains removed group/tag:\n%s", conf)
 	}
 	if strings.Contains(conf, options.ReleaseTag) {
@@ -221,11 +226,15 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 		"config shunt_rules 'crs_proxy'",
 		"config shunt_rules 'crs_direct'",
 		"geosite:" + targets.ProxyResidualTag,
+		"geosite:tld-not-cn",
 		"geosite:" + targets.DirectResidualTag,
 	} {
 		if !strings.Contains(fragment, want) {
 			t.Fatalf("installer fragment missing %q:\n%s", want, fragment)
 		}
+	}
+	if strings.Contains(fragment, "crs_tld_not_cn") {
+		t.Fatalf("installer fragment contains removed tld_not_cn group:\n%s", fragment)
 	}
 }
 
@@ -283,29 +292,53 @@ func TestProductionDependenciesFailuresPreservePreviousGeneration(t *testing.T) 
 			want: []string{"proxy.yaml", "field paylaod not found"},
 		},
 		{
-			name: "generated source collision",
+			name: "generated mixed-case source collision",
 			mutate: func(t *testing.T, root string) {
 				path := filepath.Join(root, "sources.yaml")
 				data, err := os.ReadFile(path)
 				if err != nil {
 					t.Fatal(err)
 				}
-				data = []byte(strings.Replace(string(data), "{tag: proxy, mode: create}", "{tag: crs-proxy-residual, mode: create}", 1))
+				data = []byte(strings.Replace(string(data), "{tag: proxy, mode: create}", "{tag: CRS-PROXY-RESIDUAL, mode: create}", 1))
 				if err := os.WriteFile(path, data, 0o600); err != nil {
 					t.Fatal(err)
 				}
 			},
-			want: []string{"fixture-proxy", "crs-proxy-residual", "generated"},
+			want: []string{"fixture-proxy", "CRS-PROXY-RESIDUAL", "generated"},
 		},
 		{
-			name: "generated community collision",
+			name: "generated mixed-case community collision",
 			mutate: func(t *testing.T, root string) {
-				path := filepath.Join(root, "community", "crs-direct-residual")
+				path := filepath.Join(root, "community", "CRS-DIRECT-RESIDUAL")
 				if err := os.WriteFile(path, []byte("domain:collision.example\n"), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			},
-			want: []string{"crs-direct-residual", "generated", "base/community"},
+			want: []string{"validate target registry", "crs-direct-residual", "generated", "base/community"},
+		},
+		{
+			name: "generated nested mixed-case community collision",
+			mutate: func(t *testing.T, root string) {
+				directory := filepath.Join(root, "community", "nested")
+				if err := os.Mkdir(directory, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				path := filepath.Join(directory, "CRS-DIRECT-RESIDUAL")
+				if err := os.WriteFile(path, []byte("domain:collision.example\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: []string{"validate target registry", "crs-direct-residual", "generated", "base/community"},
+		},
+		{
+			name: "generated mixed-case custom collision",
+			mutate: func(t *testing.T, root string) {
+				path := filepath.Join(root, "custom", "geosite", "Crs-Proxy-Residual.yaml")
+				if err := os.WriteFile(path, []byte("payload:\n  - DOMAIN-SUFFIX,collision.example\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: []string{"Crs-Proxy-Residual.yaml", "generated"},
 		},
 		{
 			name: "create collision",
@@ -383,6 +416,35 @@ func hasDomainRule(rules []model.DomainRule, kind model.DomainKind, value string
 		}
 	}
 	return false
+}
+
+func readGeneratedRules(t *testing.T, path string) []model.DomainRule {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result []model.DomainRule
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		fields := strings.Fields(line)
+		kind, value, found := strings.Cut(fields[0], ":")
+		if !found {
+			t.Fatalf("invalid generated rule %q", line)
+		}
+		result = append(result, model.DomainRule{Kind: model.DomainKind(kind), Value: value, Attrs: append([]string(nil), fields[1:]...)})
+	}
+	return result
+}
+
+func sameDomainRules(left, right []model.DomainRule) bool {
+	key := func(rule model.DomainRule) string {
+		return string(rule.Kind) + "\x00" + rule.Value + "\x00" + strings.Join(rule.Attrs, "\x00")
+	}
+	left = append([]model.DomainRule(nil), left...)
+	right = append([]model.DomainRule(nil), right...)
+	slices.SortFunc(left, func(a, b model.DomainRule) int { return strings.Compare(key(a), key(b)) })
+	slices.SortFunc(right, func(a, b model.DomainRule) int { return strings.Compare(key(a), key(b)) })
+	return reflect.DeepEqual(left, right)
 }
 
 func integrationBuildOptions(repositoryRoot, root string) app.BuildOptions {

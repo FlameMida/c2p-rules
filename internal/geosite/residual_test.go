@@ -1,14 +1,79 @@
 package geosite_test
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"clash-rules-srs/internal/geodat"
 	"clash-rules-srs/internal/geosite"
 	"clash-rules-srs/internal/model"
 )
+
+func Test残差推导响应Context取消(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _, err := geosite.DeriveContext(ctx, siteTags(map[string][]model.DomainRule{
+		"basis": {{Kind: model.DomainFull, Value: "kept.example"}},
+	}), geosite.ResidualSpec{OutputTag: "out", BasisTags: []string{"basis"}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func Test大规则集在固定期限内完成(t *testing.T) {
+	const ruleCount = 50_000
+	basis := make([]model.DomainRule, 0, ruleCount)
+	coverage := make([]model.DomainRule, 0, ruleCount)
+	for index := 0; index < ruleCount; index++ {
+		basis = append(basis, model.DomainRule{Kind: model.DomainFull, Value: fmt.Sprintf("basis-%05d.example", index)})
+		coverage = append(coverage, model.DomainRule{Kind: model.DomainSuffix, Value: fmt.Sprintf("covered-%05d.invalid", index)})
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	got, _, err := geosite.DeriveContext(ctx, siteTags(map[string][]model.DomainRule{
+		"basis": basis, "earlier": coverage,
+	}), geosite.ResidualSpec{OutputTag: "out", BasisTags: []string{"basis"}, EarlierActiveTags: []string{"earlier"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != ruleCount {
+		t.Fatalf("got %d rules, want %d", len(got), ruleCount)
+	}
+}
+
+func Test编译器覆盖去重保持规则集语义(t *testing.T) {
+	expected := []model.DomainRule{
+		{Kind: model.DomainSuffix, Value: "example.com"},
+		{Kind: model.DomainSuffix, Value: "www.example.com"},
+		{Kind: model.DomainFull, Value: "attr.example", Attrs: []string{"@cn"}},
+	}
+	compiled := []model.DomainRule{
+		{Kind: model.DomainSuffix, Value: "example.com"},
+		{Kind: model.DomainFull, Value: "attr.example", Attrs: []string{"@cn"}},
+	}
+	if !geosite.EquivalentCoverage(expected, compiled) {
+		t.Fatal("covered child suffix should be a semantic no-op")
+	}
+	for name, changed := range map[string][]model.DomainRule{
+		"uncovered drop": {{Kind: model.DomainFull, Value: "attr.example", Attrs: []string{"@cn"}}},
+		"changed attrs": {
+			{Kind: model.DomainSuffix, Value: "example.com"},
+			{Kind: model.DomainFull, Value: "attr.example", Attrs: []string{"@other"}},
+		},
+		"invented rule": append(append([]model.DomainRule(nil), compiled...), model.DomainRule{Kind: model.DomainFull, Value: "invented.example"}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if geosite.EquivalentCoverage(expected, changed) {
+				t.Fatalf("unexpected equivalence for %#v", changed)
+			}
+		})
+	}
+}
 
 func TestGFW与Proxy合并且服务组优先(t *testing.T) {
 	tags := siteTags(map[string][]model.DomainRule{

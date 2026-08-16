@@ -80,8 +80,8 @@ func TestInstallerSuccessInstallsAllRepositoryGroupsAndValidData(t *testing.T) {
 	harness.seedConfig("config nodes 'node1'\n\toption remarks 'Keep Node'\n")
 	output := harness.run(harness.render(options), true)
 	installed := harness.readConfig()
-	if strings.Count(installed, "option managed_by 'clash-rules-srs'") != 14 {
-		t.Fatalf("managed group count is not 14:\n%s", installed)
+	if strings.Count(installed, "option managed_by 'clash-rules-srs'") != 13 {
+		t.Fatalf("managed group count is not 13:\n%s", installed)
 	}
 	for _, group := range groups {
 		if !strings.Contains(installed, "config shunt_rules 'crs_"+group.ID+"'") {
@@ -338,6 +338,36 @@ func TestProxy缺失时继承GFW(t *testing.T) {
 	}
 }
 
+func TestProxy缺失时继承GFW显式空值(t *testing.T) {
+	h := newHarness(t)
+	node := strings.Replace(compatibleShuntNode("shunt_a"), "\toption crs_gfw '_default'\n", "\toption crs_gfw ''\n", 1)
+	node = strings.Replace(node, "\toption crs_tld_not_cn '_default'\n", "\toption crs_tld_not_cn ''\n", 1)
+	h.seedConfig(node)
+	h.run(h.render(validInstallOptions()), true)
+	got := h.readConfig()
+	if !strings.Contains(got, "option crs_proxy ''") {
+		t.Fatalf("explicit close was not migrated:\n%s", got)
+	}
+}
+
+func Test规范ProxyOnly配置重复安装(t *testing.T) {
+	h := newHarness(t)
+	h.seedConfig(canonicalProxyOnlyNode("shunt_a"))
+	script := h.render(validInstallOptions())
+	h.run(script, true)
+	first := h.readConfig()
+	h.run(script, true)
+	second := h.readConfig()
+	if first != second {
+		t.Fatalf("canonical proxy-only config is not idempotent\nfirst=%s\nsecond=%s", first, second)
+	}
+	for _, legacy := range []string{"crs_gfw", "crs_tld_not_cn", "crs_bilibili_hmt"} {
+		if strings.Contains(second, "option "+legacy) {
+			t.Fatalf("legacy option %s remains in\n%s", legacy, second)
+		}
+	}
+}
+
 func Test单侧关闭按非空一侧归一化(t *testing.T) {
 	h := newHarness(t)
 	node := strings.ReplaceAll(compatibleShuntNode("shunt_a"), "\toption crs_gfw '_default'\n", "")
@@ -370,10 +400,17 @@ func TestGFW与Proxy冲突时零修改失败(t *testing.T) {
 	h.assertSnapshot(beforeConfig, beforeSite, beforeIP)
 }
 
-func Test两组均继承Default(t *testing.T) {
+func Test三个旧组均继承Default(t *testing.T) {
 	h := newHarness(t)
-	h.seedConfig(compatibleShuntNode("shunt_a"))
+	node := strings.Replace(compatibleShuntNode("shunt_a"), "\toption crs_tld_not_cn '_default'\n", "\toption crs_proxy '_default'\n\toption crs_tld_not_cn '_default'\n", 1)
+	node = strings.Replace(node, "\toption crs_tld_not_cn_fakedns '1'\n", "\toption crs_proxy_fakedns '1'\n\toption crs_tld_not_cn_fakedns '1'\n", 1)
+	node = strings.Replace(node, "\toption crs_tld_not_cn_proxy_tag 'proxy-tag'\n", "\toption crs_proxy_proxy_tag 'proxy-tag'\n\toption crs_tld_not_cn_proxy_tag 'proxy-tag'\n", 1)
+	h.seedConfig(node)
 	h.run(h.render(validInstallOptions()), true)
+	got := h.readConfig()
+	if !strings.Contains(got, "option crs_proxy '_default'") || strings.Contains(got, "option crs_gfw ") || strings.Contains(got, "option crs_tld_not_cn ") {
+		t.Fatalf("three legacy groups were not normalized to proxy only:\n%s", got)
+	}
 }
 
 func Test等价出口条件不成立(t *testing.T) {
@@ -401,6 +438,81 @@ func Test等价出口条件不成立(t *testing.T) {
 	}
 }
 
+func Test显式空值与缺失不等价(t *testing.T) {
+	families := []struct {
+		name  string
+		gfw   string
+		proxy string
+		tld   string
+	}{
+		{name: "main", gfw: "crs_gfw", proxy: "crs_proxy", tld: "crs_tld_not_cn"},
+		{name: "fakedns", gfw: "crs_gfw_fakedns", proxy: "crs_proxy_fakedns", tld: "crs_tld_not_cn_fakedns"},
+		{name: "proxy_tag", gfw: "crs_gfw_proxy_tag", proxy: "crs_proxy_proxy_tag", tld: "crs_tld_not_cn_proxy_tag"},
+	}
+	for _, family := range families {
+		t.Run(family.name+"/canonical_proxy_empty", func(t *testing.T) {
+			h := newHarness(t)
+			node := canonicalProxyOnlyNode("shunt_a")
+			node = regexp.MustCompile(`(?m)^\toption `+regexp.QuoteMeta(family.proxy)+` .*\n`).ReplaceAllString(node, "\toption "+family.proxy+" ''\n")
+			h.seedConfig(node)
+			h.run(h.render(validInstallOptions()), true)
+			if !strings.Contains(h.readConfig(), "option "+family.proxy+" ''") {
+				t.Fatalf("canonical explicit empty value was not preserved:\n%s", h.readConfig())
+			}
+		})
+
+		for _, legacy := range []struct {
+			name  string
+			field string
+		}{{name: "gfw", field: family.gfw}, {name: "tld", field: family.tld}} {
+			t.Run(family.name+"/legacy_"+legacy.name+"_only_empty", func(t *testing.T) {
+				h := newHarness(t)
+				node := canonicalProxyOnlyNode("shunt_a")
+				node = regexp.MustCompile(`(?m)^\toption `+regexp.QuoteMeta(family.proxy)+` .*\n`).ReplaceAllString(node, "")
+				node = strings.Replace(node, "\toption protocol '_shunt'\n", "\toption protocol '_shunt'\n\toption "+legacy.field+" ''\n", 1)
+				h.seedConfig(node)
+				beforeConfig, beforeSite, beforeIP := h.snapshot()
+				output := h.run(h.render(validInstallOptions()), false)
+				if !strings.Contains(output, "proxy/tld_not_cn mismatch") {
+					t.Fatalf("output=%s", output)
+				}
+				h.assertSnapshot(beforeConfig, beforeSite, beforeIP)
+			})
+		}
+	}
+}
+
+func Test历史主字段触发全部辅助族预检(t *testing.T) {
+	for name, fields := range map[string][]string{
+		"fakedns": {
+			"crs_gfw_fakedns", "crs_tld_not_cn_fakedns", "crs_proxy_fakedns",
+		},
+		"proxy_tag": {
+			"crs_gfw_proxy_tag", "crs_tld_not_cn_proxy_tag", "crs_proxy_proxy_tag",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t)
+			node := compatibleShuntNode("shunt_a")
+			for _, field := range fields[:2] {
+				node = regexp.MustCompile(`(?m)^\toption `+regexp.QuoteMeta(field)+` .*\n`).ReplaceAllString(node, "")
+			}
+			value := "'1'"
+			if name == "proxy_tag" {
+				value = "'proxy-tag'"
+			}
+			node = strings.Replace(node, "\toption protocol '_shunt'\n", "\toption protocol '_shunt'\n\toption "+fields[2]+" "+value+"\n", 1)
+			h.seedConfig(node)
+			beforeConfig, beforeSite, beforeIP := h.snapshot()
+			output := h.run(h.render(validInstallOptions()), false)
+			if !strings.Contains(output, "proxy/tld_not_cn mismatch in "+name) {
+				t.Fatalf("output=%s", output)
+			}
+			h.assertSnapshot(beforeConfig, beforeSite, beforeIP)
+		})
+	}
+}
+
 func Test后续步骤失败时恢复节点(t *testing.T) {
 	h := newHarness(t)
 	h.seedConfig(compatibleShuntNode("shunt_a"))
@@ -418,6 +530,7 @@ func Test成功安装后无废弃字段(t *testing.T) {
 	got := h.readConfig()
 	for _, field := range []string{
 		"crs_gfw", "crs_gfw_fakedns", "crs_gfw_proxy_tag",
+		"crs_tld_not_cn", "crs_tld_not_cn_fakedns", "crs_tld_not_cn_proxy_tag",
 		"crs_bilibili_hmt", "crs_bilibili_hmt_fakedns", "crs_bilibili_hmt_proxy_tag",
 	} {
 		if strings.Contains(got, "option "+field+" ") {
@@ -692,6 +805,14 @@ func compatibleShuntNode(id string) string {
 	option crs_direct_fakedns '0'
 	option crs_direct_proxy_tag 'direct-tag'
 `, id)
+}
+
+func canonicalProxyOnlyNode(id string) string {
+	node := compatibleShuntNode(id)
+	for _, prefix := range []string{"crs_gfw", "crs_tld_not_cn", "crs_bilibili_hmt"} {
+		node = regexp.MustCompile(`(?m)^\toption `+prefix+`(?:_fakedns|_proxy_tag)? .*\n`).ReplaceAllString(node, "")
+	}
+	return strings.Replace(node, "\toption protocol '_shunt'\n", "\toption protocol '_shunt'\n\toption crs_proxy '_default'\n\toption crs_proxy_fakedns '1'\n\toption crs_proxy_proxy_tag 'proxy-tag'\n", 1)
 }
 
 func digest(value string) string {

@@ -22,6 +22,7 @@ func TestDocsDescribeGoOnlyWorkflowAndManagedInstall(t *testing.T) {
 			"custom/geosite",
 			"custom/geoip",
 			"config/passwall2-groups.yaml",
+			"完整 `gfw`、`proxy`、`tld-not-cn`、`direct` 公共标签",
 			"install_passwall2_rules.sh.sha256sum",
 			"managed_by=clash-rules-srs",
 			"回滚",

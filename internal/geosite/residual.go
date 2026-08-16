@@ -1,6 +1,7 @@
 package geosite
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -23,8 +24,15 @@ type ResidualReport struct {
 }
 
 func Derive(tags map[string]geodat.SiteTag, spec ResidualSpec) ([]model.DomainRule, ResidualReport, error) {
+	return DeriveContext(context.Background(), tags, spec)
+}
+
+func DeriveContext(ctx context.Context, tags map[string]geodat.SiteTag, spec ResidualSpec) ([]model.DomainRule, ResidualReport, error) {
 	if spec.OutputTag == "" || len(spec.BasisTags) == 0 {
 		return nil, ResidualReport{}, fmt.Errorf("residual %q has no basis tags", spec.OutputTag)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, ResidualReport{}, fmt.Errorf("residual %s: %w", spec.OutputTag, err)
 	}
 	basis, err := collect(tags, spec.BasisTags)
 	if err != nil {
@@ -35,17 +43,14 @@ func Derive(tags map[string]geodat.SiteTag, spec ResidualSpec) ([]model.DomainRu
 	if err != nil {
 		return nil, ResidualReport{}, fmt.Errorf("residual %s coverage: %w", spec.OutputTag, err)
 	}
+	index := newCoverageIndex(coverage)
 
 	kept := make([]model.DomainRule, 0, len(basis))
 	for _, candidate := range basis {
-		covered := false
-		for _, existing := range coverage {
-			if covers(existing, candidate) {
-				covered = true
-				break
-			}
+		if err := ctx.Err(); err != nil {
+			return nil, ResidualReport{}, fmt.Errorf("residual %s: %w", spec.OutputTag, err)
 		}
-		if !covered {
+		if !index.covers(candidate) {
 			kept = append(kept, candidate)
 		}
 	}
@@ -97,35 +102,120 @@ func ruleKey(rule model.DomainRule) string {
 	return string(rule.Kind) + "\x00" + rule.Value + "\x00" + strings.Join(rule.Attrs, "\x00")
 }
 
-func covers(existing, candidate model.DomainRule) bool {
-	if strings.Join(existing.Attrs, "\x00") != strings.Join(candidate.Attrs, "\x00") {
+// EquivalentCoverage reports whether compiled contains no invented rules and
+// covers exactly the same domain universe as expected. It permits a compiler
+// to remove a more-specific rule only when another compiled rule with the same
+// attributes conservatively covers it.
+func EquivalentCoverage(expected, compiled []model.DomainRule) bool {
+	expected = uniqueNormalizedRules(expected)
+	compiled = uniqueNormalizedRules(compiled)
+	expectedKeys := make(map[string]struct{}, len(expected))
+	for _, rule := range expected {
+		expectedKeys[ruleKey(rule)] = struct{}{}
+	}
+	for _, rule := range compiled {
+		if _, exists := expectedKeys[ruleKey(rule)]; !exists {
+			return false
+		}
+	}
+	index := newCoverageIndex(compiled)
+	for _, rule := range expected {
+		if !index.covers(rule) {
+			return false
+		}
+	}
+	return true
+}
+
+func uniqueNormalizedRules(rules []model.DomainRule) []model.DomainRule {
+	unique := make(map[string]model.DomainRule, len(rules))
+	for _, rule := range rules {
+		rule = normalize(rule)
+		unique[ruleKey(rule)] = rule
+	}
+	result := make([]model.DomainRule, 0, len(unique))
+	for _, rule := range unique {
+		result = append(result, rule)
+	}
+	return result
+}
+
+type coverageIndex map[string]*coverageBucket
+
+type coverageBucket struct {
+	full    map[string]struct{}
+	suffix  map[string]struct{}
+	keyword map[string]struct{}
+	regexp  map[string]struct{}
+}
+
+func newCoverageIndex(rules []model.DomainRule) coverageIndex {
+	index := make(coverageIndex)
+	for _, rule := range rules {
+		attributeKey := strings.Join(rule.Attrs, "\x00")
+		bucket := index[attributeKey]
+		if bucket == nil {
+			bucket = &coverageBucket{
+				full: make(map[string]struct{}), suffix: make(map[string]struct{}),
+				keyword: make(map[string]struct{}), regexp: make(map[string]struct{}),
+			}
+			index[attributeKey] = bucket
+		}
+		switch rule.Kind {
+		case model.DomainFull:
+			bucket.full[rule.Value] = struct{}{}
+		case model.DomainSuffix:
+			bucket.suffix[rule.Value] = struct{}{}
+		case model.DomainKeyword:
+			bucket.keyword[rule.Value] = struct{}{}
+		case model.DomainRegexp:
+			bucket.regexp[rule.Value] = struct{}{}
+		}
+	}
+	return index
+}
+
+func (index coverageIndex) covers(candidate model.DomainRule) bool {
+	bucket := index[strings.Join(candidate.Attrs, "\x00")]
+	if bucket == nil {
 		return false
 	}
 	switch candidate.Kind {
 	case model.DomainFull:
-		switch existing.Kind {
-		case model.DomainFull:
-			return existing.Value == candidate.Value
-		case model.DomainSuffix:
-			return sameOrParent(existing.Value, candidate.Value)
-		case model.DomainKeyword:
-			return strings.Contains(candidate.Value, existing.Value)
+		if _, ok := bucket.full[candidate.Value]; ok || bucket.suffixCovers(candidate.Value) {
+			return true
 		}
 	case model.DomainSuffix:
-		switch existing.Kind {
-		case model.DomainSuffix:
-			return sameOrParent(existing.Value, candidate.Value)
-		case model.DomainKeyword:
-			return strings.Contains(candidate.Value, existing.Value)
+		if bucket.suffixCovers(candidate.Value) {
+			return true
 		}
 	case model.DomainKeyword:
-		return existing.Kind == model.DomainKeyword && strings.Contains(candidate.Value, existing.Value)
+		return bucket.keywordCovers(candidate.Value)
 	case model.DomainRegexp:
-		return existing.Kind == model.DomainRegexp && existing.Value == candidate.Value
+		_, ok := bucket.regexp[candidate.Value]
+		return ok
 	}
-	return false
+	return bucket.keywordCovers(candidate.Value)
 }
 
-func sameOrParent(parent, value string) bool {
-	return value == parent || strings.HasSuffix(value, "."+parent)
+func (bucket *coverageBucket) suffixCovers(value string) bool {
+	for {
+		if _, ok := bucket.suffix[value]; ok {
+			return true
+		}
+		separator := strings.IndexByte(value, '.')
+		if separator < 0 {
+			return false
+		}
+		value = value[separator+1:]
+	}
+}
+
+func (bucket *coverageBucket) keywordCovers(value string) bool {
+	for keyword := range bucket.keyword {
+		if strings.Contains(value, keyword) {
+			return true
+		}
+	}
+	return false
 }

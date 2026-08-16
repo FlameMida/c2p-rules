@@ -38,11 +38,7 @@ groups:
     geoip: []
   - id: proxy
     remarks: 代理规则
-    geosite: [crs-proxy-residual]
-    geoip: []
-  - id: tld_not_cn
-    remarks: 非中国域名
-    geosite: [tld-not-cn]
+    geosite: [crs-proxy-residual, tld-not-cn]
     geoip: []
   - id: private
     remarks: 私有网络

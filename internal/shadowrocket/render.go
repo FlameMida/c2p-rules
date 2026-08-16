@@ -37,15 +37,6 @@ func Render(groups []GroupRules, repo string) ([]byte, error) {
 		}
 		seenRemarks[rules.Group.Remarks] = rules.Group.ID
 	}
-	proxyRemarks := ""
-	if _, hasTLD := byID["tld_not_cn"]; hasTLD {
-		proxy, ok := byID["proxy"]
-		if !ok {
-			return nil, fmt.Errorf("tld_not_cn requires proxy group")
-		}
-		proxyRemarks = proxy.Group.Remarks
-	}
-
 	var output bytes.Buffer
 	fmt.Fprintf(&output, "[General]\nupdate-url = https://github.com/%s/releases/latest/download/shadowrocket.conf\n\n", repo)
 	output.WriteString("[Proxy Group]\n")
@@ -54,10 +45,7 @@ func Render(groups []GroupRules, repo string) ([]byte, error) {
 		if len(rules.Domains) == 0 && len(rules.CIDRs) == 0 {
 			return nil, fmt.Errorf("group %q (%s) has zero rules", rules.Group.Remarks, rules.Group.ID)
 		}
-		candidates, selected, err := policy(rules.Group.ID, proxyRemarks)
-		if err != nil {
-			return nil, err
-		}
+		candidates, selected := policy(rules.Group.ID)
 		fmt.Fprintf(&output, "%s = select,%s,policy-select-name=%s\n",
 			rules.Group.Remarks, strings.Join(candidates, ","), selected)
 		if rules.Group.ID == "cn" {
@@ -107,19 +95,14 @@ func reservedPolicyName(value string) bool {
 	}
 }
 
-func policy(id, proxyRemarks string) ([]string, string, error) {
+func policy(id string) ([]string, string) {
 	switch id {
 	case "reject":
-		return []string{"REJECT", "PROXY", "DIRECT"}, "REJECT", nil
+		return []string{"REJECT", "PROXY", "DIRECT"}, "REJECT"
 	case "cn", "private", "direct":
-		return []string{"DIRECT", "PROXY"}, "DIRECT", nil
-	case "tld_not_cn":
-		if proxyRemarks == "" {
-			return nil, "", fmt.Errorf("tld_not_cn requires proxy remarks")
-		}
-		return []string{proxyRemarks}, proxyRemarks, nil
+		return []string{"DIRECT", "PROXY"}, "DIRECT"
 	default:
-		return []string{"PROXY", "DIRECT"}, "PROXY", nil
+		return []string{"PROXY", "DIRECT"}, "PROXY"
 	}
 }
 

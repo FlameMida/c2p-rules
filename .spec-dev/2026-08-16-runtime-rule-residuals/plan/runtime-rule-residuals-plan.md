@@ -4,29 +4,29 @@
 >
 > **偏差处理**：执行中发现计划与现实不符——小偏差（路径笔误、明显遗漏但意图清楚）就地修正并在提交信息中注明；接口、数据结构等契约级偏差停下向计划作者确认，不猜着改。
 
-**目标**：从编译后的 GeoSite DAT 保守派生两个运行时残差标签，把默认托管组收敛为 14 个，并在不破坏兼容配置路由决策的前提下同步优化 PassWall2 与 Shadowrocket。
+**目标**：从编译后的 GeoSite DAT 保守派生两个运行时残差标签，把默认托管组收敛为 13 个，并在不破坏兼容配置最终出口的前提下同步优化 PassWall2 与 Shadowrocket。
 
 **Spec**：`.spec-dev/2026-08-16-runtime-rule-residuals/spec/runtime-rule-residuals-design.md`
 
-**架构**：构建先把原始合并目录编译到 staging 中间 DAT，再经共享无损 decoder 推导 `crs-proxy-residual` 与 `crs-direct-residual`，最后第二次编译正式 DAT。PassWall2 安装器在 live UCI 切换前全量预检并迁移所有 Shunt 节点；Shadowrocket 仍从最终 DAT 展开，但 `tld_not_cn` 通过 group ID 单向引用 `proxy`。完整公共标签、reject 指纹和八资产闭集均保持兼容。
+**架构**：构建先把原始合并目录编译到 staging 中间 DAT，再经共享无损 decoder 推导 `crs-proxy-residual` 与 `crs-direct-residual`，最后第二次编译正式 DAT。唯一 `proxy` 组按顺序引用 residual 与完整 `tld-not-cn`；PassWall2 在 live UCI 切换前预检历史三组配置再迁入 `proxy`，Shadowrocket 直接把两标签规则渲染到同一策略组。完整公共标签、reject 指纹和八资产闭集均保持兼容。
 
 **技术栈**：Go 1.26、标准库 protobuf wire 解码、POSIX `/bin/sh` + `awk`、OpenWrt UCI、现有 `domain-list-custom`/`geoip`/`geoview` 工具链。
 
 ## 全局约束
 
 - 不引入新的第三方依赖；继续使用 `go 1.26` 与现有固定工具链。
-- 完整公共 `gfw`、`proxy`、`direct` 标签不得删除或被残差替换；`reject` 类型、值、attributes、顺序及第一组位置不得改变。
+- 完整公共 `gfw`、`proxy`、`tld-not-cn`、`direct` 标签不得删除或被残差替换；`reject` 类型、值、attributes、顺序及第一组位置不得改变。
 - generated-only GeoSite 标签固定为 `crs-proxy-residual` 与 `crs-direct-residual`；二者必须非空、禁止 source/community/custom 占用。
 - 覆盖证明只允许单规则证明；attributes 规范化集合必须完全相同；不做多规则并集、正则语言包含或 GeoIP 证明。
-- 默认组固定为 `reject → youtube → netflix → spotify → tiktok → ai → apple_services → telegram → google → proxy → tld_not_cn → private → cn → direct`。
+- 默认组固定为 `reject → youtube → netflix → spotify → tiktok → ai → apple_services → telegram → google → proxy → private → cn → direct`；`proxy.geosite` 固定为 `[crs-proxy-residual, tld-not-cn]`。
 - 删除 BilibiliHMT 来源、双侧标签、组、custom、夹具与文档；manifest 继续把 `xiaolin-bilibili`、`BilibiliHMT` 列为禁止回归项。
 - PassWall2 迁移覆盖所有 `protocol='_shunt'` 节点及主字段、`_fakedns`、`_proxy_tag` 三族；冲突或 proxy/tld-not-cn 不等价时 live UCI 零修改。
 - 单侧关闭迁移为非空一侧并启用合并全集是已批准行为变化，必须逐节点/字段输出 `WARNING`；不纳入路由等价承诺。
-- `default_node`、reject、private、cn、direct 节点字段逐项保留；BilibiliHMT 与 gfw 废弃字段仅在预检全部通过后删除。
-- Shadowrocket `tld_not_cn` 的唯一候选及 `policy-select-name` 都是按 ID 查得的 proxy remarks；不得硬编码中文 remarks。
+- `default_node`、reject、private、cn、direct 节点字段逐项保留；BilibiliHMT、gfw 与 tld-not-cn 废弃字段仅在预检全部通过后删除。
+- Shadowrocket 只生成 13 个策略组；`tld-not-cn` 规则直接使用 `proxy` remarks，不保留专用 alias。
 - 八个 Release 资产闭集不变；本计划不增加性能报告发布资产。
-- 设备路由等价只覆盖保留的 14 组及兼容 Shunt 配置；明确排除 BilibiliHMT 与 Xray `IPOnDemand`。
-- 静态活动域名规则数、Shadowrocket `[Rule]` 行数和字节数分别不高于同源基线 70%；三种运行矩阵各自五次稳定 RSS 中位数不高于基线 95%。
+- 设备路由等价只覆盖保留的 13 组及兼容 Shunt 配置；基线 `gfw/proxy/tld_not_cn` 命中统一映射为候选 `proxy` 后比较最终出口，明确排除 BilibiliHMT 与 Xray `IPOnDemand`。
+- GFW/proxy/tld-not-cn 合并规则数不高于同源基线 70%，静态活动域名规则总数、Shadowrocket `[Rule]` 行数和字节数分别严格低于同源基线；三种运行矩阵各自五次稳定 RSS 中位数不高于基线 95%。
 - 提交信息使用中文，任务提交前缀使用 `feat(TN)`、`fix(TN)`、`test(TN)` 或 `docs(TN)`；未获得用户明确“提交/推送”授权时，执行器不得越过对应授权边界。
 
 ## 相关测试范围
@@ -58,13 +58,13 @@ go test -tags=integration ./internal/app
 - `internal/geosite/merge_test.go`：generated 文件写入、空残差及占用回归。
 - `internal/workspace/layout.go`、`internal/workspace/transaction_test.go`：增加中间编译目录与 DAT 路径。
 - `internal/app/build.go`、`internal/app/deps.go`、`internal/app/build_test.go`：加入中间编译、残差推导、最终编译和完整标签指纹校验阶段。
-- `internal/shadowrocket/render.go`、`internal/shadowrocket/render_test.go`：按 ID 解析 `proxy → tld_not_cn` 单向策略引用。
+- `internal/shadowrocket/render.go`、`internal/shadowrocket/render_test.go`：删除 tld 专用 alias，按最终 13 组直接渲染。
 - `internal/passwall/install.sh.tmpl`、`internal/passwall/installer_test.go`：Shunt 全局预检、暂存迁移、废弃字段清理与回滚断言。
-- `sources.yaml`、`config/passwall2-groups.yaml`：删除 BilibiliHMT source/group，删除 gfw 组，切换 proxy/direct 残差引用。
-- `internal/config/repository_contract_test.go`、`internal/rules/custom_test.go`、`internal/geosite/merge_test.go`、`internal/geoip/config_test.go`：更新 14 组、generated template 豁免与 BilibiliHMT 测试语义。
+- `sources.yaml`、`config/passwall2-groups.yaml`：删除 BilibiliHMT source/group 与独立 gfw/tld 组，切换 proxy 双标签及 direct 残差引用；保留完整 tld source。
+- `internal/config/repository_contract_test.go`、`internal/rules/custom_test.go`、`internal/geosite/merge_test.go`、`internal/geoip/config_test.go`：更新 13 组、generated template 豁免与 BilibiliHMT 测试语义。
 - `internal/manifest/manifest.go`、`internal/manifest/manifest_test.go`：残差 required 与 BilibiliHMT 双侧 forbidden。
 - `internal/app/build_integration_test.go`、`internal/app/testdata/sources.yaml`、`internal/app/testdata/groups.yaml`、`internal/app/testdata/community/*`：同源两段编译、指纹、禁止标签和最终 conf 集成验证。
-- `README.md`、`context.md`：更新 14 组、残差、迁移警告与 BilibiliHMT 破坏性删除说明。
+- `README.md`、`context.md`：更新 13 组、proxy 双标签、迁移警告与 BilibiliHMT 破坏性删除说明。
 - `.spec-dev/2026-08-15-shadowrocket-conf/spec/shadowrocket-conf-design.md`：交付完成时做部分取代回写。
 
 ### 删除
@@ -89,27 +89,27 @@ go test -tags=integration ./internal/app
 | 生成标签被来源占用 | T3/T8 | `Test生成标签被来源占用` + source/base 事务 Abort 子测试 |
 | 中间 DAT 不污染最终探测缓存 | T4/T8 | `Test中间DAT不污染最终探测缓存` + 最终 prober 子测试 |
 | 无法回写的 typed attribute 失败 | T1 | `Test无法回写的TypedAttribute失败` |
-| 完整标签未被残差替换 | T4/T8 | `Test完整标签与Reject指纹门禁` + 集成指纹子测试 |
+| 完整标签未被残差替换 | T4/T8/T9 | `Test完整标签与Reject指纹门禁` + `tld-not-cn` 集成指纹子测试 |
 | reject 指纹不受优化影响 | T4/T8 | `Test完整标签与Reject指纹门禁` + reject 集成子测试 |
 | proxy 缺失时继承 gfw | T6 | `TestProxy缺失时继承GFW` |
 | 单侧关闭按非空一侧归一化 | T6 | `Test单侧关闭按非空一侧归一化` |
 | gfw 与 proxy 冲突时零修改失败 | T6 | `TestGFW与Proxy冲突时零修改失败` |
-| 重复安装保持幂等 | T6 | `TestInstallerIsIdempotentAndPreservesUserRulesAndNodes` |
-| 两组均继承 Default | T6 | `Test两组均继承Default` |
-| 等价出口条件不成立 | T6 | `Test等价出口条件不成立` |
+| 重复安装保持幂等 | T6/T10 | `TestInstallerIsIdempotentAndPreservesUserRulesAndNodes` |
+| 三个旧组均继承 Default | T10 | `Test三个旧组均继承Default` |
+| 等价出口条件不成立 | T6/T10 | `Test等价出口条件不成立` |
+| 规范 proxy-only 配置重复安装 | T10 | `Test规范ProxyOnly配置重复安装` |
 | 后续步骤失败时恢复节点 | T6 | `Test后续步骤失败时恢复节点` |
 | 成功安装后无废弃字段 | T6 | `Test成功安装后无废弃字段` |
 | 默认代理和三组直连不被重写 | T6 | `Test默认代理和三组直连不被重写` |
 | 默认 custom 模板审计忽略生成型标签 | T7 | `Test默认Custom模板审计忽略生成型标签` |
 | 最终 DAT 不含 BilibiliHMT | T7/T8 | 仓库残留测试 + 最终双侧 prober 子测试 |
-| Xray AsIs 域名路由等价 | T9 | e2e-router 验收表第一行 |
-| Xray IPIfNonMatch 二次 IP 匹配等价 | T9 | e2e-router 验收表第二行 |
-| sing-box 原生路由等价 | T9 | e2e-router 验收表第三行 |
-| 静态规则规模下降至少 30% | T9 | perf-static 验收行 |
-| 三种运行矩阵 RSS 下降至少 5% | T9 | perf-router 验收行 |
-| 默认组 ID、顺序与标签精确匹配 | T7 | `Test默认组ID顺序与标签精确匹配` |
-| 非中国域名跟随代理规则 | T5 | `Test非中国域名跟随代理规则` |
-| remarks 变化时按 ID 建立引用 | T5 | `TestRemarks变化时按ID建立引用` |
+| Xray AsIs 域名路由等价 | T12 | e2e-router 验收表第一行 |
+| Xray IPIfNonMatch 二次 IP 匹配等价 | T12 | e2e-router 验收表第二行 |
+| sing-box 原生路由等价 | T12 | e2e-router 验收表第三行 |
+| 代理规则减少至少 30% 且整体不回升 | T12 | perf-static 验收行 |
+| 三种运行矩阵 RSS 下降至少 5% | T12 | perf-router 验收行 |
+| 默认组 ID、顺序与标签精确匹配 | T7/T9 | `Test默认组ID顺序与标签精确匹配` |
+| tld-not-cn 规则归入代理规则 | T11 | `TestTLDNotCN规则归入代理规则` |
 
 ---
 
@@ -2294,23 +2294,302 @@ git add internal/app/build_integration_test.go internal/app/testdata
 git commit -m "test(T8): 验证残差发布流水线"
 ```
 
+## 十三组合并增量
+
+> 任务 1-8 记录已经完成的 14 组中间交付；下列任务 9-11 是用户批准的契约增量，并取代任务 5 的 tld alias 最终形态与任务 7 的 14 组最终形态。执行完成后只以 active spec 和任务 9-13 的断言作为最终交付标准。
+
+### 任务 9：proxy 同组双标签与完整 tld 指纹
+
+**文件**：
+- 修改：`config/passwall2-groups.yaml`
+- 修改：`internal/app/testdata/groups.yaml`
+- 修改：`internal/app/residual_specs.go`
+- 修改：`internal/app/build_test.go`
+- 修改：`internal/app/deps.go`
+- 修改：`internal/app/build_integration_test.go`
+- 修改：`internal/config/repository_contract_test.go`
+
+**接口**：
+- 消费：`residualSpecsForGroups(groups []model.Group) (geosite.ResidualSpec, geosite.ResidualSpec, error)`、`buildState.ExpectedSiteTags`
+- 产出：默认 `proxy.GeoSite == []string{targets.ProxyResidualTag, "tld-not-cn"}`；proxy 同组 companion tags 进入 `LaterEquivalentTags`；完整 `tld-not-cn` 进入最终指纹门禁。
+
+- [x] **步骤 1：写失败测试**
+
+把 `Test残差拓扑跟随实际Groups顺序` 改成不含独立 `tld_not_cn` 组，并加入同组 companion tag：
+
+```go
+groups := []model.Group{
+	{ID: "reject", GeoSite: []string{"reject"}},
+	{ID: "google", GeoSite: []string{"google", "youtube"}},
+	{ID: "proxy", GeoSite: []string{targets.ProxyResidualTag, "tld-not-cn"}},
+	{ID: "private", GeoSite: []string{"private"}},
+	{ID: "direct", GeoSite: []string{targets.DirectResidualTag}},
+}
+proxy, direct, err := residualSpecsForGroups(groups)
+if err != nil { t.Fatal(err) }
+if want := []string{"tld-not-cn"}; !slices.Equal(proxy.LaterEquivalentTags, want) {
+	t.Fatalf("proxy equivalent=%v want=%v", proxy.LaterEquivalentTags, want)
+}
+if want := []string{"reject", "google", "youtube", targets.ProxyResidualTag, "tld-not-cn", "private"}; !slices.Equal(direct.EarlierActiveTags, want) {
+	t.Fatalf("direct earlier=%v want=%v", direct.EarlierActiveTags, want)
+}
+```
+
+删除旧 `Test后序等价组必须紧邻Proxy`，改为 `TestProxy同组标签才是等价覆盖`：构造独立后序 `tld_not_cn`，断言 `LaterEquivalentTags` 为空；再把 `tld-not-cn` 放入 proxy 同组，断言只含该 tag。
+
+在 `Test完整标签与Reject指纹门禁` 与 integration 的「完整标签未被残差替换」子测试中，把 `tld-not-cn` 加入完整标签集合；改变其 kind/value/attributes 或删除时必须失败。
+
+把 `Test默认组ID顺序与标签精确匹配` 期望改为 13 组：删除 `tld_not_cn` 元素，proxy 改为两个 GeoSite tags，并断言 fragment 不含 `crs_tld_not_cn`。
+
+- [x] **步骤 2：运行测试确认失败**
+
+```bash
+go test ./internal/app ./internal/config -run 'Test(残差拓扑跟随实际Groups顺序|Proxy同组标签才是等价覆盖|完整标签与Reject指纹门禁|默认组ID顺序与标签精确匹配)$' -count=1
+```
+
+预期：FAIL；当前 residual 只识别后序独立组，默认 YAML 仍有 14 组，最终指纹门禁未包含完整 `tld-not-cn`。
+
+- [x] **步骤 3：写最小实现**
+
+`config/passwall2-groups.yaml` 与 integration groups fixture 的 proxy 段改为：
+
+```yaml
+  - id: proxy
+    remarks: 代理规则
+    geosite: [crs-proxy-residual, tld-not-cn]
+    geoip: []
+```
+
+删除紧随其后的独立 `tld_not_cn` group。`residual_specs.go` 从 proxy 同组派生等价 tags：
+
+```go
+proxy := geosite.ResidualSpec{
+	OutputTag: targets.ProxyResidualTag,
+	BasisTags: []string{"gfw", "proxy"},
+	EarlierActiveTags: earlierGeoSiteTags(groups, proxyIndex),
+}
+for _, tag := range groups[proxyIndex].GeoSite {
+	if !strings.EqualFold(tag, targets.ProxyResidualTag) {
+		proxy.LaterEquivalentTags = append(proxy.LaterEquivalentTags, tag)
+	}
+}
+```
+
+`deps.go` 把公共指纹初始化容量改为 7，并使用：
+
+```go
+for _, tag := range []string{"gfw", "proxy", "tld-not-cn", "direct", "reject"} {
+	record, exists := tags[tag]
+	if !exists { return fmt.Errorf("missing geosite:%s fingerprint", tag) }
+	state.ExpectedSiteTags[tag] = cloneSiteTag(record)
+}
+```
+
+同步所有 13 组 fixture/断言；`sources.yaml`、`custom/geosite/tld-not-cn.yaml` 与 manifest required 继续保留。
+
+- [x] **步骤 4：运行测试确认通过**
+
+```bash
+gofmt -w internal/app/residual_specs.go internal/app/build_test.go internal/app/build_integration_test.go internal/config/repository_contract_test.go
+go test ./internal/app ./internal/config -count=1
+go test -tags=integration ./internal/app -count=1
+git diff --check
+```
+
+预期：全部 PASS；默认恰好 13 组，proxy 同组两个标签，完整 tld 指纹受保护，独立后序 tld 不再被当作等价出口证明。
+
+- [x] **步骤 5：提交**
+
+```bash
+git add config/passwall2-groups.yaml internal/app internal/config/repository_contract_test.go
+git commit -m "feat(T9): 合并非中国域名运行组"
+```
+
+### 任务 10：PassWall2 迁移至唯一 proxy 字段族
+
+**文件**：
+- 修改：`internal/passwall/install.sh.tmpl`
+- 修改：`internal/passwall/installer_test.go`
+
+**接口**：
+- 消费：任务 9 生成的唯一 `crs_proxy` shunt rule；历史节点三族 `crs_gfw*`、`crs_proxy*`、`crs_tld_not_cn*`
+- 产出：`preflight_shunt_nodes` 接受 canonical proxy-only，旧状态仍执行 gfw/proxy 归一及 proxy/tld 严格等价门禁；`migrate_and_filter_config` 删除 gfw/tld/bili 旧字段并保留唯一 proxy。
+
+- [x] **步骤 1：写失败测试**
+
+新增 `Test规范ProxyOnly配置重复安装`：第一次安装后断言不存在 `crs_gfw*`/`crs_tld_not_cn*`，保存配置；第二次运行同一安装器后断言配置字节完全相同。
+
+把 `Test成功安装后无废弃字段` 的字段集合扩成：
+
+```go
+for _, field := range []string{
+	"crs_gfw", "crs_gfw_fakedns", "crs_gfw_proxy_tag",
+	"crs_tld_not_cn", "crs_tld_not_cn_fakedns", "crs_tld_not_cn_proxy_tag",
+	"crs_bilibili_hmt", "crs_bilibili_hmt_fakedns", "crs_bilibili_hmt_proxy_tag",
+} {
+	if strings.Contains(got, "option "+field+" ") { t.Fatalf("deprecated %s remains:\n%s", field, got) }
+}
+```
+
+把 `Test两组均继承Default` 改名为 `Test三个旧组均继承Default`，成功后断言只剩 proxy 三族。调整 `Test显式空值与缺失不等价`：仅 proxy 显式空且 gfw/tld 全缺失是 canonical PASS；任何仍出现 gfw 或 tld 历史字段、但另一侧 presence/value 不等价的 case 继续 FAIL 且快照不变。
+
+- [x] **步骤 2：运行测试确认失败**
+
+```bash
+go test ./internal/passwall -run 'Test(规范ProxyOnly配置重复安装|成功安装后无废弃字段|三个旧组均继承Default|显式空值与缺失不等价)$' -count=1
+```
+
+预期：FAIL；当前安装器保留 tld 字段，且第二次运行会把 canonical proxy-only 误判为 proxy/tld presence 冲突。
+
+- [x] **步骤 3：写最小实现**
+
+在 AWK `check_family` 中先识别历史态；canonical proxy-only 直接返回：
+
+```awk
+legacy = (gfw_name in present) || (tld_name in present)
+if (!legacy) return
+```
+
+历史态继续沿用现有顺序：非空且不同的 gfw/proxy 先失败；以 proxy 非空优先、否则 gfw 为归一结果；归一结果与 tld 的 presence/value 不等价则失败。不得把 tld 的单侧非空扩展成“非空侧胜出”。
+
+把 migration 的 `deprecated(name)` 改为：
+
+```awk
+function deprecated(name) {
+	return name ~ /^crs_gfw(_fakedns|_proxy_tag)?$/ ||
+		name ~ /^crs_tld_not_cn(_fakedns|_proxy_tag)?$/ ||
+		name ~ /^crs_bilibili_hmt(_fakedns|_proxy_tag)?$/
+}
+```
+
+保留现有 `gfw_for_proxy` 与 `append_proxy`，因此显式空值仍可由 gfw 迁入 proxy；tld 只作为兼容门禁，预检通过后删除。
+
+- [x] **步骤 4：运行测试确认通过**
+
+```bash
+go test ./internal/passwall -count=1
+git diff --check -- internal/passwall
+```
+
+预期：全部 PASS；canonical proxy-only 幂等，历史不一致仍零修改失败，成功配置无 gfw/tld/bili orphan 字段，回滚测试保持通过。
+
+- [x] **步骤 5：提交**
+
+```bash
+git add internal/passwall/install.sh.tmpl internal/passwall/installer_test.go
+git commit -m "feat(T10): 迁移非中国域名节点字段"
+```
+
+### 任务 11：Shadowrocket 十三组、完整集成与文档
+
+**文件**：
+- 修改：`internal/shadowrocket/render.go`
+- 修改：`internal/shadowrocket/render_test.go`
+- 修改：`internal/app/build_integration_test.go`
+- 修改：`README.md`
+- 修改：`context.md`
+
+**接口**：
+- 消费：任务 9 的 13 组 YAML 与 proxy 同组展开结果
+- 产出：无 tld alias 的 13 个 Shadowrocket 策略组；tld 规则直接使用 proxy remarks；README/context 与发布契约一致。
+
+- [x] **步骤 1：写失败测试**
+
+把 `Test组名与顺序对齐YAML` 的组数改为 13，并断言 `[Proxy Group]` 不含「非中国域名」。用以下测试替换旧 alias/remarks 引用测试：
+
+```go
+func TestTLDNotCN规则归入代理规则(t *testing.T) {
+	rendered := mustRender(t, []shadowrocket.GroupRules{
+		{
+			Group: model.Group{ID: "proxy", Remarks: "代理规则"},
+			Domains: []shadowrocket.DomainLine{
+				{Kind: model.DomainSuffix, Value: "residual.example"},
+				{Kind: model.DomainSuffix, Value: "foreign"},
+			},
+		},
+		oneRule("cn", "中国大陆"),
+	}, "FlameMida/c2p-rules")
+	if strings.Count(section(rendered, "[Proxy Group]"), " = select,") != 2 {
+		t.Fatalf("unexpected groups:\n%s", rendered)
+	}
+	for _, rule := range []string{
+		"DOMAIN-SUFFIX,residual.example,代理规则\n",
+		"DOMAIN-SUFFIX,foreign,代理规则\n",
+	} {
+		if !strings.Contains(rendered, rule) { t.Fatalf("missing %q:\n%s", rule, rendered) }
+	}
+	if strings.Contains(rendered, "非中国域名") { t.Fatalf("legacy alias remains:\n%s", rendered) }
+}
+```
+
+integration 断言策略组恰好 13、包含 `DOMAIN-SUFFIX,foreign,代理规则`、不含「非中国域名 =」；installer fragment 的 `crs_proxy` domain list 必须依次包含 `geosite:crs-proxy-residual` 与 `geosite:tld-not-cn`，且不含 `crs_tld_not_cn` section。
+
+- [x] **步骤 2：运行测试确认失败**
+
+```bash
+go test ./internal/shadowrocket -run 'Test(组名与顺序对齐YAML|TLDNotCN规则归入代理规则)$' -count=1
+go test -tags=integration ./internal/app -count=1
+```
+
+预期：FAIL；当前 renderer 仍保留 tld alias 特例，integration 仍要求 14 个策略组与独立“非中国域名”。
+
+- [x] **步骤 3：写最小实现**
+
+删除 `Render` 中 `proxyRemarks`/`hasTLD` 分支，把调用改为 `policy(rules.Group.ID)`；`policy` 收敛为：
+
+```go
+func policy(id string) ([]string, string) {
+	switch id {
+	case "reject":
+		return []string{"REJECT", "PROXY", "DIRECT"}, "REJECT"
+	case "cn", "private", "direct":
+		return []string{"DIRECT", "PROXY"}, "DIRECT"
+	default:
+		return []string{"PROXY", "DIRECT"}, "PROXY"
+	}
+}
+```
+
+同步调用方去掉不再可能的 policy error；保留空组、重复 ID/remarks、保留策略名与 cn fallback 校验。
+
+README/context 写明：默认 13 组；完整 `tld-not-cn` 来源/custom/DAT 标签保留；它与 residual 同属 `crs_proxy`/“代理规则”；安装器只在历史三组配置兼容时迁移并删除 gfw/tld/bili 字段。
+
+- [x] **步骤 4：运行测试确认通过**
+
+```bash
+gofmt -w internal/shadowrocket/render.go internal/shadowrocket/render_test.go internal/app/build_integration_test.go
+go test ./internal/shadowrocket ./internal/app -count=1
+go test -tags=integration ./internal/app -count=1
+go test ./internal/... -count=1
+git diff --check
+```
+
+预期：全部 PASS；最终 config 只有 13 个策略组，tld 规则使用 proxy remarks，八资产闭集、BilibiliHMT forbidden 与完整公共标签保持。
+
+- [x] **步骤 5：提交**
+
+```bash
+git add internal/shadowrocket internal/app/build_integration_test.go README.md context.md
+git commit -m "feat(T11): 输出十三组代理策略"
+```
+
 ## 测试、验收与收尾
 
-### 任务 9：验收（acceptance-qa）
+### 任务 12：验收（acceptance-qa）
 
 > 本任务由 executing-plans 收尾审查阶段触发 acceptance-qa 按下表执行，不参与逐任务连续执行；报告与证据落盘特性目录 `acceptance/` 子目录。基线固定为实施前代码提交 `f2276af`，候选固定为进入验收时的功能分支 HEAD；两者必须消费同一份带 SHA-256 清单的 source/community/base-GeoIP/custom 快照。
 
 | Scenario / 检查项 | 维度 | 执行方式 | 目标 | 阈值/预期 | 验收证据 |
 |-------------------|------|---------|------|----------|---------|
-| Xray AsIs 域名路由等价 | e2e-router | 验收任务 (D) | 用户授权的同一台 PassWall2 路由器、同一 Shunt 节点，`domainStrategy='AsIs'`；依次安装基线/候选 | 保留 14 组语料逐请求命中组与最终 outbound 全相同；未命中域名也相同；不得用 GeoIP 补救域名差异 | `acceptance/router-xray-asis-baseline.jsonl`、`router-xray-asis-candidate.jsonl`、逐请求 diff 与 UCI/core 版本快照 |
+| Xray AsIs 域名路由等价 | e2e-router | 验收任务 (D) | 用户授权的同一台 PassWall2 路由器、同一 Shunt 节点，`domainStrategy='AsIs'`；依次安装基线/候选 | 保留 13 组语料逐请求最终 outbound 相同；基线 gfw/proxy/tld_not_cn 命中映射为候选 proxy；未命中域名也相同；不得用 GeoIP 补救域名差异 | `acceptance/router-xray-asis-baseline.jsonl`、`router-xray-asis-candidate.jsonl`、逐请求 diff 与 UCI/core 版本快照 |
 | Xray IPIfNonMatch 二次 IP 匹配等价 | e2e-router | 验收任务 (D) | 同一设备/节点切到 `domainStrategy='IPIfNonMatch'`，加入域名未命中后解析至 private/cn 的固定语料 | 域名首轮决策、解析 IP、二次匹配组、最终 outbound 四列逐请求一致 | `acceptance/router-xray-ipifnonmatch-*.jsonl` 与两轮匹配 diff |
 | sing-box 原生路由等价 | e2e-router | 验收任务 (D) | 同一设备的 sing-box Shunt 节点及同一语料；记录其原生 route 配置，不把 Xray 字段名套入报告 | 每个请求的命中 rule-set/group 与最终 outbound 一致 | `acceptance/router-singbox-*.jsonl`、生成配置摘要与 diff |
-| 静态规则规模下降至少 30% | perf-static | 验收任务 (D) | `f2276af` detached baseline worktree 与候选 worktree；同一不可变输入快照分别构建八资产 | 候选活动域名规则总数 ≤ 基线 70%；Shadowrocket `[Rule]` 行数 ≤ 70%；`[Rule]` UTF-8 字节数 ≤ 70% | `acceptance/static-metrics.json`，含两侧绝对值、比率、输入快照 hash、构建 commit；计数定义按 spec 术语表 |
+| 代理规则减少至少 30% 且整体不回升 | perf-static | 验收任务 (D) | `f2276af` detached baseline worktree 与候选 worktree；同一不可变输入快照分别构建八资产 | 候选 GFW/proxy/tld-not-cn 合并规则数 ≤ 基线 70%；活动域名规则总数、Shadowrocket `[Rule]` 行数与 UTF-8 字节数均严格低于基线 | `acceptance/static-metrics.json`，含两侧绝对值、比率、输入快照 hash、构建 commit；计数定义按 spec 术语表 |
 | 三种运行矩阵 RSS 下降至少 5% | perf-router | 验收任务 (D) | Xray AsIs、Xray IPIfNonMatch、sing-box 三格；同设备/节点/语料，固定冷启动、稳定等待和流量预热 | 每格基线与候选各采 5 次同口径 RSS；候选中位数 ≤ 自身基线 95%；任一格未达标即 FAIL | `acceptance/rss-samples.csv`（30 个原始样本）、`rss-summary.json`（中位数/比率）、进程命令与采样时刻 |
 | 仓库完整回归 | regression | 验收任务 (D) | 功能分支 worktree、本地真实 pinned 工具 | `go test ./...`、integration、`go vet ./...`、完整 build、四份 `sha256sum -c`、releasecmp、`git diff --check` 全部退出 0；publish 恰为八文件 | `acceptance/local-regression.log`、`publish-inventory.txt`、checksum 输出、工具版本 |
 | Shadowrocket 真机导入 | e2e-device | 验收任务 (D) | iPhone Shadowrocket 导入候选 `shadowrocket.conf` | 本轮仍为 DEFERRED；不得记 PASS，不阻塞本特性其余验收 | `acceptance/runtime-rule-residuals-acceptance.md` 中单列 DEFERRED、原因与后续入口 |
 
-- [ ] **步骤 1：建立同源基线并锁定输入**
+- [x] **步骤 1：建立同源基线并锁定输入**
 
 ```bash
 git worktree add --detach .worktrees/runtime-rule-residuals-baseline f2276af
@@ -2319,7 +2598,7 @@ mkdir -p .worktrees/runtime-rule-residuals-source-snapshot
 
 用仓库现有 `config.LoadSources` 与 `fetch.Client` 在一次受控采集里保存基线 sources 的全部响应（候选使用其中仍存在的同一 URL 子集）及 `config/geoip.base.json` 指向的 base DAT；community 固定为同一 bootstrap 目录快照。custom 使用同一个语义快照：复制当前 custom，但不包含已删除且本来为空的港澳台模板；旧基线允许该模板缺失。生成 `SHA256SUMS` 后只允许只读 replay，基线/候选构建日志必须逐 URL 记录同一个 snapshot SHA。若无法证明两侧共有输入字节相同，静态与路由验收不得开始。
 
-- [ ] **步骤 2：执行本地回归与静态计数**
+- [x] **步骤 2：执行本地回归与静态计数**
 
 在候选 worktree：
 
@@ -2336,9 +2615,9 @@ go test ./internal/releasecmp -count=1
 git diff --check
 ```
 
-基线/候选活动规则计数都用任务 1 decoder 展开对应 groups 实际引用：组内按 `kind/value/normalized attrs` 去重后求和、跨组重复分别计数；Shadowrocket 只统计 `[Rule]` header 后、`GEOIP,CN`/`FINAL` 之前的行及其原始 UTF-8 字节。报告用整数交叉乘法判断 `candidate*100 <= baseline*70`，避免浮点舍入掩盖失败。
+基线/候选活动规则计数都用任务 1 decoder 展开对应 groups 实际引用：组内按 `kind/value/normalized attrs` 去重后求和、跨组重复分别计数；合并 proxy 指标取基线 `gfw + proxy + tld_not_cn` 三组之和与候选唯一 `proxy` 组比较。Shadowrocket 只统计 `[Rule]` header 后、`GEOIP,CN`/`FINAL` 之前的行及其原始 UTF-8 字节。报告用整数交叉乘法判断合并 proxy 的 `candidate*100 <= baseline*70`，其余三项直接判断 `candidate < baseline`，避免浮点舍入掩盖失败。
 
-- [ ] **步骤 3：执行三种路由矩阵与 RSS 采样**
+- [ ] **步骤 3：执行三种路由矩阵与 RSS 采样（PARTIAL：RSS 已执行且整体 FAIL；逐请求路由出口 diff 尚未执行）**
 
 开始前只读记录设备型号、固件、PassWall2/Xray/sing-box 版本、当前 `/etc/config/passwall2` SHA-256、活动 Shunt node ID 与三族字段；在路由器执行下列精确备份（`ASSET_DIR` 来自设备当前 UCI，不从主机猜）：
 
@@ -2355,29 +2634,33 @@ sha256sum "$ACCEPTANCE_BACKUP/passwall2" "$ACCEPTANCE_BACKUP/geosite.dat" "$ACCE
 
 每格固定流程为：停止目标 core → 安装该侧 DAT/managed rules → 启动 → 等待相同稳定时长 → 发同一 corpus 预热 → 记录命中/出口 → 以相同命令采 RSS 5 次。基线与候选交替顺序固定为 `baseline → candidate`，三格之间恢复同一初始 UCI 与 DAT；任何迁移 warning、冲突拒绝或恢复失败进入报告且停止后续设备写入。
 
-- [ ] **步骤 4：写验收报告并提交证据**
+2026-08-16 真机 RSS 结果：Xray AsIs `115288 → 111132 KiB`（下降 3.6049%，FAIL），Xray IPIfNonMatch `115488 → 114612 KiB`（下降 0.7585%，FAIL）。sing-box 首轮单进程结果受冷启动堆波动污染；补充每侧 5 次独立冷启动后为 `55112 → 50096 KiB`（下降 9.1015%，PASS），同时 SRS 总字节下降 5.0184%。三格要求任一失败即整体 FAIL。HTTP 预热仅证明核心健康，不等同逐请求最终 outbound 证据，因此三种路由等价行仍未完成。
+
+- [x] **步骤 4：写验收报告并提交证据**
 
 `acceptance/runtime-rule-residuals-acceptance.md` 必须逐表格行写 `PASS`/`FAIL`/`BLOCKED`/`DEFERRED`，列出绝对值、比率、commit、输入 snapshot hash 与原始证据相对路径；不允许把本地 fake UCI 当设备 PASS。全部强制行 PASS 后：
 
 ```bash
 git add .spec-dev/2026-08-16-runtime-rule-residuals/acceptance
-git commit -m "test(T9): 记录残差优化验收"
+git commit -m "test(T12): 记录残差优化验收"
 ```
 
 若路由器不可达或没有设备写入授权，三种路由/RSS 行记 `BLOCKED` 并停在验收任务，不宣称本特性交付完成；Shadowrocket 真机行始终按 spec 记 `DEFERRED`。
 
-### 任务 10：合并与清理
+本次已写入验收报告与证据；用户已明确授权提交、推送与发版，证据随任务 9–12 的收敛提交一并纳入。验收期间发现 pinned GeoSite 编译器会随机遍历 map，已在发布前增加无损规范化并以相同封存输入连续两次构建逐字节验证；规范化对 document/tag/domain 未知 protobuf 字段采用失败关闭，并验证不会替换旧 publish。
+
+### 任务 13：合并与清理
 
 **资源台账**（清理依据；执行中创建即追加；行格式为“复选框、资源类型、精确标识、清理命令”）：
 
 - [ ] worktree: `.worktrees/runtime-rule-residuals` / branch `plan/2026-08-16-runtime-rule-residuals` —— `git worktree remove .worktrees/runtime-rule-residuals && git branch -d plan/2026-08-16-runtime-rule-residuals`
 - [ ] detached baseline worktree: `.worktrees/runtime-rule-residuals-baseline` —— `git worktree remove .worktrees/runtime-rule-residuals-baseline`
 - [ ] temporary source snapshot: `.worktrees/runtime-rule-residuals-source-snapshot` —— 校验验收报告已记录 `SHA256SUMS` 后执行 `rm -r .worktrees/runtime-rule-residuals-source-snapshot`
-- [ ] router config/DAT backup: `/tmp/passwall2-runtime-rule-residuals-acceptance` —— 读取其中 `asset-dir`，恢复 `/etc/config/passwall2`、`geosite.dat`、`geoip.dat`，执行 `uci commit passwall2` 并重启 PassWall2；回读三份 SHA-256 等于 `SHA256SUMS` 后执行 `rm -r /tmp/passwall2-runtime-rule-residuals-acceptance`
+- [x] router config/DAT backup: `/tmp/passwall2-runtime-rule-residuals-acceptance` —— 已恢复原始 Xray AsIs 配置及两个 DAT，三文件 `cmp` 一致、Google 健康检查 204；临时资产与本次 14 份安装器备份已删除。
 
 台账总则：**清理只遍历本台账、台账外一律不动**（可疑残留只报告不删）；共享缓存（`~/.cargo`、pnpm store、npm cache 等）默认保留，仅用户显式要求清理时才登记入账；台账限定持久资源（容器、测试库/表、临时目录、后台服务），worktree 内构建产物随 worktree 删除自然回收、不入账。
 
-- [ ] **步骤 1：全量验证（安全网）与归属裁决**
+- [x] **步骤 1：全量验证（安全网）与归属裁决**
 
 在 worktree 内运行：
 
@@ -2392,11 +2675,13 @@ git diff --check
 - 失败测试在相关测试范围内 → 修复并复跑全绿后进入步骤 2。
 - 失败测试在范围之外 → 归属裁决：在主工作区的源分支检出上复跑该测试（主工作区有未提交改动 → 先询问用户）。源分支同样失败 → 报告“既有失败”，请用户裁决是否阻塞合并，不自行静默忽略；源分支通过 → 判定为本次引入的回归，修复并复跑全绿后进入步骤 2。
 
-- [ ] **步骤 2：测试退役检查**
+- [x] **步骤 2：测试退役检查**
 
 扫描本计划“相关测试范围”内的测试，按 active spec 的现行 Scenario 名查找孤儿测试。重点候选是旧 `Test组名与顺序对齐YAML` 及所有以 BilibiliHMT 为一般能力的旧测试；任务 7/8 应已用新 Scenario 测试替换或删除。只有“测试名对不上任何 active spec 的现行 Scenario”且所属 Requirement 已 REMOVED/被 Superseded 标注两个条件同时成立才列为候选。候选非空 → 列清单征询用户，同意后删除并计入本任务提交；用户未确认则不删除。无候选 → 声明“无孤儿测试”。
 
-- [ ] **步骤 3：取代回写**
+检查结果：无孤儿测试。BilibiliHMT 相关保留测试均覆盖“已移除/禁止回归”或通用 forbidden-tag 能力；`Test组名与顺序对齐YAML` 已改为现行 13 组 Scenario。
+
+- [x] **步骤 3：取代回写**
 
 本 spec 对 `.spec-dev/2026-08-15-shadowrocket-conf/spec/shadowrocket-conf-design.md` 是部分取代，旧 spec 保持 `status: active`：
 
@@ -2404,10 +2689,10 @@ git diff --check
 2. 在旧 spec `### Requirement: 十六个具名策略组与默认出口` 标题下一行插入：
 
 ```markdown
-> **Superseded (2026-08-16)** — 本 Requirement 的组数、独立 GFW/BilibiliHMT 组及 `tld_not_cn` 可独立选择出口的契约，已由 `.spec-dev/2026-08-16-runtime-rule-residuals/spec/runtime-rule-residuals-design.md` 的十四组与绑定出口 Requirement 取代；reject/cn/private/direct 的既有默认、remarks 唯一性、空组失败和不写节点分面继续有效。
+> **Superseded (2026-08-16)** — 本 Requirement 的组数、独立 GFW/BilibiliHMT/tld_not_cn 组及其可独立选择出口的契约，已由 `.spec-dev/2026-08-16-runtime-rule-residuals/spec/runtime-rule-residuals-design.md` 的十三组与合并 proxy Requirement 取代；reject/cn/private/direct 的既有默认、remarks 唯一性、空组失败和不写节点分面继续有效。
 ```
 
-3. 在旧成功标准后加注：16 组已被 14 组取代，八资产与 checksum 成功标准继续有效。
+3. 在旧成功标准后加注：16 组已被 13 组取代，八资产与 checksum 成功标准继续有效。
 4. 在旧非目标“修改 PassWall2 安装器、UCI 托管组或两个 dat 的语义”后加注：该非目标仅适用于旧交付，本特性已明确取代。
 5. 在旧关键决策“16 个具名 select 组”后加注：组数与 tld policy 由新 spec 取代，其余默认出口继续共存。
 6. 在旧风险“组间不去重”后加注：完整公共标签仍不做跨组改写；默认运行组现由编译后残差进行有证明裁剪。

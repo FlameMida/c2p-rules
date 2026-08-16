@@ -20,13 +20,13 @@ spec_dev:
 
 # Shadowrocket 胖配置 设计
 
-> **Superseded-pending (2026-08-16)** — 本 spec 的「Requirement: 十六个具名策略组与默认出口」将被 .spec-dev/2026-08-16-runtime-rule-residuals/spec/runtime-rule-residuals-design.md 部分取代（待其交付）；新工作以新 spec 为准，本 spec 仍描述当前已实现行为。
-
 ## 背景与目标
 
 本仓库已把 Clash 规则与 GeoSite/GeoIP 底包合成 PassWall2 可消费的 `geosite.dat` / `geoip.dat`。iOS Shadowrocket 没有 `GEOSITE` 语法，也不能加载这两个 dat。需要把同一套托管分流转成一份可远程导入、可自动更新的 Surge 风格配置。
 
 **成功标准 / Success criteria**：一次完整构建在 `publish/` 中额外产出通过校验的 `shadowrocket.conf` 与其 SHA-256 文件；conf 内联 16 个托管组的完整规则与具名策略组；文档给出 HTTPS / 二维码 / scheme 三种导入方式；首次上线后仅 conf 内容变化也会触发发布。
+
+> **Superseded (2026-08-16)** — 上述 16 组成功标准已由 13 组取代；八资产闭集、checksum、导入入口与发布指纹成功标准继续有效。
 
 ## 非目标
 
@@ -34,6 +34,7 @@ spec_dev:
 - 把 `geosite.dat` / `geoip.dat` 当作 Shadowrocket 输入
 - 写入任何节点、地区筛选子组（如「香港节点」）
 - 修改 PassWall2 安装器、UCI 托管组或两个 dat 的语义
+  - **Superseded (2026-08-16)** — 该非目标仅适用于本旧交付；runtime-rule-residuals 特性已明确取代。
 - 让 App 校验 SHA-256
 - 真机导入、自动更新与大 conf 编译耗时（DEFERRED，与现有路由器设备验收同级）
 
@@ -58,6 +59,7 @@ spec_dev:
 - 交付形态：单份胖 conf + checksum，作为 Release 第 7、8 号资产 —— 与精确集合门禁合拍，且 App 无 dat 入口（详见 `../../adr/0001-shadowrocket-fat-conf.md`）
 - 规则源：从编译后的最终 dat 按托管组 tag 展开 —— 含 include 与 GeoIP 底包，与路由器一致（详见 `../../adr/0002-expand-from-compiled-dat.md`）
 - 策略：16 个具名 select 组；广告默认 REJECT 可改；中国大陆 / 私有网络 / 直连规则默认 DIRECT 可改；其余默认 PROXY 可改 DIRECT
+  - **Superseded (2026-08-16)** — 组数与 `tld-not-cn` policy 由 runtime-rule-residuals spec 取代；其余默认出口继续共存。
 - 不写入节点；`update-url` 指向 `releases/latest/download/shadowrocket.conf`；conf 不嵌入 `RELEASE_TAG`
 - `regexp` 跳过并计数，不导致构建失败
 - 导入：HTTPS 粘贴为必须，二维码与 `shadowrocket://config/add/{url}` 为文档增强
@@ -65,7 +67,7 @@ spec_dev:
 
 ## 取代与共存
 
-无相交 active spec。
+`.spec-dev/2026-08-16-runtime-rule-residuals/spec/runtime-rule-residuals-design.md` 对组数、独立 GFW/BilibiliHMT/tld_not_cn 组及运行规则裁剪契约作部分取代；本 spec 的八资产与 Shadowrocket 胖配置契约继续 active。
 
 ## 行为规范（Requirements）
 
@@ -130,6 +132,8 @@ spec_dev:
 - **THEN** `[Rule]` 中不出现该正则原文，构建成功
 
 ### Requirement: 十六个具名策略组与默认出口
+
+> **Superseded (2026-08-16)** — 本 Requirement 的组数、独立 GFW/BilibiliHMT/tld_not_cn 组及其可独立选择出口的契约，已由 `.spec-dev/2026-08-16-runtime-rule-residuals/spec/runtime-rule-residuals-design.md` 的十三组与合并 proxy Requirement 取代；reject/cn/private/direct 的既有默认、remarks 唯一性、空组失败和不写节点分面继续有效。
 
 conf SHALL 含 `[Proxy Group]` 段，为每个托管组生成一个 `select` 策略组，组名等于该组 `remarks`。所有策略组名 SHALL 唯一，且 SHALL NOT 与渲染器使用的内建策略名 `PROXY`、`DIRECT`、`REJECT`（不区分大小写）冲突。默认出口按 **group id** 决定，不按 remarks 文案匹配：`reject` 默认 `REJECT`；`cn`、`private`、`direct` 默认 `DIRECT`；其余 id 默认 `PROXY`。每组行 SHALL 含对应候选（广告另含 `PROXY` 与 `DIRECT`；国内三类另含 `PROXY`；其余另含 `DIRECT`），并写 `policy-select-name=<默认出口>`，不得只靠「列表第一项即默认」。`[Rule]` 中该组规则的策略列 SHALL 为该组 remarks。conf SHALL NOT 包含 `[Proxy]` 节点定义。
 
@@ -287,6 +291,7 @@ func Render(groups []GroupRules, repo string) ([]byte, error)
 - `shadowrocket://config/add/` 为社区手册语法：HTTPS 粘贴为必须入口。
 - 用户尚未添加订阅时，select 组仍可用 PROXY/DIRECT/REJECT。
 - 组间不去重：同一域名可按 YAML 顺序先中 YouTube 再中 Google。
+  - **Superseded (2026-08-16)** — 完整公共标签仍不做跨组改写；默认运行组现由编译后残差进行有证明裁剪。
 - 二维码图片不进入八资产闭集，避免发布集合再膨胀。
 
 ## 开放问题

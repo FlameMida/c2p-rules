@@ -1,0 +1,45 @@
+BEGIN label=baseline commit=f2276afe7a7204d1d6d47294812bb7079c0e2944 snapshot_sha256=ff4587b6d9da756e7264d5f9e01132219e095bd7584bf47df74d614887eda805
+REPLAY label=baseline url=https://github.com/Loyalsoldier/geoip/releases/latest/download/geoip.dat sha256=b406dd3759037188b0674b110dcaf33664a699c0518152d0ca0d9023fc774c6b bytes=17344919
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/reject.txt sha256=2a8d49b95735cd7a1d4d89c85236218ba1a4ecfd69771e1863db7bde50db0391 bytes=4714371
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/icloud.txt sha256=f1fb7e9d17400071bf77d853b2a3148ccb6a13d785cb97e73f1693142682b23f bytes=1141
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/apple.txt sha256=70f9f77e0022fc1e79d597d2fca5a3bbfa8bfe0f7542694b455f8a70004f5ba3 bytes=5387
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/google.txt sha256=21a04f287800943b3fdfdef1f843173086171d9a0b5c9c33c3f73e1ec77d4c9e bytes=3368
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/proxy.txt sha256=a58a8e8a30bec87b64c36ba97ec3ce7199746372808dcf9be4605d763a7577c6 bytes=616668
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt sha256=5cf8a7f24be48ce747509df09f2f7bdac7434f5f3083a6590efa3823d7de2b47 bytes=2308237
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/private.txt sha256=3a04b128200ef8097d73b1496cbb23d24bc1e05d42fffb09f07c51699efb00b2 bytes=3478
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/gfw.txt sha256=6c7ef010ee96e8a885c1239d067a7664a78a45f06e3ea044ab72fbb3b60bdfed bytes=93875
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/tld-not-cn.txt sha256=67ada67716332c39e0afea361dd4b2ad66f55d0a92d3d1b90a7a1d4d47283f62 bytes=11820
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/telegramcidr.txt sha256=328fca88c675763111c7f7585ec504e5c21ab9afb7a8ce6df33b7ac01b8a3ee0 bytes=274
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/cncidr.txt sha256=f7136b7c7adeb11a31c2d4bb738e968b605d046159dba8f5ae24deebd91eae9f bytes=118660
+REPLAY label=baseline url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/lancidr.txt sha256=82920b241dc328f1dc99849cf733ed8675a00a4ee0bdf64c892b332dfb7e1e2e bytes=341
+REPLAY label=baseline url=https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/YouTube.txt sha256=95d459f857ce1cf7ad1a0ebe8a703f8af05219ed6b901ded520a8f6da26b73d7 bytes=448
+REPLAY label=baseline url=https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/Netflix.txt sha256=dec2f648b06986e1d0a6df47e36d9b5da60b89087f65ce54809f65972508bc5f bytes=1465
+REPLAY label=baseline url=https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/Spotify.txt sha256=9432d542207908ea10c18b9c11a3c23f926861c2fdf0ec598f93f4bd04ba5649 bytes=245
+REPLAY label=baseline url=https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/BilibiliHMT.txt sha256=dc67cdb6c5b00044c2845a32364142fd141299ee0cc928f9265a05e47cc9a977 bytes=820
+REPLAY label=baseline url=https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/TikTok.txt sha256=882662fb2fcf4d40cf5a7c6efbca0f23cc3be6228a9333c0d97279392f1c623b bytes=316
+REPLAY label=baseline url=https://ruleset.skk.moe/Clash/non_ip/ai.txt sha256=dc0d624c5a4873fd91281c64b752f458a4d4299e155a5f73193e5b3f4b4733fc bytes=1910
+END label=baseline status=PASS
+BEGIN label=candidate commit=b74c025f0498d7d3b134926e57fafe9fc4a57483+uncommitted tracked_patch_sha256=8317a72d938ad62c3a551292090e54de7264d39f65484d7f0e686804b27eb77e snapshot_sha256=ff4587b6d9da756e7264d5f9e01132219e095bd7584bf47df74d614887eda805
+REPLAY label=candidate url=https://github.com/Loyalsoldier/geoip/releases/latest/download/geoip.dat sha256=b406dd3759037188b0674b110dcaf33664a699c0518152d0ca0d9023fc774c6b bytes=17344919
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/reject.txt sha256=2a8d49b95735cd7a1d4d89c85236218ba1a4ecfd69771e1863db7bde50db0391 bytes=4714371
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/icloud.txt sha256=f1fb7e9d17400071bf77d853b2a3148ccb6a13d785cb97e73f1693142682b23f bytes=1141
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/apple.txt sha256=70f9f77e0022fc1e79d597d2fca5a3bbfa8bfe0f7542694b455f8a70004f5ba3 bytes=5387
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/google.txt sha256=21a04f287800943b3fdfdef1f843173086171d9a0b5c9c33c3f73e1ec77d4c9e bytes=3368
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/proxy.txt sha256=a58a8e8a30bec87b64c36ba97ec3ce7199746372808dcf9be4605d763a7577c6 bytes=616668
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt sha256=5cf8a7f24be48ce747509df09f2f7bdac7434f5f3083a6590efa3823d7de2b47 bytes=2308237
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/private.txt sha256=3a04b128200ef8097d73b1496cbb23d24bc1e05d42fffb09f07c51699efb00b2 bytes=3478
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/gfw.txt sha256=6c7ef010ee96e8a885c1239d067a7664a78a45f06e3ea044ab72fbb3b60bdfed bytes=93875
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/tld-not-cn.txt sha256=67ada67716332c39e0afea361dd4b2ad66f55d0a92d3d1b90a7a1d4d47283f62 bytes=11820
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/telegramcidr.txt sha256=328fca88c675763111c7f7585ec504e5c21ab9afb7a8ce6df33b7ac01b8a3ee0 bytes=274
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/cncidr.txt sha256=f7136b7c7adeb11a31c2d4bb738e968b605d046159dba8f5ae24deebd91eae9f bytes=118660
+REPLAY label=candidate url=https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/lancidr.txt sha256=82920b241dc328f1dc99849cf733ed8675a00a4ee0bdf64c892b332dfb7e1e2e bytes=341
+REPLAY label=candidate url=https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/YouTube.txt sha256=95d459f857ce1cf7ad1a0ebe8a703f8af05219ed6b901ded520a8f6da26b73d7 bytes=448
+REPLAY label=candidate url=https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/Netflix.txt sha256=dec2f648b06986e1d0a6df47e36d9b5da60b89087f65ce54809f65972508bc5f bytes=1465
+REPLAY label=candidate url=https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/Spotify.txt sha256=9432d542207908ea10c18b9c11a3c23f926861c2fdf0ec598f93f4bd04ba5649 bytes=245
+REPLAY label=candidate url=https://raw.githubusercontent.com/xiaolin-007/clash/main/rule/TikTok.txt sha256=882662fb2fcf4d40cf5a7c6efbca0f23cc3be6228a9333c0d97279392f1c623b bytes=316
+REPLAY label=candidate url=https://ruleset.skk.moe/Clash/non_ip/ai.txt sha256=dc0d624c5a4873fd91281c64b752f458a4d4299e155a5f73193e5b3f4b4733fc bytes=1910
+END label=candidate status=PASS elapsed_seconds=13.880 group_count=13 unknown_schema_policy=fail_closed
+REPEAT label=candidate status=PASS byte_identical=true
+SHA256 label=candidate-repeat asset=geosite.dat value=aae0bfa7b4410b42b6b18fbce77f94a46fed88e474e1a5a1e189aaa79367c5a8
+SHA256 label=candidate-repeat asset=shadowrocket.conf value=22789561f025e385255b0de34423a2f0b5ae0d85b7f9331c8c5ebd2e8fc8a039
+SHA256 label=candidate-repeat asset=install_passwall2_rules.sh value=400466d6eceb9be5517f9743dcabb0326b2c70a99537f5ddee371c8539c65518

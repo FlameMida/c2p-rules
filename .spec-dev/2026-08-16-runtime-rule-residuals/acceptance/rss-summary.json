@@ -1,0 +1,67 @@
+{
+  "device": {
+    "model": "FastRhino R66S",
+    "firmware": "OpenWrt 24.10.3 R26.02.20 (by flippy)",
+    "kernel": "6.18.12-flippy-94+",
+    "passwall2": "26.7.16-r1",
+    "xray": "26.7.11-r1",
+    "sing_box": "1.13.14-r1"
+  },
+  "threshold": {
+    "candidate_at_most_baseline_ratio": 0.95,
+    "required_reduction_percent": 5
+  },
+  "primary_method": {
+    "stable_wait_seconds": 25,
+    "warmup_urls": 7,
+    "samples_per_process": 5,
+    "sample_interval_seconds": 2
+  },
+  "matrices": {
+    "xray_asis": {
+      "baseline_median_rss_kib": 115288,
+      "candidate_median_rss_kib": 111132,
+      "candidate_ratio": 0.963951148428,
+      "reduction_percent": 3.6049,
+      "status": "FAIL"
+    },
+    "xray_ipifnonmatch": {
+      "baseline_median_rss_kib": 115488,
+      "candidate_median_rss_kib": 114612,
+      "candidate_ratio": 0.992414796342,
+      "reduction_percent": 0.7585,
+      "status": "FAIL"
+    },
+    "sing_box_native": {
+      "initial_single_process_comparison": {
+        "baseline_median_rss_kib": 50224,
+        "candidate_median_rss_kib": 55868,
+        "candidate_ratio": 1.112376553042,
+        "status": "NOISY_FAIL"
+      },
+      "independent_cold_start_diagnostic": {
+        "baseline_process_medians_rss_kib": [50224, 55080, 55112, 56468, 61632],
+        "candidate_process_medians_rss_kib": [55868, 49224, 49276, 54548, 50096],
+        "baseline_median_of_process_medians_rss_kib": 55112,
+        "candidate_median_of_process_medians_rss_kib": 50096,
+        "candidate_ratio": 0.908985338946,
+        "reduction_percent": 9.1015,
+        "status": "PASS"
+      },
+      "compiled_rule_evidence": {
+        "baseline_srs_count": 20,
+        "candidate_srs_count": 17,
+        "baseline_srs_bytes": 2144539,
+        "candidate_srs_bytes": 2036918,
+        "srs_reduction_percent": 5.0184,
+        "baseline_config_bytes": 17329,
+        "candidate_config_bytes": 15581,
+        "config_reduction_percent": 10.0871
+      },
+      "status": "PASS"
+    }
+  },
+  "overall_rss_status": "FAIL",
+  "overall_reason": "Xray AsIs and Xray IPIfNonMatch did not reach the required 5 percent reduction",
+  "device_restore": "PASS"
+}

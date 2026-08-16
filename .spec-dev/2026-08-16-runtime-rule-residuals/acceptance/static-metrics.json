@@ -1,0 +1,88 @@
+{
+  "snapshot_sha256": "ff4587b6d9da756e7264d5f9e01132219e095bd7584bf47df74d614887eda805",
+  "baseline": {
+    "commit": "f2276afe7a7204d1d6d47294812bb7079c0e2944",
+    "group_count": 16,
+    "gfw_proxy_tld_active_domain_rules": 32208,
+    "active_domain_rules": 316761,
+    "active_domain_rules_by_group": {
+      "ai": 51,
+      "apple_services": 1835,
+      "bilibili_hmt": 8,
+      "cn": 4217,
+      "direct": 111528,
+      "gfw": 4337,
+      "google": 1122,
+      "netflix": 31,
+      "private": 131,
+      "proxy": 27042,
+      "reject": 165372,
+      "spotify": 30,
+      "telegram": 0,
+      "tiktok": 46,
+      "tld_not_cn": 829,
+      "youtube": 182
+    },
+    "shadowrocket_rule_lines": 322228,
+    "shadowrocket_rule_bytes": 14152790
+  },
+  "candidate": {
+    "commit": "b74c025f0498d7d3b134926e57fafe9fc4a57483+uncommitted-working-tree",
+    "tracked_patch_sha256": "8317a72d938ad62c3a551292090e54de7264d39f65484d7f0e686804b27eb77e",
+    "untracked_source_sha256": {
+      "internal/app/community.go": "b60a3cc6fd2b5833aa98f7b5f4bed8f4e144feb43047d10fd67162368b0d399c",
+      "internal/app/residual_specs.go": "7b1c9f3af82da3678fadc241d2562622d39b0483602e33c9c2c689f44fed3df3",
+      "internal/app/testdata/community/direct": "b29a582fbc4765b559f90e11a6aab5b7d8ff6e40ef099a8d41cb63e3c13f4dde",
+      "internal/geodat/canonical.go": "6091d3ec4bf41a0797d439691259ee977701efe21e85a24bf75648ea1932c61a",
+      "internal/geodat/canonical_test.go": "47605332649d97bf70ef17871ee801a83cf4780be63806958d6d32ed5207d645",
+      "internal/geosite/generated_internal_test.go": "c8a5b0372da2afa934d5d9d4e16a7618a06b82f396b65330f619854c7b9373dd"
+    },
+    "group_count": 13,
+    "gfw_proxy_tld_active_domain_rules": 18938,
+    "active_domain_rules": 297589,
+    "active_domain_rules_by_group": {
+      "ai": 51,
+      "apple_services": 1835,
+      "cn": 4217,
+      "direct": 105634,
+      "google": 1122,
+      "netflix": 31,
+      "private": 131,
+      "proxy": 18938,
+      "reject": 165372,
+      "spotify": 30,
+      "telegram": 0,
+      "tiktok": 46,
+      "youtube": 182
+    },
+    "shadowrocket_rule_lines": 303044,
+    "shadowrocket_rule_bytes": 13414445
+  },
+  "comparisons": {
+    "active_domain_rules": {
+      "candidate": 297589,
+      "baseline": 316761,
+      "ratio": 0.9394748722222749,
+      "candidate_less_than_baseline": true
+    },
+    "gfw_proxy_tld_active_domain_rules": {
+      "candidate": 18938,
+      "baseline": 32208,
+      "ratio": 0.5879905613512171,
+      "candidate_at_most_70_percent": true
+    },
+    "shadowrocket_rule_bytes": {
+      "candidate": 13414445,
+      "baseline": 14152790,
+      "ratio": 0.9478304277808008,
+      "candidate_less_than_baseline": true
+    },
+    "shadowrocket_rule_lines": {
+      "candidate": 303044,
+      "baseline": 322228,
+      "ratio": 0.9404645158086821,
+      "candidate_less_than_baseline": true
+    }
+  },
+  "status": "PASS"
+}
