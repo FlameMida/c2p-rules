@@ -2653,9 +2653,9 @@ git commit -m "test(T12): 记录残差优化验收"
 
 **资源台账**（清理依据；执行中创建即追加；行格式为“复选框、资源类型、精确标识、清理命令”）：
 
-- [ ] worktree: `.worktrees/runtime-rule-residuals` / branch `plan/2026-08-16-runtime-rule-residuals` —— `git worktree remove .worktrees/runtime-rule-residuals && git branch -d plan/2026-08-16-runtime-rule-residuals`
-- [ ] detached baseline worktree: `.worktrees/runtime-rule-residuals-baseline` —— `git worktree remove .worktrees/runtime-rule-residuals-baseline`
-- [ ] temporary source snapshot: `.worktrees/runtime-rule-residuals-source-snapshot` —— 校验验收报告已记录 `SHA256SUMS` 后执行 `rm -r .worktrees/runtime-rule-residuals-source-snapshot`
+- [x] worktree: `.worktrees/runtime-rule-residuals` / branch `plan/2026-08-16-runtime-rule-residuals` —— 已在快进合并 `4081ec9` 后移除 worktree 并删除分支。
+- [x] detached baseline worktree: `.worktrees/runtime-rule-residuals-baseline` —— 已移除；其中仅残留验收构建产生的空 `.commit.lock`。
+- [x] temporary source snapshot: `.worktrees/runtime-rule-residuals-source-snapshot` —— 验收报告已记录 `SHA256SUMS`；恢复只读快照的属主写权限后已删除。
 - [x] router config/DAT backup: `/tmp/passwall2-runtime-rule-residuals-acceptance` —— 已恢复原始 Xray AsIs 配置及两个 DAT，三文件 `cmp` 一致、Google 健康检查 204；临时资产与本次 14 份安装器备份已删除。
 
 台账总则：**清理只遍历本台账、台账外一律不动**（可疑残留只报告不删）；共享缓存（`~/.cargo`、pnpm store、npm cache 等）默认保留，仅用户显式要求清理时才登记入账；台账限定持久资源（容器、测试库/表、临时目录、后台服务），worktree 内构建产物随 worktree 删除自然回收、不入账。
@@ -2699,7 +2699,7 @@ git diff --check
 
 旧 spec 不翻 `superseded`、不填写 `superseded_by`；这是部分取代，不执行 covers 差集接管。
 
-- [ ] **步骤 4：合并回来源分支**
+- [x] **步骤 4：合并回来源分支**
 
 先确认用户已明确授权合并/提交；没有授权则停下交接，不把计划阶段的 `ok` 推断为合并授权。获得授权后：
 
@@ -2710,11 +2710,11 @@ git merge plan/2026-08-16-runtime-rule-residuals
 
 合并冲突、或主工作区有未提交改动 → 停下向计划作者确认，不强行合并。
 
-- [ ] **步骤 5：清理（按资源台账逐条执行）**
+- [x] **步骤 5：清理（按资源台账逐条执行）**
 
 先恢复并回读路由器配置，再逐条执行资源台账中的 source snapshot、baseline worktree、功能 worktree 清理命令并勾选。命令执行失败 → 该行保留未勾选并报告用户；资源已不存在 → 勾选并注明“已不存在”。台账外的文件、进程、设备数据一律不动。
 
-- [ ] **步骤 6：sync_commit 锚定**
+- [x] **步骤 6：sync_commit 锚定**
 
 ```bash
 SYNC=$(git rev-parse HEAD)
