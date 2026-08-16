@@ -143,9 +143,13 @@ func (t *Template) BaseURI() string {
 	return t.baseURI
 }
 
-func WriteConfig(template *Template, inputs []Input, baseDatPath, publishDir, outputPath string) error {
+func WriteConfig(template *Template, inputs []Input, wantedTags []string, baseDatPath, publishDir, outputPath string) error {
 	if template == nil {
 		return fmt.Errorf("geoip template is nil")
+	}
+	wantedTags, err := normalizeWantedTags(wantedTags)
+	if err != nil {
+		return err
 	}
 	baseInfo, err := os.Stat(baseDatPath)
 	if err != nil {
@@ -218,6 +222,7 @@ func WriteConfig(template *Template, inputs []Input, baseDatPath, publishDir, ou
 	}
 	outputArgs["outputDir"] = publishAbsolute
 	outputArgs["outputName"] = "geoip.dat"
+	outputArgs["wantedList"] = wantedTags
 
 	encoded, err := json.MarshalIndent(document, "", "  ")
 	if err != nil {
@@ -228,6 +233,25 @@ func WriteConfig(template *Template, inputs []Input, baseDatPath, publishDir, ou
 		return fmt.Errorf("write geoip config %s: %w", outputPath, err)
 	}
 	return nil
+}
+
+func normalizeWantedTags(tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return nil, fmt.Errorf("geoip output wanted tags must be non-empty")
+	}
+	unique := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		if !tagPattern.MatchString(tag) {
+			return nil, fmt.Errorf("invalid geoip output tag %q", tag)
+		}
+		unique[tag] = struct{}{}
+	}
+	result := make([]string, 0, len(unique))
+	for tag := range unique {
+		result = append(result, tag)
+	}
+	sort.Strings(result)
+	return result, nil
 }
 
 func cloneObject(value map[string]any) map[string]any {

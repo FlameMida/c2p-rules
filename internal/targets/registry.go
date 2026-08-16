@@ -42,9 +42,6 @@ func New(sources []model.Source, lookup BaseLookup) (*Registry, error) {
 			if item.output == nil {
 				continue
 			}
-			if IsGenerated(item.side, item.output.Tag) {
-				return nil, fmt.Errorf("source %q claims generated-only target %s:%s", source.ID, item.side, item.output.Tag)
-			}
 			if !targetPattern.MatchString(item.output.Tag) {
 				return nil, fmt.Errorf("source %q has invalid %s tag %q", source.ID, item.side, item.output.Tag)
 			}
@@ -60,16 +57,6 @@ func New(sources []model.Source, lookup BaseLookup) (*Registry, error) {
 			}
 		}
 	}
-	for _, tag := range GeneratedGeoSiteTags() {
-		exists, err := lookup(model.GeoSite, tag)
-		if err != nil {
-			return nil, fmt.Errorf("lookup generated-only target geosite:%s: %w", tag, err)
-		}
-		if exists {
-			return nil, fmt.Errorf("generated-only target geosite:%s already exists in base/community", tag)
-		}
-	}
-
 	registry := &Registry{
 		final: map[model.Side]map[string]struct{}{
 			model.GeoSite: {},
@@ -108,9 +95,6 @@ func New(sources []model.Source, lookup BaseLookup) (*Registry, error) {
 func (r *Registry) Require(side model.Side, tag string) error {
 	if r == nil || r.lookup == nil {
 		return fmt.Errorf("target registry is not initialized")
-	}
-	if IsGenerated(side, tag) {
-		return fmt.Errorf("target %s:%s is generated-only and cannot accept custom input", side, tag)
 	}
 	if tags, ok := r.final[side]; ok {
 		if _, exists := tags[tag]; exists {

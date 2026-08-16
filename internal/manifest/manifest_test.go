@@ -25,9 +25,14 @@ func TestManifestUsesOutputTagsAndOnlyForbidsExplicitLegacyTags(t *testing.T) {
 	if !slices.Contains(doc.Required.GeoSite, "google") || slices.Contains(doc.Required.GeoSite, "loyalsoldier-google") {
 		t.Fatalf("required=%v", doc.Required.GeoSite)
 	}
-	for _, tag := range targets.GeneratedGeoSiteTags() {
+	for _, tag := range targets.ResidualGeoSiteTags() {
 		if !slices.Contains(doc.Required.GeoSite, tag) {
-			t.Fatalf("generated tag %s missing from required=%v", tag, doc.Required.GeoSite)
+			t.Fatalf("residual tag %s missing from required=%v", tag, doc.Required.GeoSite)
+		}
+	}
+	for _, tag := range targets.RetiredGeoSiteTags() {
+		if !slices.Contains(doc.Forbidden.GeoSite, tag) {
+			t.Fatalf("retired tag %s missing from forbidden=%v", tag, doc.Forbidden.GeoSite)
 		}
 	}
 	if !slices.Contains(doc.Forbidden.GeoSite, "loyalsoldier-google") || !slices.Contains(doc.Forbidden.GeoSite, "xiaolin-netflix") || !slices.Contains(doc.Forbidden.GeoIP, "xiaolin-netflix") {
@@ -65,7 +70,7 @@ func TestManifestAddsGroupRefsAndBaselineRequirements(t *testing.T) {
 	doc := manifest.Build(nil, []model.Group{{
 		ID: "apple", GeoSite: []string{"icloud", "apple"}, GeoIP: []string{"private"},
 	}})
-	if !reflect.DeepEqual(doc.Required.GeoSite, []string{"apple", "cn", targets.DirectResidualTag, targets.ProxyResidualTag, "icloud"}) {
+	if !reflect.DeepEqual(doc.Required.GeoSite, []string{"apple", "cn", targets.DirectResidualTag, "icloud", targets.ProxyResidualTag}) {
 		t.Fatalf("geosite=%v", doc.Required.GeoSite)
 	}
 	if !reflect.DeepEqual(doc.Required.GeoIP, []string{"cn", "private"}) {

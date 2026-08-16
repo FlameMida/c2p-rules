@@ -1,28 +1,26 @@
 package targets
 
-import (
-	"strings"
-
-	"clash-rules-srs/internal/model"
-)
+import "strings"
 
 const (
-	ProxyResidualTag  = "crs-proxy-residual"
-	DirectResidualTag = "crs-direct-residual"
+	ProxyResidualTag  = "proxy"
+	DirectResidualTag = "direct"
 )
 
-var generatedGeoSiteTags = []string{DirectResidualTag, ProxyResidualTag}
+var residualGeoSiteTags = []string{DirectResidualTag, ProxyResidualTag}
+var retiredGeoSiteTags = []string{"crs-direct-residual", "crs-proxy-residual", "gfw", "tld-not-cn"}
 
-func GeneratedGeoSiteTags() []string {
-	return append([]string(nil), generatedGeoSiteTags...)
+func ResidualGeoSiteTags() []string {
+	return append([]string(nil), residualGeoSiteTags...)
 }
 
-func IsGenerated(side model.Side, tag string) bool {
-	if side != model.GeoSite {
-		return false
-	}
-	for _, generated := range generatedGeoSiteTags {
-		if strings.EqualFold(tag, generated) {
+func RetiredGeoSiteTags() []string {
+	return append([]string(nil), retiredGeoSiteTags...)
+}
+
+func IsIntermediateGeoSiteTag(tag string) bool {
+	for _, intermediate := range []string{"gfw", "tld-not-cn"} {
+		if strings.EqualFold(tag, intermediate) {
 			return true
 		}
 	}

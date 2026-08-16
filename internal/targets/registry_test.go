@@ -71,9 +71,6 @@ func TestRegistryPropagatesBaseLookupErrors(t *testing.T) {
 	want := errors.New("probe failed")
 	output := model.Output{Tag: "google", Mode: model.MergeBase}
 	_, err := targets.New([]model.Source{{ID: "source", Outputs: model.Outputs{GeoSite: &output}}}, func(_ model.Side, tag string) (bool, error) {
-		if targets.IsGenerated(model.GeoSite, tag) {
-			return false, nil
-		}
 		return false, want
 	})
 	if !errors.Is(err, want) || !strings.Contains(err.Error(), "geosite:google") {
@@ -91,8 +88,6 @@ func TestRegistryLooksUpTargetsInStableOrder(t *testing.T) {
 		{ID: "b", Outputs: model.Outputs{GeoIP: &b}},
 	}
 	want := []string{
-		"geosite:" + targets.DirectResidualTag,
-		"geosite:" + targets.ProxyResidualTag,
 		"geosite:a",
 		"geosite:z",
 		"geoip:b",
@@ -112,47 +107,14 @@ func TestRegistryLooksUpTargetsInStableOrder(t *testing.T) {
 	}
 }
 
-func Test生成标签被来源占用(t *testing.T) {
-	for _, owner := range []string{"source", "community"} {
-		t.Run(owner, func(t *testing.T) {
-			lookup := func(side model.Side, tag string) (bool, error) {
-				return owner == "community" && side == model.GeoSite && tag == targets.ProxyResidualTag, nil
-			}
-			var sources []model.Source
-			if owner == "source" {
-				output := model.Output{Tag: targets.ProxyResidualTag, Mode: model.Create}
-				sources = []model.Source{{ID: "reserved-owner", Outputs: model.Outputs{GeoSite: &output}}}
-			}
-			_, err := targets.New(sources, lookup)
-			if err == nil || !strings.Contains(err.Error(), targets.ProxyResidualTag) || !strings.Contains(err.Error(), "generated") {
-				t.Fatalf("err=%v", err)
-			}
-		})
-	}
-}
-
-func TestGenerated标签拒绝CustomRequire(t *testing.T) {
-	registry, err := targets.New(nil, func(model.Side, string) (bool, error) { return false, nil })
+func TestResidual标签由普通Source和Custom共享(t *testing.T) {
+	output := model.Output{Tag: targets.ProxyResidualTag, Mode: model.Create}
+	registry, err := targets.New([]model.Source{{ID: "proxy", Outputs: model.Outputs{GeoSite: &output}}}, func(model.Side, string) (bool, error) { return false, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = registry.Require(model.GeoSite, targets.DirectResidualTag)
-	if err == nil || !strings.Contains(err.Error(), "generated") {
+	err = registry.Require(model.GeoSite, targets.ProxyResidualTag)
+	if err != nil {
 		t.Fatalf("err=%v", err)
-	}
-}
-
-func TestGenerated标签身份不区分大小写(t *testing.T) {
-	for _, tag := range []string{"CRS-PROXY-RESIDUAL", "Crs-Direct-Residual"} {
-		if !targets.IsGenerated(model.GeoSite, tag) {
-			t.Fatalf("%q was not recognized as generated-only", tag)
-		}
-		output := model.Output{Tag: tag, Mode: model.Create}
-		_, err := targets.New([]model.Source{{ID: "mixed-case", Outputs: model.Outputs{GeoSite: &output}}}, func(model.Side, string) (bool, error) {
-			return false, nil
-		})
-		if err == nil || !strings.Contains(err.Error(), "generated") {
-			t.Fatalf("err=%v", err)
-		}
 	}
 }

@@ -86,7 +86,7 @@ func TestGFW与Proxy合并且服务组优先(t *testing.T) {
 		"youtube": {{Kind: model.DomainSuffix, Value: "youtube.example"}},
 	})
 	got, report, err := geosite.Derive(tags, geosite.ResidualSpec{
-		OutputTag: "crs-proxy-residual", BasisTags: []string{"gfw", "proxy"}, EarlierActiveTags: []string{"youtube"},
+		OutputTag: "proxy", BasisTags: []string{"gfw", "proxy"}, EarlierActiveTags: []string{"youtube"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func Test不借用后序直连组裁剪Proxy(t *testing.T) {
 		"cn":    {{Kind: model.DomainSuffix, Value: "example"}},
 	})
 	got, _, err := geosite.Derive(tags, geosite.ResidualSpec{
-		OutputTag: "crs-proxy-residual", BasisTags: []string{"proxy"},
+		OutputTag: "proxy", BasisTags: []string{"proxy"},
 	})
 	if err != nil || len(got) != 1 || got[0].Value != "only-cn.example" {
 		t.Fatalf("got=%#v err=%v", got, err)
@@ -124,7 +124,7 @@ func TestTLDNotCN与CN使Direct规则不可达(t *testing.T) {
 		"cn":         {{Kind: model.DomainSuffix, Value: "cn"}},
 	})
 	got, _, err := geosite.Derive(tags, geosite.ResidualSpec{
-		OutputTag: "crs-direct-residual", BasisTags: []string{"direct"}, EarlierActiveTags: []string{"tld-not-cn", "cn"},
+		OutputTag: "direct", BasisTags: []string{"direct"}, EarlierActiveTags: []string{"tld-not-cn", "cn"},
 	})
 	if err != nil || len(got) != 1 || got[0].Value != "kept.example" {
 		t.Fatalf("got=%#v err=%v", got, err)
@@ -136,7 +136,7 @@ func TestGeoIP不作为域名覆盖证据(t *testing.T) {
 		"direct": {{Kind: model.DomainFull, Value: "resolves-to-cn.example"}},
 	})
 	got, _, err := geosite.Derive(tags, geosite.ResidualSpec{
-		OutputTag: "crs-direct-residual", BasisTags: []string{"direct"},
+		OutputTag: "direct", BasisTags: []string{"direct"},
 	})
 	if err != nil || len(got) != 1 {
 		t.Fatalf("got=%#v err=%v", got, err)

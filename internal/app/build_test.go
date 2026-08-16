@@ -233,27 +233,25 @@ func Test未知GeoSite字段不切换Publish(t *testing.T) {
 	fixture.assertBuildAndPublished("old")
 }
 
-func Test完整标签与Reject指纹门禁(t *testing.T) {
-	baseline := map[string]geodat.SiteTag{}
-	for _, tag := range []string{"gfw", "proxy", "tld-not-cn", "direct", "reject"} {
-		baseline[tag] = geodat.SiteTag{Name: strings.ToUpper(tag), Domains: []model.DomainRule{{
-			Kind: model.DomainSuffix, Value: tag + ".example", Attrs: []string{"@cn"},
-		}}}
-	}
-	baseline["reject"] = geodat.SiteTag{Name: "REJECT", Domains: []model.DomainRule{
-		{Kind: model.DomainSuffix, Value: "ads-one.example", Attrs: []string{"@cn"}},
-		{Kind: model.DomainFull, Value: "ads-two.example"},
-	}}
-	baseline[targets.ProxyResidualTag] = geodat.SiteTag{
-		Name: targets.ProxyResidualTag, Domains: []model.DomainRule{
-			{Kind: model.DomainFull, Value: "proxy-residual.example", Attrs: []string{"@cn"}},
-			{Kind: model.DomainRegexp, Value: "^proxy-residual\\.example$"},
+func Test残差标签与Reject指纹门禁(t *testing.T) {
+	baseline := map[string]geodat.SiteTag{
+		"reject": {
+			Name: "REJECT", Domains: []model.DomainRule{
+				{Kind: model.DomainSuffix, Value: "ads-one.example", Attrs: []string{"@cn"}},
+				{Kind: model.DomainFull, Value: "ads-two.example"},
+			},
 		},
-	}
-	baseline[targets.DirectResidualTag] = geodat.SiteTag{
-		Name: targets.DirectResidualTag, Domains: []model.DomainRule{
-			{Kind: model.DomainFull, Value: "direct-residual.example", Attrs: []string{"@cn"}},
-			{Kind: model.DomainRegexp, Value: "^direct-residual\\.example$"},
+		targets.ProxyResidualTag: {
+			Name: targets.ProxyResidualTag, Domains: []model.DomainRule{
+				{Kind: model.DomainFull, Value: "proxy-residual.example", Attrs: []string{"@cn"}},
+				{Kind: model.DomainRegexp, Value: "^proxy-residual\\.example$"},
+			},
+		},
+		targets.DirectResidualTag: {
+			Name: targets.DirectResidualTag, Domains: []model.DomainRule{
+				{Kind: model.DomainFull, Value: "direct-residual.example", Attrs: []string{"@cn"}},
+				{Kind: model.DomainRegexp, Value: "^direct-residual\\.example$"},
+			},
 		},
 	}
 
@@ -273,14 +271,9 @@ func Test完整标签与Reject指纹门禁(t *testing.T) {
 		tag  string
 		rule model.DomainRule
 	}{
-		{name: "kind", tag: "gfw", rule: model.DomainRule{Kind: model.DomainFull, Value: "gfw.example", Attrs: []string{"@cn"}}},
-		{name: "value", tag: "proxy", rule: model.DomainRule{Kind: model.DomainSuffix, Value: "changed.example", Attrs: []string{"@cn"}}},
-		{name: "tld value", tag: "tld-not-cn", rule: model.DomainRule{Kind: model.DomainSuffix, Value: "changed.example", Attrs: []string{"@cn"}}},
-		{name: "attrs", tag: "direct", rule: model.DomainRule{Kind: model.DomainSuffix, Value: "direct.example", Attrs: []string{"@other"}}},
+		{name: "proxy kind", tag: targets.ProxyResidualTag, rule: model.DomainRule{Kind: model.DomainSuffix, Value: "proxy-residual.example", Attrs: []string{"@cn"}}},
+		{name: "direct attrs", tag: targets.DirectResidualTag, rule: model.DomainRule{Kind: model.DomainFull, Value: "direct-residual.example", Attrs: []string{"@other"}}},
 		{name: "order", tag: "reject"},
-		{name: "generated kind", tag: targets.ProxyResidualTag, rule: model.DomainRule{Kind: model.DomainSuffix, Value: "proxy-residual.example", Attrs: []string{"@cn"}}},
-		{name: "generated attrs", tag: targets.DirectResidualTag, rule: model.DomainRule{Kind: model.DomainFull, Value: "direct-residual.example", Attrs: []string{"@other"}}},
-		{name: "generated missing", tag: targets.ProxyResidualTag, rule: model.DomainRule{Kind: model.DomainFull, Value: "proxy-residual.example", Attrs: []string{"@cn"}}},
 	} {
 		t.Run(mutation.name, func(t *testing.T) {
 			changed := cloneSiteTags(baseline)
@@ -297,10 +290,10 @@ func Test完整标签与Reject指纹门禁(t *testing.T) {
 		})
 	}
 
-	for _, tag := range []string{"gfw", "tld-not-cn"} {
-		t.Run("missing "+tag, func(t *testing.T) {
+	for _, tag := range targets.RetiredGeoSiteTags() {
+		t.Run("retired "+tag, func(t *testing.T) {
 			changed := cloneSiteTags(baseline)
-			delete(changed, tag)
+			changed[tag] = geodat.SiteTag{Name: tag, Domains: []model.DomainRule{{Kind: model.DomainFull, Value: "retired.example"}}}
 			err := verifyFullGeoSiteTags(writeFinal(changed), baseline)
 			if err == nil || !strings.Contains(err.Error(), tag) {
 				t.Fatalf("err=%v", err)
@@ -308,7 +301,7 @@ func Test完整标签与Reject指纹门禁(t *testing.T) {
 		})
 	}
 
-	t.Run("generated compiler order", func(t *testing.T) {
+	t.Run("residual compiler order", func(t *testing.T) {
 		changed := cloneSiteTags(baseline)
 		rules := changed[targets.ProxyResidualTag].Domains
 		changed[targets.ProxyResidualTag] = geodat.SiteTag{Name: targets.ProxyResidualTag, Domains: []model.DomainRule{rules[1], rules[0]}}
@@ -322,13 +315,16 @@ func Test残差拓扑跟随实际Groups顺序(t *testing.T) {
 	groups := []model.Group{
 		{ID: "reject", GeoSite: []string{"reject"}},
 		{ID: "google", GeoSite: []string{"google", "youtube"}},
-		{ID: "proxy", GeoSite: []string{targets.ProxyResidualTag, "tld-not-cn"}},
+		{ID: "proxy", GeoSite: []string{"proxy"}},
 		{ID: "private", GeoSite: []string{"private"}},
-		{ID: "direct", GeoSite: []string{targets.DirectResidualTag}},
+		{ID: "direct", GeoSite: []string{"direct"}},
 	}
 	proxy, direct, err := residualSpecsForGroups(groups)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if proxy.OutputTag != "proxy" || direct.OutputTag != "direct" {
+		t.Fatalf("output tags proxy=%q direct=%q", proxy.OutputTag, direct.OutputTag)
 	}
 	if want := []string{"reject", "google", "youtube"}; !slices.Equal(proxy.EarlierActiveTags, want) {
 		t.Fatalf("proxy earlier=%v want=%v", proxy.EarlierActiveTags, want)
@@ -336,40 +332,9 @@ func Test残差拓扑跟随实际Groups顺序(t *testing.T) {
 	if want := []string{"tld-not-cn"}; !slices.Equal(proxy.LaterEquivalentTags, want) {
 		t.Fatalf("proxy equivalent=%v want=%v", proxy.LaterEquivalentTags, want)
 	}
-	if want := []string{"reject", "google", "youtube", targets.ProxyResidualTag, "tld-not-cn", "private"}; !slices.Equal(direct.EarlierActiveTags, want) {
+	if want := []string{"reject", "google", "youtube", "proxy", "private"}; !slices.Equal(direct.EarlierActiveTags, want) {
 		t.Fatalf("direct earlier=%v want=%v", direct.EarlierActiveTags, want)
 	}
-}
-
-func TestProxy同组标签才是等价覆盖(t *testing.T) {
-	t.Run("独立后序组不算等价覆盖", func(t *testing.T) {
-		groups := []model.Group{
-			{ID: "proxy", GeoSite: []string{targets.ProxyResidualTag}},
-			{ID: "tld_not_cn", GeoSite: []string{"tld-not-cn"}},
-			{ID: "direct", GeoSite: []string{targets.DirectResidualTag}},
-		}
-		proxy, _, err := residualSpecsForGroups(groups)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(proxy.LaterEquivalentTags) != 0 {
-			t.Fatalf("proxy must not borrow coverage from an independent group: %v", proxy.LaterEquivalentTags)
-		}
-	})
-
-	t.Run("同组伴随标签算等价覆盖", func(t *testing.T) {
-		groups := []model.Group{
-			{ID: "proxy", GeoSite: []string{targets.ProxyResidualTag, "tld-not-cn"}},
-			{ID: "direct", GeoSite: []string{targets.DirectResidualTag}},
-		}
-		proxy, _, err := residualSpecsForGroups(groups)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if want := []string{"tld-not-cn"}; !slices.Equal(proxy.LaterEquivalentTags, want) {
-			t.Fatalf("proxy equivalent=%v want=%v", proxy.LaterEquivalentTags, want)
-		}
-	})
 }
 
 func TestCommunity标签查找不区分大小写(t *testing.T) {
@@ -378,7 +343,7 @@ func TestCommunity标签查找不区分大小写(t *testing.T) {
 	if err := os.Mkdir(nested, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(nested, "CRS-DIRECT-RESIDUAL"), []byte("domain:collision.example\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(nested, "DIRECT"), []byte("domain:collision.example\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	exists, err := regularFileEqualFold(root, targets.DirectResidualTag)

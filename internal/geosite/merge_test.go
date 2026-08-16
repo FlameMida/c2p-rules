@@ -104,13 +104,18 @@ func TestMergeRejectsNonGeositeAndUnsafeTags(t *testing.T) {
 	}
 }
 
-func TestGenerated标签安全写入(t *testing.T) {
+func TestResidual标签安全覆写并删除合并标签(t *testing.T) {
 	root := t.TempDir()
+	for _, tag := range []string{"proxy", "gfw", "tld-not-cn"} {
+		if err := os.WriteFile(filepath.Join(root, tag), []byte("domain:old.example\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	rules := []model.DomainRule{
 		{Kind: model.DomainSuffix, Value: "z.example", Attrs: []string{"@cn"}},
 		{Kind: model.DomainFull, Value: "a.example"},
 	}
-	if err := geosite.WriteGenerated(root, targets.ProxyResidualTag, rules); err != nil {
+	if err := geosite.WriteResidual(root, targets.ProxyResidualTag, rules, "gfw", "tld-not-cn"); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(filepath.Join(root, targets.ProxyResidualTag))
@@ -120,15 +125,46 @@ func TestGenerated标签安全写入(t *testing.T) {
 	if string(data) != "domain:z.example @cn\nfull:a.example\n" {
 		t.Fatalf("data=%q", data)
 	}
-	if err := geosite.WriteGenerated(root, targets.ProxyResidualTag, rules); err == nil || !strings.Contains(err.Error(), "already exists") {
+	for _, removed := range []string{"gfw", "tld-not-cn"} {
+		if _, err := os.Stat(filepath.Join(root, removed)); !os.IsNotExist(err) {
+			t.Fatalf("retired %s remains: %v", removed, err)
+		}
+	}
+}
+
+func TestResidual标签拒绝空规则(t *testing.T) {
+	err := geosite.WriteResidual(t.TempDir(), targets.DirectResidualTag, nil)
+	if err == nil || !strings.Contains(err.Error(), "empty") {
 		t.Fatalf("err=%v", err)
 	}
 }
 
-func TestGenerated标签拒绝空规则(t *testing.T) {
-	err := geosite.WriteGenerated(t.TempDir(), targets.DirectResidualTag, nil)
-	if err == nil || !strings.Contains(err.Error(), "empty") {
-		t.Fatalf("err=%v", err)
+func TestResidual标签删除目标无效时不覆写原文件(t *testing.T) {
+	for name, removed := range map[string]string{
+		"不能删除自身":   targets.ProxyResidualTag,
+		"待删除标签不存在": "missing",
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, targets.ProxyResidualTag)
+			original := []byte("domain:original.example\n")
+			if err := os.WriteFile(path, original, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			err := geosite.WriteResidual(root, targets.ProxyResidualTag, []model.DomainRule{
+				{Kind: model.DomainSuffix, Value: "replacement.example"},
+			}, removed)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			got, readErr := os.ReadFile(path)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if !bytes.Equal(got, original) {
+				t.Fatalf("target changed after validation failure: got=%q want=%q", got, original)
+			}
+		})
 	}
 }
 

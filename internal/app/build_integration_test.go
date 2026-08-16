@@ -76,15 +76,14 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 
 	document := readIntegrationManifest(t, filepath.Join(root, "build", "expected_tags.json"))
 	for _, tag := range []string{
-		"reject", "gfw", "proxy", "direct", "tld-not-cn", "ai",
+		"reject", "proxy", "direct", "ai",
 		"youtube", "netflix", "spotify", "tiktok", "apple", "icloud", "google", "private", "cn",
-		targets.ProxyResidualTag, targets.DirectResidualTag,
 	} {
 		if !slices.Contains(document.Required.GeoSite, tag) {
 			t.Fatalf("missing geosite:%s", tag)
 		}
 	}
-	for _, tag := range []string{"cn", "netflix", "private", "telegram"} {
+	for _, tag := range []string{"cn", "google", "netflix", "private", "telegram"} {
 		if !slices.Contains(document.Required.GeoIP, tag) {
 			t.Fatalf("missing geoip:%s", tag)
 		}
@@ -94,6 +93,11 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 			if !slices.Contains(side, forbidden) {
 				t.Fatalf("legacy tag %s is not forbidden: %#v", forbidden, document.Forbidden)
 			}
+		}
+	}
+	for _, retired := range targets.RetiredGeoSiteTags() {
+		if !slices.Contains(document.Forbidden.GeoSite, retired) {
+			t.Fatalf("retired geosite:%s is not forbidden: %#v", retired, document.Forbidden)
 		}
 	}
 
@@ -126,6 +130,40 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	finalIPBytes, err := os.ReadFile(geoIPDat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalIP, err := geodat.DecodeGeoIP(finalIPBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := sortedIPTagKeys(finalIP), []string{"cn", "google", "netflix", "private", "telegram"}; !slices.Equal(got, want) {
+		t.Fatalf("final geoip tags=%v want=%v", got, want)
+	}
+
+	t.Run("最终DAT用proxy和direct原位承载残差", func(t *testing.T) {
+		if len(finalBytes) >= len(intermediateBytes) {
+			t.Fatalf("final geosite did not shrink: final=%d intermediate=%d", len(finalBytes), len(intermediateBytes))
+		}
+		for _, removed := range []string{"gfw", "tld-not-cn", "crs-proxy-residual", "crs-direct-residual"} {
+			if _, exists := final[removed]; exists {
+				t.Fatalf("removed geosite:%s remains in final DAT", removed)
+			}
+		}
+		if _, exists := final["proxy"]; !exists {
+			t.Fatal("final DAT is missing geosite:proxy")
+		}
+		if _, exists := final["direct"]; !exists {
+			t.Fatal("final DAT is missing geosite:direct")
+		}
+		if reflect.DeepEqual(intermediate["proxy"].Domains, final["proxy"].Domains) {
+			t.Fatal("geosite:proxy was not replaced by the in-place residual")
+		}
+		if !hasDomainRule(final["proxy"].Domains, model.DomainSuffix, "foreign", nil) {
+			t.Fatal("geosite:proxy did not absorb tld-not-cn")
+		}
+	})
 
 	t.Run("include 与属性在残差输入中已展开", func(t *testing.T) {
 		google := intermediate["google"].Domains
@@ -133,23 +171,15 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 			!hasDomainRule(google, model.DomainSuffix, "googleapis.com", []string{"@cn"}) {
 			t.Fatalf("google=%#v", google)
 		}
-		for _, tag := range targets.GeneratedGeoSiteTags() {
+		for _, tag := range targets.ResidualGeoSiteTags() {
 			want := readGeneratedRules(t, filepath.Join(mergedRoot, tag))
 			if !sameDomainRules(final[tag].Domains, want) {
-				t.Fatalf("generated %s=%#v want=%#v", tag, final[tag].Domains, want)
+				t.Fatalf("in-place residual %s=%#v want=%#v", tag, final[tag].Domains, want)
 			}
 		}
 		if direct := final[targets.DirectResidualTag].Domains; !hasDomainRule(direct, model.DomainFull, "attr-direct.example", []string{"@cn"}) ||
 			!hasDomainRule(direct, model.DomainRegexp, "^regex-direct\\.example$", nil) {
 			t.Fatalf("direct residual does not preserve attrs/regexp: %#v", direct)
-		}
-	})
-
-	t.Run("完整标签未被残差替换", func(t *testing.T) {
-		for _, tag := range []string{"gfw", "proxy", "tld-not-cn", "direct"} {
-			if !reflect.DeepEqual(intermediate[tag].Domains, final[tag].Domains) {
-				t.Fatalf("%s changed", tag)
-			}
 		}
 	})
 
@@ -164,7 +194,7 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 	})
 
 	t.Run("中间 DAT 不污染最终探测缓存", func(t *testing.T) {
-		for _, tag := range targets.GeneratedGeoSiteTags() {
+		for _, tag := range targets.ResidualGeoSiteTags() {
 			present, err := prober.Has(context.Background(), model.GeoSite, tag)
 			if err != nil || !present {
 				t.Fatalf("%s present=%v err=%v", tag, present, err)
@@ -193,6 +223,7 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 	for _, want := range []string{
 		"DOMAIN-SUFFIX,youtube.example,Google 服务",
 		"DOMAIN-SUFFIX,foreign,代理规则",
+		"IP-CIDR,8.8.8.0/24,Google 服务,no-resolve",
 		"IP-CIDR,192.0.2.0/24,中国大陆,no-resolve",
 		"IP-CIDR6,2001:db8::/32,中国大陆,no-resolve",
 	} {
@@ -225,16 +256,18 @@ func Test完整构建得到八文件且Checksum匹配(t *testing.T) {
 	for _, want := range []string{
 		"config shunt_rules 'crs_proxy'",
 		"config shunt_rules 'crs_direct'",
+		"geoip:google",
 		"geosite:" + targets.ProxyResidualTag,
-		"geosite:tld-not-cn",
 		"geosite:" + targets.DirectResidualTag,
 	} {
 		if !strings.Contains(fragment, want) {
 			t.Fatalf("installer fragment missing %q:\n%s", want, fragment)
 		}
 	}
-	if strings.Contains(fragment, "crs_tld_not_cn") {
-		t.Fatalf("installer fragment contains removed tld_not_cn group:\n%s", fragment)
+	for _, removed := range []string{"crs_tld_not_cn", "geosite:tld-not-cn", "geosite:gfw", "geosite:crs-proxy-residual", "geosite:crs-direct-residual"} {
+		if strings.Contains(fragment, removed) {
+			t.Fatalf("installer fragment contains removed %q:\n%s", removed, fragment)
+		}
 	}
 }
 
@@ -292,32 +325,17 @@ func TestProductionDependenciesFailuresPreservePreviousGeneration(t *testing.T) 
 			want: []string{"proxy.yaml", "field paylaod not found"},
 		},
 		{
-			name: "generated mixed-case source collision",
-			mutate: func(t *testing.T, root string) {
-				path := filepath.Join(root, "sources.yaml")
-				data, err := os.ReadFile(path)
-				if err != nil {
-					t.Fatal(err)
-				}
-				data = []byte(strings.Replace(string(data), "{tag: proxy, mode: create}", "{tag: CRS-PROXY-RESIDUAL, mode: create}", 1))
-				if err := os.WriteFile(path, data, 0o600); err != nil {
-					t.Fatal(err)
-				}
-			},
-			want: []string{"fixture-proxy", "CRS-PROXY-RESIDUAL", "generated"},
-		},
-		{
-			name: "generated mixed-case community collision",
+			name: "retired mixed-case community tag",
 			mutate: func(t *testing.T, root string) {
 				path := filepath.Join(root, "community", "CRS-DIRECT-RESIDUAL")
 				if err := os.WriteFile(path, []byte("domain:collision.example\n"), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			},
-			want: []string{"validate target registry", "crs-direct-residual", "generated", "base/community"},
+			want: []string{"retired geosite:crs-direct-residual remains"},
 		},
 		{
-			name: "generated nested mixed-case community collision",
+			name: "retired nested mixed-case community tag",
 			mutate: func(t *testing.T, root string) {
 				directory := filepath.Join(root, "community", "nested")
 				if err := os.Mkdir(directory, 0o700); err != nil {
@@ -328,17 +346,17 @@ func TestProductionDependenciesFailuresPreservePreviousGeneration(t *testing.T) 
 					t.Fatal(err)
 				}
 			},
-			want: []string{"validate target registry", "crs-direct-residual", "generated", "base/community"},
+			want: []string{"retired geosite:crs-direct-residual remains"},
 		},
 		{
-			name: "generated mixed-case custom collision",
+			name: "retired mixed-case custom tag",
 			mutate: func(t *testing.T, root string) {
 				path := filepath.Join(root, "custom", "geosite", "Crs-Proxy-Residual.yaml")
 				if err := os.WriteFile(path, []byte("payload:\n  - DOMAIN-SUFFIX,collision.example\n"), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			},
-			want: []string{"Crs-Proxy-Residual.yaml", "generated"},
+			want: []string{"Crs-Proxy-Residual.yaml", "unknown target"},
 		},
 		{
 			name: "create collision",
@@ -502,16 +520,18 @@ func buildSyntheticBaseGeoIP(t *testing.T, runner *tools.Runner) string {
 	}
 	for name, content := range map[string]string{
 		"cn":       "192.0.2.0/24\n2001:db8::/32\n",
+		"google":   "8.8.8.0/24\n",
 		"netflix":  "198.51.100.0/24\n",
 		"private":  "10.0.0.0/8\n",
 		"telegram": "149.154.160.0/20\n",
+		"us":       "203.0.113.0/24\n",
 	} {
 		if err := os.WriteFile(filepath.Join(inputRoot, name+".txt"), []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	inputs := make([]map[string]any, 0, 4)
-	for _, name := range []string{"cn", "netflix", "private", "telegram"} {
+	inputs := make([]map[string]any, 0, 6)
+	for _, name := range []string{"cn", "google", "netflix", "private", "telegram", "us"} {
 		inputs = append(inputs, map[string]any{
 			"type": "text", "action": "add",
 			"args": map[string]any{"name": name, "uri": filepath.Join(inputRoot, name+".txt")},
@@ -593,6 +613,15 @@ func readIntegrationManifest(t *testing.T, path string) manifest.Document {
 		t.Fatal(err)
 	}
 	return document
+}
+
+func sortedIPTagKeys(tags map[string]geodat.IPTag) []string {
+	keys := make([]string, 0, len(tags))
+	for tag := range tags {
+		keys = append(keys, tag)
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 func assertFileContains(t *testing.T, path, value string, count int) {

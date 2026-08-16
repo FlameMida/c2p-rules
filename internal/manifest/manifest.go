@@ -71,13 +71,18 @@ func Build(sources []model.Source, groups []model.Group) Document {
 	}
 	requiredIP := map[string]struct{}{"cn": {}, "private": {}}
 	forbiddenSite := stringSet(legacyForbidden.GeoSite)
+	for _, tag := range targets.RetiredGeoSiteTags() {
+		forbiddenSite[tag] = struct{}{}
+	}
 	forbiddenIP := stringSet(legacyForbidden.GeoIP)
 	records := make(map[string]SourceRecord, len(sources))
 	for _, source := range sources {
 		var record SourceRecord
 		if source.Outputs.GeoSite != nil {
 			output := source.Outputs.GeoSite
-			requiredSite[output.Tag] = struct{}{}
+			if !targets.IsIntermediateGeoSiteTag(output.Tag) {
+				requiredSite[output.Tag] = struct{}{}
+			}
 			record.GeoSite = &Target{Tag: output.Tag, Mode: output.Mode}
 		}
 		if source.Outputs.GeoIP != nil {

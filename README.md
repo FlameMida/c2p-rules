@@ -25,11 +25,15 @@ shadowrocket.conf.sha256sum
 
 GeoSite 只对完全相同的 `kind + value + attrs` 去重，不把父域和子域互相消除。GeoIP 对 CIDR 做掩码规范化、排序和精确去重，保留 `/24` 内有明确声明的 `/25`。
 
-完整构建会先编译一份仅位于 staging/build 的中间 GeoSite DAT，再从编译后规则推导 `crs-proxy-residual` 与 `crs-direct-residual`，写回合并目录后进行第二次正式编译。最终 DAT 继续保留规则指纹不变的完整 `gfw`、`proxy`、`tld-not-cn`、`direct` 公共标签；托管分流使用两个残差标签，其中代理组还同组引用完整 `tld-not-cn`。
+完整构建会先编译一份仅位于 staging/build 的中间 GeoSite DAT，再从编译后规则推导运行时残差。代理残差由 `gfw ∪ proxy` 经前序覆盖裁剪后再并入完整 `tld-not-cn`，原位覆写 `proxy`；直连残差原位覆写 `direct`。最终 DAT 只保留原位残差 `proxy` 与 `direct`，并删除中间标签 `gfw`、`tld-not-cn` 以及旧兼容标签 `crs-proxy-residual`、`crs-direct-residual`，避免同一批规则在 DAT 中重复存储。
+
+GeoIP 底包仍作为合并输入，但转换器只把 manifest 的活动标签闭集写入发布物。当前最终 `geoip.dat` 仅含 `cn`、`google`、`netflix`、`private`、`telegram`；其余国家与特殊标签不再发布，也不提供兼容空壳。
+
+Shadowrocket 不读取自定义 DAT，而是把所引用标签展开为内联规则。因此 `shadowrocket.conf` 总字节允许因内联 `geoip:google` 相对同输入基线增长，但增幅不得超过 5%；GeoSite 派生规则数与字节仍必须严格下降，Google IP 之外的增长视为回归。
 
 ## 自定义规则
 
-自定义目录分为 `custom/geosite` 和 `custom/geoip`。文件名就是要扩展的现有最终 tag；例如 `custom/geosite/apple.yaml` 扩展 `geosite:apple`，`custom/geoip/cn.yaml` 扩展 `geoip:cn`。拼错或不存在的目标会让构建失败，不会悄悄创建新组。
+自定义目录分为 `custom/geosite` 和 `custom/geoip`。文件名就是要扩展的现有构建目标；例如 `custom/geosite/apple.yaml` 扩展最终 `geosite:apple`，`custom/geosite/gfw.yaml` 扩展仅供残差推导的中间 `gfw`，`custom/geoip/cn.yaml` 扩展 `geoip:cn`。拼错或不存在的目标会让构建失败，不会悄悄创建新组。
 
 GeoSite YAML 支持：
 
@@ -49,13 +53,13 @@ payload:
   - IP-CIDR6,2001:db8::/32
 ```
 
-仓库自带的模板只有注释，默认是语义空集，不会改变 dat。两个 generated-only 残差标签不接受 custom 文件；构建会在编译前拒绝同名 source、community 或 custom 输入。
+仓库自带的模板只有注释，默认是语义空集，不会改变 dat。`proxy`、`direct`、`gfw` 与 `tld-not-cn` 的 custom 输入都先参与中间 DAT；构建随后原位生成最终 `proxy`/`direct`，并从最终 DAT 删除 `gfw` 与 `tld-not-cn`。
 
 ## 默认 PassWall2 分流
 
 `config/passwall2-groups.yaml` 的数组顺序就是托管分流优先级，共 13 组：广告拦截、YouTube、Netflix、Spotify、TikTok、AI 服务、苹果服务、Telegram、Google 服务、代理规则、私有网络、中国大陆、直连规则。
 
-其中苹果服务配置 `geosite:apple` 与 `geosite:icloud`；中国大陆同时配置 `geosite:cn` 与 `geoip:cn`。原 GFW 规则已并入“代理规则”，代理组依次引用 `crs-proxy-residual` 与完整 `tld-not-cn`，“直连规则”只引用 `crs-direct-residual`。完整 `tld-not-cn` 来源、custom 目标和 DAT 公共标签继续保留，但不再有独立 PassWall2/Shadowrocket 策略组；两类规则统一使用“代理规则”出口。原港澳台专用来源与双侧标签已破坏性删除，不保留兼容入口。
+其中苹果服务配置 `geosite:apple` 与 `geosite:icloud`；Google 服务同时配置 `geosite:google` 与 `geoip:google`；中国大陆同时配置 `geosite:cn` 与 `geoip:cn`。原 GFW 与 `tld-not-cn` 规则都已并入最终 `proxy`，“代理规则”只引用 `geosite:proxy`，“直连规则”只引用原位裁剪后的 `geosite:direct`。`gfw` 与 `tld-not-cn` 来源及 custom 目标仍作为中间构建输入，但对应 DAT 标签和独立 PassWall2/Shadowrocket 策略组均不再发布。原港澳台专用来源与双侧标签也已破坏性删除，不保留兼容入口。
 
 生成的具名 UCI section 使用 `crs_` 命名空间并带 `managed_by=clash-rules-srs` 标记。`reject` 的规则与默认出口不变；`private`、`cn`、`direct` 仍默认直连。`IPOnDemand` 不在本轮验收范围，路由器建议继续使用 `IPIfNonMatch`。
 

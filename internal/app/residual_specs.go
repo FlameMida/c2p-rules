@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"strings"
 
 	"clash-rules-srs/internal/geosite"
 	"clash-rules-srs/internal/model"
@@ -17,14 +16,10 @@ func residualSpecsForGroups(groups []model.Group) (geosite.ResidualSpec, geosite
 	}
 
 	proxy := geosite.ResidualSpec{
-		OutputTag:         targets.ProxyResidualTag,
-		BasisTags:         []string{"gfw", "proxy"},
-		EarlierActiveTags: earlierGeoSiteTags(groups, proxyIndex),
-	}
-	for _, tag := range groups[proxyIndex].GeoSite {
-		if !strings.EqualFold(tag, proxy.OutputTag) {
-			proxy.LaterEquivalentTags = append(proxy.LaterEquivalentTags, tag)
-		}
+		OutputTag:           targets.ProxyResidualTag,
+		BasisTags:           []string{"gfw", "proxy"},
+		EarlierActiveTags:   earlierGeoSiteTags(groups, proxyIndex),
+		LaterEquivalentTags: []string{"tld-not-cn"},
 	}
 	direct := geosite.ResidualSpec{
 		OutputTag:         targets.DirectResidualTag,

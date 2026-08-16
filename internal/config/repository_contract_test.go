@@ -8,14 +8,12 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
-	"strings"
 	"testing"
 
 	"clash-rules-srs/internal/config"
 	"clash-rules-srs/internal/model"
 	"clash-rules-srs/internal/passwall"
 	"clash-rules-srs/internal/rules"
-	"clash-rules-srs/internal/targets"
 )
 
 func TestRepositorySourcesMatchApprovedTargets(t *testing.T) {
@@ -72,11 +70,11 @@ func Test默认组ID顺序与标签精确匹配(t *testing.T) {
 		{ID: "ai", Remarks: "AI 服务", GeoSite: []string{"ai"}, GeoIP: []string{}},
 		{ID: "apple_services", Remarks: "苹果服务", GeoSite: []string{"apple", "icloud"}, GeoIP: []string{}},
 		{ID: "telegram", Remarks: "Telegram", GeoSite: []string{}, GeoIP: []string{"telegram"}},
-		{ID: "google", Remarks: "Google 服务", GeoSite: []string{"google"}, GeoIP: []string{}},
-		{ID: "proxy", Remarks: "代理规则", GeoSite: []string{targets.ProxyResidualTag, "tld-not-cn"}, GeoIP: []string{}},
+		{ID: "google", Remarks: "Google 服务", GeoSite: []string{"google"}, GeoIP: []string{"google"}},
+		{ID: "proxy", Remarks: "代理规则", GeoSite: []string{"proxy"}, GeoIP: []string{}},
 		{ID: "private", Remarks: "私有网络", GeoSite: []string{"private"}, GeoIP: []string{"private"}},
 		{ID: "cn", Remarks: "中国大陆", GeoSite: []string{"cn"}, GeoIP: []string{"cn"}},
-		{ID: "direct", Remarks: "直连规则", GeoSite: []string{targets.DirectResidualTag}, GeoIP: []string{}},
+		{ID: "direct", Remarks: "直连规则", GeoSite: []string{"direct"}, GeoIP: []string{}},
 	}
 	if !reflect.DeepEqual(groups, want) {
 		t.Fatalf("groups mismatch\n got: %#v\nwant: %#v", groups, want)
@@ -87,13 +85,14 @@ func Test默认组ID顺序与标签精确匹配(t *testing.T) {
 	}
 	if !bytes.Contains(fragment, []byte("config shunt_rules 'crs_proxy'")) ||
 		!bytes.Contains(fragment, []byte("config shunt_rules 'crs_direct'")) ||
+		!bytes.Contains(fragment, []byte("option ip_list 'geoip:google'")) ||
 		bytes.Contains(fragment, []byte("crs_gfw")) || bytes.Contains(fragment, []byte("crs_tld_not_cn")) ||
 		bytes.Contains(fragment, []byte("crs_bilibili_hmt")) {
 		t.Fatalf("fragment=%s", fragment)
 	}
 }
 
-func Test默认Custom模板审计忽略生成型标签(t *testing.T) {
+func Test默认Custom模板可直接启用(t *testing.T) {
 	for _, test := range defaultTemplateCases(t) {
 		data, err := os.ReadFile(test.path)
 		if err != nil {
@@ -134,19 +133,6 @@ func Test默认Custom模板审计忽略生成型标签(t *testing.T) {
 		}
 		if len(buckets.Domains) != beforeDomains+test.wantDomains || len(buckets.CIDRs) != beforeCIDRs+test.wantCIDRs || len(buckets.Skipped) != 0 {
 			t.Fatalf("%s enabled example produced unexpected rules: %#v", test.path, buckets)
-		}
-	}
-	for _, tag := range targets.GeneratedGeoSiteTags() {
-		path := filepath.Join("../../custom/geosite", tag+".yaml")
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("generated template %s must not exist: %v", path, err)
-		}
-	}
-	for _, test := range defaultTemplateCases(t) {
-		for _, tag := range targets.GeneratedGeoSiteTags() {
-			if strings.Contains(test.path, tag+".yaml") {
-				t.Fatalf("generated target entered template audit: %s", test.path)
-			}
 		}
 	}
 }
@@ -209,9 +195,6 @@ func defaultTemplateCases(t *testing.T) []defaultTemplateCase {
 	var cases []defaultTemplateCase
 	add := func(side model.Side, tags []string, markers []string, example string, wantDomains, wantCIDRs int) {
 		for _, tag := range tags {
-			if targets.IsGenerated(side, tag) {
-				continue
-			}
 			path := fmt.Sprintf("../../custom/%s/%s.yaml", side, tag)
 			if _, exists := seen[path]; exists {
 				continue

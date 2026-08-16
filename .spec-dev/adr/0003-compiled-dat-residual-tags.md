@@ -1,6 +1,6 @@
 # ADR-0003: 从编译后 DAT 派生运行时残差标签
 
-**Status**: Accepted (2026-08-16)
+**Status**: Superseded by [ADR-0004](0004-in-place-residual-tags.md) (2026-08-16)
 
 ## 背景
 

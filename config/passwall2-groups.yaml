@@ -35,10 +35,10 @@ groups:
   - id: google
     remarks: Google 服务
     geosite: [google]
-    geoip: []
+    geoip: [google]
   - id: proxy
     remarks: 代理规则
-    geosite: [crs-proxy-residual, tld-not-cn]
+    geosite: [proxy]
     geoip: []
   - id: private
     remarks: 私有网络
@@ -50,5 +50,5 @@ groups:
     geoip: [cn]
   - id: direct
     remarks: 直连规则
-    geosite: [crs-direct-residual]
+    geosite: [direct]
     geoip: []

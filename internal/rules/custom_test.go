@@ -109,15 +109,16 @@ func TestCustomRejectsUnknownDuplicateAliasMergeAndControlYAML(t *testing.T) {
 	}
 }
 
-func TestGenerated标签拒绝Custom输入(t *testing.T) {
+func TestResidual标签接受Custom输入(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "geosite", targets.ProxyResidualTag+".yaml"), "payload:\n  - DOMAIN-SUFFIX,example.test\n")
-	registry, err := targets.New(nil, func(model.Side, string) (bool, error) { return false, nil })
+	output := model.Output{Tag: targets.ProxyResidualTag, Mode: model.Create}
+	registry, err := targets.New([]model.Source{{ID: "proxy", Outputs: model.Outputs{GeoSite: &output}}}, func(model.Side, string) (bool, error) { return false, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
 	got, err := rules.LoadCustom(root, registry)
-	if err == nil || len(got) != 0 || !strings.Contains(err.Error(), targets.ProxyResidualTag) || !strings.Contains(err.Error(), "generated") {
+	if err != nil || len(got) != 1 || got[0].Tag != targets.ProxyResidualTag {
 		t.Fatalf("got=%#v err=%v", got, err)
 	}
 }

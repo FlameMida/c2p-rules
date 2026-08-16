@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -33,7 +34,7 @@ func TestWriteConfigKeepsBaseFirstAndSortsTargets(t *testing.T) {
 	if template.BaseURI() == "" {
 		t.Fatal("validated template did not expose its base URI")
 	}
-	if err := geoip.WriteConfig(template, inputs, base, filepath.Join(dir, "publish"), path); err != nil {
+	if err := geoip.WriteConfig(template, inputs, []string{"telegram", "cn", "google", "private", "netflix"}, base, filepath.Join(dir, "publish"), path); err != nil {
 		t.Fatal(err)
 	}
 	var got converterConfig
@@ -46,6 +47,9 @@ func TestWriteConfigKeepsBaseFirstAndSortsTargets(t *testing.T) {
 	}
 	if !filepath.IsAbs(got.Input[1].Args.URI) || got.Output[0].Args.OutputName != "geoip.dat" || !filepath.IsAbs(got.Output[0].Args.OutputDir) {
 		t.Fatalf("config=%#v", got)
+	}
+	if want := []string{"cn", "google", "netflix", "private", "telegram"}; !reflect.DeepEqual(got.Output[0].Args.WantedList, want) {
+		t.Fatalf("wantedList=%v want=%v", got.Output[0].Args.WantedList, want)
 	}
 }
 
@@ -111,14 +115,14 @@ func TestWriteConfigPreservesTemplateOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := geoip.WriteConfig(loaded, nil, base, filepath.Join(dir, "publish"), output); err != nil {
+	if err := geoip.WriteConfig(loaded, nil, []string{"private", "cn"}, base, filepath.Join(dir, "publish"), output); err != nil {
 		t.Fatal(err)
 	}
 	var got map[string]any
 	decodeJSON(t, output, &got)
 	inputArgs := got["input"].([]any)[0].(map[string]any)["args"].(map[string]any)
 	outputArgs := got["output"].([]any)[0].(map[string]any)["args"].(map[string]any)
-	if _, ok := inputArgs["wantedList"]; !ok || outputArgs["onlyIPType"] != "IPv4" {
+	if _, ok := inputArgs["wantedList"]; !ok || outputArgs["onlyIPType"] != "IPv4" || !reflect.DeepEqual(outputArgs["wantedList"], []any{"cn", "private"}) {
 		t.Fatalf("got=%#v", got)
 	}
 }
@@ -146,7 +150,7 @@ func TestWriteConfigRejectsInvalidTemplates(t *testing.T) {
 			}
 			loaded, loadErr := geoip.LoadTemplate(template)
 			if loadErr == nil {
-				loadErr = geoip.WriteConfig(loaded, nil, base, filepath.Join(dir, "publish"), filepath.Join(dir, name+"-out.json"))
+				loadErr = geoip.WriteConfig(loaded, nil, []string{"cn"}, base, filepath.Join(dir, "publish"), filepath.Join(dir, name+"-out.json"))
 			}
 			if loadErr == nil {
 				t.Fatal("expected error")
@@ -164,10 +168,11 @@ type converterEntry struct {
 	Type   string `json:"type"`
 	Action string `json:"action"`
 	Args   struct {
-		Name       string `json:"name"`
-		URI        string `json:"uri"`
-		OutputDir  string `json:"outputDir"`
-		OutputName string `json:"outputName"`
+		Name       string   `json:"name"`
+		URI        string   `json:"uri"`
+		OutputDir  string   `json:"outputDir"`
+		OutputName string   `json:"outputName"`
+		WantedList []string `json:"wantedList"`
 	} `json:"args"`
 }
 

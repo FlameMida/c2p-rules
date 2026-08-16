@@ -154,9 +154,11 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 				return err
 			}
 			state.GeoInputs = inputs
+			wantedTags := manifest.Build(state.Sources, state.Groups).Required.GeoIP
 			return geoip.WriteConfig(
 				state.GeoIPTemplate,
 				inputs,
+				wantedTags,
 				state.BaseGeoIP,
 				state.Tx.Layout().Publish,
 				state.Tx.Layout().GeoIPConfig,
@@ -184,14 +186,13 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			if err != nil {
 				return fmt.Errorf("decode intermediate geosite: %w", err)
 			}
-			state.ExpectedSiteTags = make(map[string]geodat.SiteTag, 7)
+			state.ExpectedSiteTags = make(map[string]geodat.SiteTag, 3)
 			for _, tag := range []string{"gfw", "proxy", "tld-not-cn", "direct", "reject"} {
-				record, exists := tags[tag]
-				if !exists {
+				if _, exists := tags[tag]; !exists {
 					return fmt.Errorf("missing geosite:%s fingerprint", tag)
 				}
-				state.ExpectedSiteTags[tag] = cloneSiteTag(record)
 			}
+			state.ExpectedSiteTags["reject"] = cloneSiteTag(tags["reject"])
 
 			proxySpec, directSpec, err := residualSpecsForGroups(state.Groups)
 			if err != nil {
@@ -201,7 +202,15 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			if err != nil {
 				return err
 			}
-			if err := geosite.WriteGenerated(state.Tx.Layout().DataMerged, proxySpec.OutputTag, proxy); err != nil {
+			tags[strings.ToLower(proxySpec.OutputTag)] = geodat.SiteTag{Name: proxySpec.OutputTag, Domains: proxy}
+			proxy, _, err = geosite.DeriveContext(ctx, tags, geosite.ResidualSpec{
+				OutputTag: proxySpec.OutputTag,
+				BasisTags: []string{proxySpec.OutputTag, "tld-not-cn"},
+			})
+			if err != nil {
+				return err
+			}
+			if err := geosite.WriteResidual(state.Tx.Layout().DataMerged, proxySpec.OutputTag, proxy, "gfw", "tld-not-cn"); err != nil {
 				return err
 			}
 			state.ExpectedSiteTags[proxySpec.OutputTag] = geodat.SiteTag{Name: proxySpec.OutputTag, Domains: cloneDomainRules(proxy)}
@@ -211,7 +220,7 @@ func ProductionDependencies(fetcher SourceFetcher, runner *tools.Runner) Depende
 			if err != nil {
 				return err
 			}
-			if err := geosite.WriteGenerated(state.Tx.Layout().DataMerged, directSpec.OutputTag, direct); err != nil {
+			if err := geosite.WriteResidual(state.Tx.Layout().DataMerged, directSpec.OutputTag, direct); err != nil {
 				return err
 			}
 			state.ExpectedSiteTags[directSpec.OutputTag] = geodat.SiteTag{Name: directSpec.OutputTag, Domains: cloneDomainRules(direct)}
@@ -344,18 +353,23 @@ func verifyFullGeoSiteTags(finalPath string, expected map[string]geodat.SiteTag)
 	if err != nil {
 		return fmt.Errorf("decode final geosite: %w", err)
 	}
-	for _, tag := range []string{"gfw", "proxy", "tld-not-cn", "direct", "reject"} {
+	for _, tag := range []string{"reject"} {
 		before, beforeOK := expected[tag]
 		after, afterOK := final[tag]
 		if !beforeOK || !afterOK || !reflect.DeepEqual(before.Domains, after.Domains) {
 			return fmt.Errorf("geosite:%s fingerprint changed", tag)
 		}
 	}
-	for _, tag := range targets.GeneratedGeoSiteTags() {
+	for _, tag := range targets.ResidualGeoSiteTags() {
 		before, beforeOK := expected[tag]
 		after, afterOK := final[tag]
 		if !beforeOK || !afterOK || !geosite.EquivalentCoverage(before.Domains, after.Domains) {
 			return fmt.Errorf("geosite:%s semantic fingerprint changed", tag)
+		}
+	}
+	for _, tag := range targets.RetiredGeoSiteTags() {
+		if _, exists := final[tag]; exists {
+			return fmt.Errorf("retired geosite:%s remains", tag)
 		}
 	}
 	return nil

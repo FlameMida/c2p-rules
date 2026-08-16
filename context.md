@@ -35,7 +35,7 @@ sources.yaml + custom/geosite + custom/geoip
   -> proxy/direct 保守残差推导
   -> 最终 GeoSite DAT 第二次编译
   -> base GeoIP + 规范化 CIDR 输入合并
-  -> pinned geoip 编译
+  -> manifest 活动 GeoIP 标签闭集投影 + pinned geoip 编译
   -> geoview required + forbidden 探针
   -> config/passwall2-groups.yaml 引用验证
   -> 从最终 dat 展开并渲染 shadowrocket.conf
@@ -52,7 +52,9 @@ sources.yaml + custom/geosite + custom/geoip
 - `merge-base` 要求底包中已经存在目标。
 - 多个 source 只有在同 tag、同 side、同 mode 时才可共享目标。
 - Google 合入 `geosite:google`，YouTube 合入 `geosite:youtube`，Netflix 合入标准双侧 `netflix`。
-- 最终 DAT 保留完整 `gfw`、`proxy`、`tld-not-cn`、`direct` 公共标签；proxy 托管组同时消费 `crs-proxy-residual` 与完整 `tld-not-cn`，direct 托管组消费 `crs-direct-residual`。
+- 最终 DAT 只保留原位残差 `proxy` 与 `direct`；`gfw`、`tld-not-cn` 仅作为中间构建输入，最终连同旧 `crs-proxy-residual`、`crs-direct-residual` 标签一起删除。
+- GeoIP 底包只作为合并输入；最终 `geoip.dat` 仅含 `cn`、`google`、`netflix`、`private`、`telegram`，其余标签不发布。
+- Shadowrocket 会把 `geoip:google` 展开为内联 IP 规则；`shadowrocket.conf` 总字节允许因内联 `geoip:google` 相对同输入基线增长，但增幅不得超过 5%，GeoSite 派生规则仍须严格下降。
 - 原港澳台专用来源与双侧标签已破坏性移除，不提供兼容入口。
 
 GeoSite 去重键是完整的 `kind + value + attrs`，不会做父子域覆盖推导。GeoIP 只做 CIDR Mask、稳定排序和完全相同前缀去重，不删除父前缀内部的子前缀。
@@ -65,7 +67,7 @@ GeoSite 去重键是完整的 `kind + value + attrs`，不会做父子域覆盖�
 
 ## 5. 分流与安装
 
-`config/passwall2-groups.yaml` 显式列出 13 个托管组：reject、youtube、netflix、spotify、tiktok、ai、apple_services、telegram、google、proxy、private、cn、direct。数组顺序是托管优先级；苹果服务为 `[apple, icloud]`；中国大陆为 GeoSite/GeoIP 双 `cn`。完整 GFW 规则并入 proxy 残差，proxy 同组依次引用 `[crs-proxy-residual, tld-not-cn]`。完整 `tld-not-cn` 来源、custom 目标与 DAT 标签保留，但 PassWall2 和 Shadowrocket 都不再生成独立 `tld_not_cn` 组，展开规则统一使用 proxy remarks。
+`config/passwall2-groups.yaml` 显式列出 13 个托管组：reject、youtube、netflix、spotify、tiktok、ai、apple_services、telegram、google、proxy、private、cn、direct。数组顺序是托管优先级；苹果服务为 GeoSite `[apple, icloud]`；Google 服务为 GeoSite/GeoIP 双 `google`；中国大陆为 GeoSite/GeoIP 双 `cn`。完整 GFW 与 `tld-not-cn` 规则在中间编译后并入原位残差 `proxy`，最终 proxy 组只引用 `[proxy]`，direct 组只引用 `[direct]`。PassWall2 和 Shadowrocket 都不再生成独立 GFW 或 `tld_not_cn` 组。
 
 renderer 生成稳定 `crs_<id>` section，并设置 `managed_by=clash-rules-srs`。安装器只清理旧 `c2p_` 分流和该标记下的托管 section。它会先在隔离暂存配置中预检所有 Shunt 节点的主出口、FakeDNS 与 proxy-tag 三族：GFW/proxy 冲突会失败，仅一侧非空时告警并采用非空侧；归一后的 proxy 必须与历史 tld-not-cn 逐项等价。只含规范 proxy 字段的节点直接视为已迁移。成功后删除 GFW、tld-not-cn 与港澳台专用废弃字段，保留 `default_node`、reject、private、cn、direct；后续失败从完整配置快照恢复节点、规则与 URL。
 
